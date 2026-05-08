@@ -1,0 +1,7 @@
+@_exported import HotkeyEngine
+@_exported import AudioRecorder
+@_exported import AudioEncoder
+@_exported import TranscriptionProvider
+@_exported import PasteEngine
+@_exported import HistoryStore
+@_exported import KeychainStore
