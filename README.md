@@ -4,7 +4,7 @@ Native macOS menu bar voice dictation utility — fast push-to-talk transcriptio
 
 ## Status
 
-Pre-implementation. PRD pending.
+In active development. The PRD lives in [Issue #1](https://github.com/yung-sun-xxi/WhisperKey/issues/1); see the [Implementation Order](https://github.com/yung-sun-xxi/WhisperKey/issues/1#implementation-order) section for the locked-in ticket sequence and milestones.
 
 ## Concept
 
