@@ -10,19 +10,23 @@ struct WhisperKeyApp: App {
             PopoverContent()
                 .environmentObject(coordinator)
         } label: {
-            Image(systemName: coordinator.menuBarSymbolName)
+            coordinator.menuBarIcon
         }
         .menuBarExtraStyle(.window)
     }
 }
 
 extension AppCoordinator {
-    var menuBarSymbolName: String {
+    @ViewBuilder
+    var menuBarIcon: some View {
         switch state {
-        case .idle: return "mic"
-        case .recording: return "mic.fill"
-        case .transcribing: return "waveform"
-        case .error, .microphoneDenied, .accessibilityDenied: return "mic.slash"
+        case .idle, .transcribing:
+            Image("MenubarIcon")
+                .renderingMode(.template)
+        case .recording:
+            Image(systemName: "mic.fill")
+        case .error, .microphoneDenied, .accessibilityDenied:
+            Image(systemName: "mic.slash")
         }
     }
 }
