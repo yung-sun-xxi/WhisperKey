@@ -1,3 +1,4 @@
+import ApplicationServices
 import AppKit
 import AVFoundation
 import HotkeyEngine
@@ -26,6 +27,7 @@ extension AppCoordinator {
     }
 
     func openAccessibilitySettings() {
+        requestAccessibilityRegistration()
         NSWorkspace.shared.open(Self.accessibilitySettingsURL)
         refreshPermissions()
     }
@@ -82,6 +84,13 @@ extension AppCoordinator {
         log.info("microphone requestAccess returned: \(granted, privacy: .public)")
 
         NSApp.setActivationPolicy(previousPolicy)
+    }
+
+    private func requestAccessibilityRegistration() {
+        let options = [
+            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
+        ] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     private func synchronizeHotkey(with snapshot: PermissionState) {
