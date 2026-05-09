@@ -44,7 +44,10 @@ final class AppCoordinator: ObservableObject {
             state = .accessibilityDenied
         }
 
-        Task { [weak self] in await self?.bootstrapMicrophonePermission() }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await self?.bootstrapMicrophonePermission()
+        }
     }
 
     private func handle(_ output: HotkeyOutput) {
