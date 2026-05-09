@@ -15,6 +15,8 @@ final class AppCoordinator: ObservableObject {
         case recording
         case transcribing
         case error(String)
+        case microphoneDenied
+        case accessibilityDenied
     }
 
     @Published private(set) var state: AppState = .idle
@@ -37,7 +39,7 @@ final class AppCoordinator: ObservableObject {
         let started = hotkey.start()
         if !started {
             log.error("CGEventTap could not be created — Accessibility permission likely missing")
-            state = .error("Accessibility permission required")
+            state = .accessibilityDenied
         }
     }
 
@@ -58,6 +60,12 @@ final class AppCoordinator: ObservableObject {
         Task {
             do {
                 try await recorder.start()
+            } catch AudioRecorderError.microphonePermissionDenied {
+                log.error("microphone permission denied")
+                await MainActor.run {
+                    state = .microphoneDenied
+                    hotkey.setAppState(.idle)
+                }
             } catch {
                 log.error("recorder.start failed: \(String(describing: error), privacy: .public)")
                 await MainActor.run {

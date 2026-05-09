@@ -8,6 +8,9 @@ struct PopoverContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             StatusLine(state: coordinator.state)
+            if let banner = PermissionBanner(state: coordinator.state) {
+                banner
+            }
             Divider()
             SettingsForm(settings: coordinator.settings)
             Divider()
@@ -18,7 +21,40 @@ struct PopoverContent: View {
             }
         }
         .padding(16)
-        .frame(width: 320)
+        .frame(width: 340)
+    }
+}
+
+private struct PermissionBanner: View {
+    let title: String
+    let message: String
+    let settingsURL: URL
+
+    init?(state: AppCoordinator.AppState) {
+        switch state {
+        case .microphoneDenied:
+            self.title = "Microphone access required"
+            self.message = "Enable WhisperKey under Privacy & Security → Microphone."
+            self.settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
+        case .accessibilityDenied:
+            self.title = "Accessibility access required"
+            self.message = "Enable WhisperKey under Privacy & Security → Accessibility, then quit and relaunch."
+            self.settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+        default:
+            return nil
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.headline)
+            Text(message).font(.callout).foregroundStyle(.secondary)
+            Button("Open System Settings") { NSWorkspace.shared.open(settingsURL) }
+                .controlSize(.small)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -39,7 +75,7 @@ private struct StatusLine: View {
         case .idle: return "mic"
         case .recording: return "mic.fill"
         case .transcribing: return "waveform"
-        case .error: return "exclamationmark.triangle"
+        case .error, .microphoneDenied, .accessibilityDenied: return "exclamationmark.triangle"
         }
     }
 
@@ -49,6 +85,8 @@ private struct StatusLine: View {
         case .recording: return "Recording…"
         case .transcribing: return "Transcribing…"
         case .error(let message): return message
+        case .microphoneDenied: return "Microphone access denied"
+        case .accessibilityDenied: return "Accessibility access denied"
         }
     }
 
@@ -57,7 +95,7 @@ private struct StatusLine: View {
         case .idle: return .primary
         case .recording: return .red
         case .transcribing: return .blue
-        case .error: return .orange
+        case .error, .microphoneDenied, .accessibilityDenied: return .orange
         }
     }
 }
