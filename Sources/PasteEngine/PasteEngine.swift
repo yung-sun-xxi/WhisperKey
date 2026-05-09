@@ -77,20 +77,57 @@ public struct PasteEngine: Sendable {
 // MARK: - System inspector
 
 public struct SystemAXFocusInspector: AXFocusInspector {
+    /// Per-call AX timeout. The default of 6 s is too long when we want to
+    /// fall back to a different code path quickly.
+    private static let axTimeout: Float = 0.5
+
+    /// Brief retry delay when the first focus query returns nil — focus
+    /// updates after window switches arrive a few dozen ms late.
+    private static let retryDelayUSec: useconds_t = 80_000
+
     public init() {}
 
     public func currentFocus() -> AXFocusInfo? {
+        if let info = readFocus() { return info }
+
+        usleep(Self.retryDelayUSec)
+        if let info = readFocus() { return info }
+
+        pasteLog.info("AX focus query returned nil after retry; frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil", privacy: .public)")
+        return nil
+    }
+
+    private func readFocus() -> AXFocusInfo? {
+        if let info = readSystemWideFocus() { return info }
+        return readFrontmostAppFocus()
+    }
+
+    private func readSystemWideFocus() -> AXFocusInfo? {
         let systemWide = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(systemWide, Self.axTimeout)
+        return readFocusedElement(of: systemWide)
+    }
+
+    private func readFrontmostAppFocus() -> AXFocusInfo? {
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
+            return nil
+        }
+        let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(appElement, Self.axTimeout)
+        return readFocusedElement(of: appElement)
+    }
+
+    private func readFocusedElement(of element: AXUIElement) -> AXFocusInfo? {
         var focused: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(
-            systemWide,
+            element,
             kAXFocusedUIElementAttribute as CFString,
             &focused
         )
         guard status == .success, let value = focused else { return nil }
-        let element = value as! AXUIElement
-        let role = Self.string(element, kAXRoleAttribute as CFString)
-        let subrole = Self.string(element, kAXSubroleAttribute as CFString)
+        let focusedElement = value as! AXUIElement
+        let role = Self.string(focusedElement, kAXRoleAttribute as CFString)
+        let subrole = Self.string(focusedElement, kAXSubroleAttribute as CFString)
         if role == nil && subrole == nil { return nil }
         return AXFocusInfo(role: role, subrole: subrole)
     }
