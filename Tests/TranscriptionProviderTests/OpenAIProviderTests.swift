@@ -170,37 +170,79 @@ final class OpenAIProviderTests: XCTestCase {
     func testUnauthorizedMapsTo401() async {
         StubURLProtocol.nextOutcome = .http(.init(statusCode: 401, body: Data(), headers: [:]))
         let provider = makeProvider()
-        await assertThrows(provider, expected: .unauthorized)
+        await assertThrows(provider, expected: .unauthorized(message: nil))
     }
 
     func testForbiddenMapsToUnauthorized() async {
         StubURLProtocol.nextOutcome = .http(.init(statusCode: 403, body: Data(), headers: [:]))
         let provider = makeProvider()
-        await assertThrows(provider, expected: .unauthorized)
+        await assertThrows(provider, expected: .unauthorized(message: nil))
     }
 
     func testRateLimitMapsTo429() async {
         StubURLProtocol.nextOutcome = .http(.init(statusCode: 429, body: Data(), headers: [:]))
         let provider = makeProvider()
-        await assertThrows(provider, expected: .rateLimit)
+        await assertThrows(provider, expected: .rateLimit(message: nil))
+    }
+
+    func testRateLimitParsesServerMessage() async {
+        let body = #"{"error":{"message":"Rate limit reached for whisper-1","type":"rate_limit_error","code":"rate_limit_exceeded"}}"#
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 429,
+            body: body.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+        let provider = makeProvider()
+        await assertThrows(provider, expected: .rateLimit(message: "Rate limit reached for whisper-1"))
+    }
+
+    func testInsufficientQuotaMapsToQuotaExceeded() async {
+        let body = #"{"error":{"message":"You exceeded your current quota.","type":"insufficient_quota","code":"insufficient_quota"}}"#
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 429,
+            body: body.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+        let provider = makeProvider()
+        await assertThrows(provider, expected: .quotaExceeded(message: "You exceeded your current quota."))
+    }
+
+    func testUnauthorizedParsesServerMessage() async {
+        let body = #"{"error":{"message":"Incorrect API key provided.","type":"invalid_request_error","code":"invalid_api_key"}}"#
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 401,
+            body: body.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+        let provider = makeProvider()
+        await assertThrows(provider, expected: .unauthorized(message: "Incorrect API key provided."))
     }
 
     func testServerErrorMapsTo5xx() async {
         StubURLProtocol.nextOutcome = .http(.init(statusCode: 503, body: Data(), headers: [:]))
         let provider = makeProvider()
-        await assertThrows(provider, expected: .serverError(status: 503))
+        await assertThrows(provider, expected: .serverError(status: 503, message: nil))
     }
 
     func testClientErrorMapsTo4xxOther() async {
         StubURLProtocol.nextOutcome = .http(.init(statusCode: 422, body: Data(), headers: [:]))
         let provider = makeProvider()
-        await assertThrows(provider, expected: .clientError(status: 422))
+        await assertThrows(provider, expected: .clientError(status: 422, message: nil))
     }
 
     func testNetworkFailureMapsToNetwork() async {
         StubURLProtocol.nextOutcome = .failure(URLError(.notConnectedToInternet))
         let provider = makeProvider()
         await assertThrows(provider, expected: .network)
+    }
+
+    // MARK: LocalizedError
+
+    func testQuotaExceededErrorDescriptionMentionsBilling() {
+        let error = TranscriptionError.quotaExceeded(message: "You exceeded your current quota.")
+        let description = error.errorDescription ?? ""
+        XCTAssertTrue(description.contains("quota"))
+        XCTAssertTrue(description.contains("platform.openai.com/billing"))
     }
 
     // MARK: Helpers
