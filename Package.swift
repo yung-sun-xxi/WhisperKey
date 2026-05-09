@@ -16,6 +16,7 @@ let package = Package(
         .library(name: "HistoryStore", targets: ["HistoryStore"]),
         .library(name: "KeychainStore", targets: ["KeychainStore"]),
         .library(name: "SettingsStore", targets: ["SettingsStore"]),
+        .library(name: "ErrorToast", targets: ["ErrorToast"]),
     ],
     targets: [
         .target(name: "HotkeyEngine"),
@@ -26,6 +27,7 @@ let package = Package(
         .target(name: "HistoryStore"),
         .target(name: "KeychainStore"),
         .target(name: "SettingsStore", dependencies: ["HotkeyEngine", "KeychainStore", "TranscriptionProvider"]),
+        .target(name: "ErrorToast", dependencies: ["TranscriptionProvider"]),
         .target(
             name: "WhisperKeyKit",
             dependencies: [
@@ -37,6 +39,7 @@ let package = Package(
                 "HistoryStore",
                 "KeychainStore",
                 "SettingsStore",
+                "ErrorToast",
             ]
         ),
 
@@ -48,5 +51,6 @@ let package = Package(
         .testTarget(name: "HistoryStoreTests", dependencies: ["HistoryStore"]),
         .testTarget(name: "KeychainStoreTests", dependencies: ["KeychainStore"]),
         .testTarget(name: "SettingsStoreTests", dependencies: ["SettingsStore"]),
+        .testTarget(name: "ErrorToastTests", dependencies: ["ErrorToast", "TranscriptionProvider"]),
     ]
 )

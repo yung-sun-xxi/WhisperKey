@@ -8,6 +8,7 @@ import AudioEncoder
 import SettingsStore
 import TranscriptionProvider
 import PasteEngine
+import ErrorToast
 
 @MainActor
 final class AppCoordinator: ObservableObject {
@@ -33,10 +34,12 @@ final class AppCoordinator: ObservableObject {
     private let encoder = AudioEncoder()
     private let sounds = SoundPlayer()
     private let pasteEngine = PasteEngine()
+    private let toastPresenter = ToastPresenter()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
     private var cancellables = Set<AnyCancellable>()
     private var recordingStartedAt: Date?
     private var recordingTimerTask: Task<Void, Never>?
+    private var lastTranscriptionRequest: (encoded: EncodedAudio, language: String?)?
     var hotkeyStarted = false
     var permissionPollTask: Task<Void, Never>?
     var workspaceActivationObserver: NSObjectProtocol?
@@ -88,6 +91,7 @@ final class AppCoordinator: ObservableObject {
         state = .recording
         hotkey.setAppState(.recording)
         startRecordingTimer()
+        toastPresenter.dismiss(animated: false)
 
         Task {
             do {
@@ -136,43 +140,106 @@ final class AppCoordinator: ObservableObject {
                 return
             }
 
-            await runTranscription(buffer: buffer)
+            await transcribeNew(buffer: buffer)
         }
     }
 
-    private func runTranscription(buffer: AudioBuffer) async {
-        guard let provider = settings.makeTranscriptionProvider() else {
-            log.error("no provider configured; cannot transcribe")
-            await MainActor.run {
-                state = .error("Set the API key in Settings")
-                hotkey.setAppState(.idle)
-                playSound(.error)
-            }
+    private func transcribeNew(buffer: AudioBuffer) async {
+        let language = settings.language.isoCode
+        let encoded: EncodedAudio
+        do {
+            encoded = try encoder.encode(buffer)
+        } catch {
+            log.error("audio encode failed: \(String(describing: error), privacy: .public)")
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            self.lastTranscriptionRequest = nil
+            self.handleTranscriptionFailure(reason: .transcription(.unknown), message: message)
             return
         }
 
-        let language = settings.language.isoCode
+        self.lastTranscriptionRequest = (encoded, language)
+        await runTranscription(encoded: encoded, language: language)
+    }
+
+    private func runTranscription(encoded: EncodedAudio, language: String?) async {
+        guard let provider = settings.makeTranscriptionProvider() else {
+            log.error("no provider configured; cannot transcribe")
+            handleTranscriptionFailure(
+                reason: .missingProvider,
+                message: "Set the API key in Settings."
+            )
+            return
+        }
 
         do {
-            let encoded = try encoder.encode(buffer)
             let text = try await provider.transcribe(audio: encoded, language: language)
-            await MainActor.run {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-                log.info("transcription written to clipboard, \(text.count, privacy: .public) chars")
-                let decision = pasteEngine.attemptPaste()
-                log.info("paste decision: \(String(describing: decision), privacy: .public)")
-                state = .idle
-                hotkey.setAppState(.idle)
-                playSound(.done)
-            }
-        } catch {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            log.info("transcription written to clipboard, \(text.count, privacy: .public) chars")
+            let decision = pasteEngine.attemptPaste()
+            log.info("paste decision: \(String(describing: decision), privacy: .public)")
+            self.lastTranscriptionRequest = nil
+            state = .idle
+            hotkey.setAppState(.idle)
+            playSound(.done)
+        } catch let error as TranscriptionError {
             log.error("transcription failed: \(String(describing: error), privacy: .public)")
+            let message = error.errorDescription ?? "Transcription failed."
+            handleTranscriptionFailure(reason: .transcription(error.category), message: message)
+        } catch {
+            log.error("transcription failed (other): \(String(describing: error), privacy: .public)")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            await MainActor.run {
-                state = .error(message)
-                hotkey.setAppState(.idle)
-                playSound(.error)
+            handleTranscriptionFailure(reason: .transcription(.unknown), message: message)
+        }
+    }
+
+    func retryLastTranscription() {
+        guard let request = lastTranscriptionRequest else {
+            log.info("retry requested but no cached audio; falling back to Open Settings toast")
+            handleTranscriptionFailure(
+                reason: .missingProvider,
+                message: "Nothing to retry. Open Settings to check your configuration."
+            )
+            return
+        }
+        state = .transcribing
+        hotkey.setAppState(.transcribing)
+        Task { @MainActor in
+            await self.runTranscription(encoded: request.encoded, language: request.language)
+        }
+    }
+
+    func openMenuBarPopover() {
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            // SwiftUI's `MenuBarExtra` owns its NSStatusItem; the only way to surface
+            // its popover programmatically is via the private `statusItems` key on
+            // NSStatusBar. If Apple ever drops it we still get app activation.
+            let statusBar: AnyObject = NSStatusBar.system
+            guard let items = statusBar.value(forKey: "statusItems") as? [NSStatusItem],
+                  let button = items.first?.button else { return }
+            button.performClick(nil)
+        }
+    }
+
+    private func handleTranscriptionFailure(reason: ToastReason, message: String) {
+        state = .error(message)
+        hotkey.setAppState(.idle)
+        playSound(.error)
+        let content = ToastDecision.content(
+            reason: reason,
+            message: message,
+            hasCachedAudio: lastTranscriptionRequest != nil
+        )
+        toastPresenter.show(content: content) { [weak self] in
+            guard let self else { return }
+            switch content.action {
+            case .retry:
+                self.retryLastTranscription()
+            case .openSettings:
+                self.openMenuBarPopover()
+            case .none:
+                break
             }
         }
     }

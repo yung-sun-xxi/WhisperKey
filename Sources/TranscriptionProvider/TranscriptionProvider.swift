@@ -11,6 +11,30 @@ public enum TranscriptionError: Error, Equatable {
     case unknown
 }
 
+public extension TranscriptionError {
+    enum Category: Sendable, Equatable {
+        case network
+        case rateLimit
+        case quotaExceeded
+        case unauthorized
+        case serverError
+        case clientError
+        case unknown
+    }
+
+    var category: Category {
+        switch self {
+        case .network: return .network
+        case .rateLimit: return .rateLimit
+        case .quotaExceeded: return .quotaExceeded
+        case .unauthorized: return .unauthorized
+        case .serverError: return .serverError
+        case .clientError: return .clientError
+        case .unknown: return .unknown
+        }
+    }
+}
+
 extension TranscriptionError: LocalizedError {
     public var errorDescription: String? {
         switch self {
