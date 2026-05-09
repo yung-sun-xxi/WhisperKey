@@ -83,7 +83,7 @@ private struct StatusLine: View {
         case .idle: return "mic"
         case .recording: return "mic.fill"
         case .transcribing: return "waveform"
-        case .error, .microphoneDenied, .accessibilityDenied: return "exclamationmark.triangle"
+        case .error, .microphoneDenied, .accessibilityDenied: return "mic.slash"
         }
     }
 
@@ -103,7 +103,7 @@ private struct StatusLine: View {
         case .idle: return .primary
         case .recording: return .red
         case .transcribing: return .blue
-        case .error, .microphoneDenied, .accessibilityDenied: return .orange
+        case .error, .microphoneDenied, .accessibilityDenied: return .yellow
         }
     }
 }
@@ -167,6 +167,12 @@ private struct SettingsForm: View {
                 .labelsHidden()
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
+            }
+            GridRow {
+                Text("Sound effects").gridColumnAlignment(.trailing)
+                Toggle("", isOn: $settings.soundEffectsEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
             }
         }
     }

@@ -30,6 +30,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.triggerKey, .rightOption)
         XCTAssertEqual(store.triggerMode, .tap)
         XCTAssertEqual(store.hotkeyConfig, HotkeyConfig(trigger: .rightOption, mode: .tap))
+        XCTAssertTrue(store.soundEffectsEnabled)
         XCTAssertEqual(store.openAIAPIKey, "")
     }
 
@@ -40,6 +41,7 @@ final class SettingsStoreTests: XCTestCase {
         first.language = .russian
         first.triggerKey = .rightShift
         first.triggerMode = .hold
+        first.soundEffectsEnabled = false
         first.openAIAPIKey = "sk-persisted"
 
         let second = SettingsStore(keychain: keychain, defaults: defaults)
@@ -48,6 +50,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.triggerKey, .rightShift)
         XCTAssertEqual(second.triggerMode, .hold)
         XCTAssertEqual(second.hotkeyConfig, HotkeyConfig(trigger: .rightShift, mode: .hold))
+        XCTAssertFalse(second.soundEffectsEnabled)
         XCTAssertEqual(second.openAIAPIKey, "sk-persisted")
     }
 
