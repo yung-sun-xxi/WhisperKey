@@ -25,24 +25,28 @@ final class AppCoordinator: ObservableObject {
     func updateState(_ new: AppState) { state = new }
 
     let settings: SettingsStore
+    let hotkey: HotkeyEngineRunner
 
-    let hotkey = HotkeyEngineRunner(config: HotkeyConfig(trigger: .rightOption, mode: .tap))
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
+    private var cancellables = Set<AnyCancellable>()
     var hotkeyStarted = false
     var permissionPollTask: Task<Void, Never>?
     var workspaceActivationObserver: NSObjectProtocol?
     var onboardingWindowController: OnboardingWindowController?
 
     init(settings: SettingsStore? = nil) {
-        self.settings = settings ?? SettingsStore()
+        let resolvedSettings = settings ?? SettingsStore()
+        self.settings = resolvedSettings
+        self.hotkey = HotkeyEngineRunner(config: resolvedSettings.hotkeyConfig)
 
         hotkey.setOutputHandler { [weak self] output in
             guard let self else { return }
             Task { @MainActor in self.handle(output) }
         }
 
+        observeSettings()
         observeWorkspaceActivation()
         startPermissionPolling()
 
@@ -142,5 +146,16 @@ final class AppCoordinator: ObservableObject {
                 hotkey.setAppState(.idle)
             }
         }
+    }
+
+    private func observeSettings() {
+        settings.$triggerKey
+            .combineLatest(settings.$triggerMode)
+            .map { trigger, mode in HotkeyConfig(trigger: trigger, mode: mode) }
+            .removeDuplicates()
+            .sink { [weak self] config in
+                self?.hotkey.setConfig(config)
+            }
+            .store(in: &cancellables)
     }
 }

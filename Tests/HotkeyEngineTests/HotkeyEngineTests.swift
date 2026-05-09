@@ -115,4 +115,63 @@ final class HotkeyEngineStateMachineTests: XCTestCase {
         _ = sm.process(.triggerDown(at: 2.0))
         XCTAssertEqual(sm.process(.triggerUp(at: 2.05)), .recordingShouldStart)
     }
+
+    // MARK: - Hold mode
+
+    func testHoldModeStartsImmediatelyOnTriggerDown() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+
+        let output = sm.process(.triggerDown(at: 0.0))
+
+        XCTAssertEqual(output, .recordingShouldStart)
+    }
+
+    func testHoldModeStopsOnTriggerUpAfterAppStateChangesToRecording() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
+        sm.setAppState(.recording)
+
+        XCTAssertEqual(sm.process(.triggerUp(at: 0.5)), .recordingShouldStop)
+    }
+
+    func testHoldModeStopsOnTriggerUpEvenBeforeAppStateCatchesUp() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
+
+        XCTAssertEqual(sm.process(.triggerUp(at: 0.05)), .recordingShouldStop)
+    }
+
+    func testHoldModeOtherKeyWithinAbortWindowStopsRecording() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
+        sm.setAppState(.recording)
+
+        XCTAssertEqual(sm.process(.otherKeyDown(at: 0.05)), .recordingShouldStop)
+    }
+
+    func testHoldModeOtherKeyWithinAbortWindowStopsBeforeAppStateCatchesUp() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
+
+        XCTAssertEqual(sm.process(.otherKeyDown(at: 0.05)), .recordingShouldStop)
+    }
+
+    func testHoldModeOtherKeyAfterAbortWindowDoesNotStopRecording() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
+        sm.setAppState(.recording)
+
+        XCTAssertNil(sm.process(.otherKeyDown(at: 0.081)))
+    }
+
+    func testHoldModeIgnoresTriggerDownWhileRecording() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold), appState: .recording)
+
+        XCTAssertNil(sm.process(.triggerDown(at: 1.0)))
+    }
 }

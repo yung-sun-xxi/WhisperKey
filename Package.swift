@@ -25,7 +25,7 @@ let package = Package(
         .target(name: "PasteEngine"),
         .target(name: "HistoryStore"),
         .target(name: "KeychainStore"),
-        .target(name: "SettingsStore", dependencies: ["KeychainStore", "TranscriptionProvider"]),
+        .target(name: "SettingsStore", dependencies: ["HotkeyEngine", "KeychainStore", "TranscriptionProvider"]),
         .target(
             name: "WhisperKeyKit",
             dependencies: [
