@@ -122,7 +122,7 @@ public struct CGEventKeyboardSimulator: KeyboardSimulator {
         }
         keyDown.flags = .maskCommand
         keyUp.flags = .maskCommand
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        keyUp.post(tap: .cgAnnotatedSessionEventTap)
     }
 }
