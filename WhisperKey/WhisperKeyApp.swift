@@ -7,32 +7,12 @@ struct WhisperKeyApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarContent()
+            PopoverContent()
                 .environmentObject(coordinator)
         } label: {
             Image(systemName: coordinator.menuBarSymbolName)
         }
-        .menuBarExtraStyle(.menu)
-    }
-}
-
-private struct MenuBarContent: View {
-    @EnvironmentObject private var coordinator: AppCoordinator
-
-    var body: some View {
-        Text(statusLine)
-        Divider()
-        Button("Quit WhisperKey") { NSApplication.shared.terminate(nil) }
-            .keyboardShortcut("q")
-    }
-
-    private var statusLine: String {
-        switch coordinator.state {
-        case .idle: return "Idle — tap Right Option to record"
-        case .recording: return "Recording…"
-        case .transcribing: return "Transcribing…"
-        case .error(let message): return "Error: \(message)"
-        }
+        .menuBarExtraStyle(.window)
     }
 }
 

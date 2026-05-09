@@ -5,6 +5,7 @@ import os
 import HotkeyEngine
 import AudioRecorder
 import AudioEncoder
+import SettingsStore
 import TranscriptionProvider
 
 @MainActor
@@ -18,19 +19,15 @@ final class AppCoordinator: ObservableObject {
 
     @Published private(set) var state: AppState = .idle
 
+    let settings: SettingsStore
+
     private let hotkey = HotkeyEngineRunner(config: HotkeyConfig(trigger: .rightOption, mode: .tap))
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
-    private let provider: TranscriptionProvider?
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
 
-    init() {
-        if let key = ProcessInfo.processInfo.environment["OPENAI_API_KEY"], !key.isEmpty {
-            self.provider = OpenAIProvider(apiKey: key, model: .whisper1)
-        } else {
-            self.provider = nil
-            log.error("OPENAI_API_KEY env var not set; transcription will be skipped")
-        }
+    init(settings: SettingsStore? = nil) {
+        self.settings = settings ?? SettingsStore()
 
         hotkey.setOutputHandler { [weak self] output in
             guard let self else { return }
@@ -93,18 +90,20 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func runTranscription(buffer: AudioBuffer) async {
-        guard let provider else {
+        guard let provider = settings.makeTranscriptionProvider() else {
             log.error("no provider configured; cannot transcribe")
             await MainActor.run {
-                state = .error("Set OPENAI_API_KEY and relaunch")
+                state = .error("Set the API key in Settings")
                 hotkey.setAppState(.idle)
             }
             return
         }
 
+        let language = settings.language.isoCode
+
         do {
             let encoded = try encoder.encode(buffer)
-            let text = try await provider.transcribe(audio: encoded, language: nil)
+            let text = try await provider.transcribe(audio: encoded, language: language)
             await MainActor.run {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
