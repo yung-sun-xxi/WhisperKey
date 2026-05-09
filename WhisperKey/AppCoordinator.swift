@@ -92,7 +92,8 @@ final class AppCoordinator: ObservableObject {
         Task {
             do {
                 await recorder.setOnMaxDurationReached { [weak self] in
-                    await MainActor.run { self?.stopRecording() }
+                    guard let self else { return }
+                    await MainActor.run { self.stopRecording() }
                 }
                 try await recorder.start()
                 playSound(.start)
