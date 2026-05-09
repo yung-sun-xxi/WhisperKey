@@ -31,10 +31,14 @@ public enum AudioRecorderError: Error, Equatable {
 /// Captures microphone audio into an in-memory PCM buffer at 16 kHz mono 16-bit.
 ///
 /// - Discards recordings shorter than 300 ms (returns `nil` from `stop`).
-/// - Hard-stops at 10 minutes; the buffer is returned as if the user had stopped manually.
+/// - When `maxDuration` is reached, fires the handler registered via
+///   `setOnMaxDurationReached`. The handler is expected to drive the same
+///   stop/transcribe path as a manual stop.
 public actor AudioRecorder {
     public static let minDuration: TimeInterval = 0.3
-    public static let maxDuration: TimeInterval = 10 * 60
+    public static let defaultMaxDuration: TimeInterval = 10 * 60
+
+    public let maxDuration: TimeInterval
 
     private let engine = AVAudioEngine()
     private let outputFormat: AVAudioFormat = {
@@ -54,8 +58,17 @@ public actor AudioRecorder {
     private var isRecording = false
     private var startTime: Date?
     private var maxDurationTask: Task<Void, Never>?
+    private var onMaxDurationReached: (@Sendable () async -> Void)?
 
-    public init() {}
+    public init(maxDuration: TimeInterval = AudioRecorder.defaultMaxDuration) {
+        self.maxDuration = maxDuration
+    }
+
+    /// Registers a callback fired when `maxDuration` is reached.
+    /// The handler is responsible for invoking the manual-stop flow.
+    public func setOnMaxDurationReached(_ handler: (@Sendable () async -> Void)?) {
+        onMaxDurationReached = handler
+    }
 
     public var sampleRate: Double { outputFormat.sampleRate }
     public var channelCount: UInt32 { outputFormat.channelCount }
@@ -152,8 +165,14 @@ public actor AudioRecorder {
         isRecording = true
         startTime = Date()
 
+        scheduleMaxDurationTask()
+    }
+
+    private func scheduleMaxDurationTask() {
+        let duration = maxDuration
         maxDurationTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.maxDuration * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            if Task.isCancelled { return }
             await self?.handleMaxDurationReached()
         }
     }
@@ -190,8 +209,23 @@ public actor AudioRecorder {
         })
     }
 
-    private func handleMaxDurationReached() {
-        guard isRecording else { return }
-        _ = stop()
+    private func handleMaxDurationReached() async {
+        guard let handler = onMaxDurationReached else { return }
+        await handler()
+    }
+
+    // MARK: - Test hooks
+
+    /// Schedules the max-duration task without starting the audio engine.
+    /// Test-only — exposed via `@testable import`.
+    internal func _armMaxDurationTaskForTesting() {
+        scheduleMaxDurationTask()
+    }
+
+    /// Cancels the scheduled max-duration task.
+    /// Test-only — exposed via `@testable import`.
+    internal func _cancelMaxDurationTaskForTesting() {
+        maxDurationTask?.cancel()
+        maxDurationTask = nil
     }
 }
