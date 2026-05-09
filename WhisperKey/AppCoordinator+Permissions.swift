@@ -1,12 +1,14 @@
 import ApplicationServices
 import AppKit
 import AVFoundation
+import CoreGraphics
 import HotkeyEngine
 import os
 
 extension AppCoordinator {
     static let microphoneSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
     static let accessibilitySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+    private static let permissionLog = Logger(subsystem: "WhisperKey", category: "Permissions")
 
     func refreshPermissions(forceOnboarding: Bool = false) {
         let snapshot = PermissionState.current()
@@ -27,9 +29,7 @@ extension AppCoordinator {
     }
 
     func openAccessibilitySettings() {
-        requestAccessibilityRegistration()
-        NSWorkspace.shared.open(Self.accessibilitySettingsURL)
-        refreshPermissions()
+        Task { await requestAccessibilityPermissionAndOpenSettings() }
     }
 
     func observeWorkspaceActivation() {
@@ -54,7 +54,7 @@ extension AppCoordinator {
     }
 
     private func requestMicrophonePermissionAsync() async {
-        let log = Logger(subsystem: "WhisperKey", category: "Permissions")
+        let log = Self.permissionLog
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         log.info("microphone authorizationStatus before onboarding request: \(status.rawValue, privacy: .public)")
 
@@ -86,11 +86,49 @@ extension AppCoordinator {
         NSApp.setActivationPolicy(previousPolicy)
     }
 
+    private func requestAccessibilityPermissionAndOpenSettings() async {
+        let previousPolicy = NSApp.activationPolicy()
+        Self.permissionLog.info("temporarily switching activation policy from \(previousPolicy.rawValue, privacy: .public) to regular for Accessibility prompt")
+
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+
+        requestAccessibilityRegistration()
+        provokeAccessibilityRegistrationViaEventTap()
+
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        NSWorkspace.shared.open(Self.accessibilitySettingsURL)
+
+        try? await Task.sleep(nanoseconds: 750_000_000)
+        NSApp.setActivationPolicy(previousPolicy)
+        refreshPermissions(forceOnboarding: true)
+    }
+
     private func requestAccessibilityRegistration() {
         let options = [
             kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
         ] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
+        let trusted = AXIsProcessTrustedWithOptions(options)
+        Self.permissionLog.info("AXIsProcessTrustedWithOptions returned \(trusted, privacy: .public)")
+    }
+
+    private func provokeAccessibilityRegistrationViaEventTap() {
+        let mask: CGEventMask = 1 << CGEventType.keyDown.rawValue
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: mask,
+            callback: { _, _, event, _ in Unmanaged.passUnretained(event) },
+            userInfo: nil
+        ) else {
+            Self.permissionLog.info("probe CGEventTap was not created before Accessibility trust")
+            return
+        }
+
+        CGEvent.tapEnable(tap: tap, enable: false)
+        CFMachPortInvalidate(tap)
+        Self.permissionLog.info("probe CGEventTap was created")
     }
 
     private func synchronizeHotkey(with snapshot: PermissionState) {
