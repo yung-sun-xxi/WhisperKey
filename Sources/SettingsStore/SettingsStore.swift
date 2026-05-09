@@ -47,6 +47,7 @@ public final class SettingsStore: ObservableObject {
         static let language = "WhisperKey.settings.language"
         static let triggerKey = "WhisperKey.settings.triggerKey"
         static let triggerMode = "WhisperKey.settings.triggerMode"
+        static let soundEffectsEnabled = "WhisperKey.settings.soundEffectsEnabled"
     }
 
     private enum LegacyKeychain {
@@ -78,6 +79,10 @@ public final class SettingsStore: ObservableObject {
         didSet { if !loading { defaults.set(triggerMode.rawValue, forKey: DefaultsKey.triggerMode) } }
     }
 
+    @Published public var soundEffectsEnabled: Bool {
+        didSet { if !loading { defaults.set(soundEffectsEnabled, forKey: DefaultsKey.soundEffectsEnabled) } }
+    }
+
     @Published public var openAIAPIKey: String {
         didSet { if !loading { persistOpenAIAPIKey() } }
     }
@@ -91,6 +96,7 @@ public final class SettingsStore: ObservableObject {
         self.language = (defaults.string(forKey: DefaultsKey.language).flatMap(TranscriptionLanguage.init(rawValue:))) ?? .auto
         self.triggerKey = (defaults.string(forKey: DefaultsKey.triggerKey).flatMap(TriggerKey.init(rawValue:))) ?? .rightOption
         self.triggerMode = (defaults.string(forKey: DefaultsKey.triggerMode).flatMap(TriggerMode.init(rawValue:))) ?? .tap
+        self.soundEffectsEnabled = (defaults.object(forKey: DefaultsKey.soundEffectsEnabled) as? Bool) ?? true
         self.openAIAPIKey = Self.loadOpenAIAPIKey(keychain: keychain)
 
         self.loading = false
