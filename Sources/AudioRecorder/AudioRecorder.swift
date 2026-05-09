@@ -1,5 +1,8 @@
 import Foundation
+import os
 @preconcurrency import AVFoundation
+
+private let recorderLog = Logger(subsystem: "WhisperKey", category: "AudioRecorder")
 
 public struct AudioBuffer: Sendable, Equatable {
     public let samples: Data            // 16-bit signed little-endian PCM
@@ -93,16 +96,30 @@ public actor AudioRecorder {
 
     private func ensureMicrophonePermission() async throws {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        recorderLog.info("ensureMicrophonePermission: authorizationStatus=\(status.rawValue, privacy: .public) (\(Self.statusName(status), privacy: .public))")
         switch status {
         case .authorized:
             return
         case .notDetermined:
+            recorderLog.info("ensureMicrophonePermission: prompting via AVCaptureDevice.requestAccess")
             let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            recorderLog.info("ensureMicrophonePermission: requestAccess returned \(granted, privacy: .public)")
             if !granted { throw AudioRecorderError.microphonePermissionDenied }
         case .denied, .restricted:
+            recorderLog.error("ensureMicrophonePermission: TCC reports \(Self.statusName(status), privacy: .public) — bundleID=\(Bundle.main.bundleIdentifier ?? "nil", privacy: .public)")
             throw AudioRecorderError.microphonePermissionDenied
         @unknown default:
             throw AudioRecorderError.microphonePermissionDenied
+        }
+    }
+
+    private static func statusName(_ status: AVAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "notDetermined"
+        case .restricted: return "restricted"
+        case .denied: return "denied"
+        case .authorized: return "authorized"
+        @unknown default: return "unknown"
         }
     }
 
