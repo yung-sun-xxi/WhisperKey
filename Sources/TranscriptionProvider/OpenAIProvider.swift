@@ -54,13 +54,17 @@ public struct OpenAIProvider: TranscriptionProvider {
         case 200..<300:
             return try Self.parseSuccess(data)
         case 401, 403:
-            throw TranscriptionError.unauthorized
+            throw TranscriptionError.unauthorized(message: Self.parseError(data)?.message)
         case 429:
-            throw TranscriptionError.rateLimit
+            let parsed = Self.parseError(data)
+            if parsed?.code == "insufficient_quota" {
+                throw TranscriptionError.quotaExceeded(message: parsed?.message)
+            }
+            throw TranscriptionError.rateLimit(message: parsed?.message)
         case 500..<600:
-            throw TranscriptionError.serverError(status: http.statusCode)
+            throw TranscriptionError.serverError(status: http.statusCode, message: Self.parseError(data)?.message)
         case 400..<500:
-            throw TranscriptionError.clientError(status: http.statusCode)
+            throw TranscriptionError.clientError(status: http.statusCode, message: Self.parseError(data)?.message)
         default:
             throw TranscriptionError.unknown
         }
@@ -101,5 +105,21 @@ public struct OpenAIProvider: TranscriptionProvider {
         } catch {
             throw TranscriptionError.unknown
         }
+    }
+
+    struct OpenAIErrorBody: Decodable {
+        let message: String?
+        let code: String?
+    }
+
+    static func parseError(_ data: Data) -> OpenAIErrorBody? {
+        struct Envelope: Decodable {
+            let error: OpenAIErrorBody?
+        }
+        guard !data.isEmpty,
+              let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else {
+            return nil
+        }
+        return envelope.error
     }
 }
