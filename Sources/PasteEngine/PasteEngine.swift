@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import os
 
 private let pasteLog = Logger(subsystem: "WhisperKey", category: "PasteEngine")
@@ -31,6 +32,13 @@ public protocol KeyboardSimulator: Sendable {
     func sendCommandV()
 }
 
+/// Reports whether any process in the system has currently enabled secure
+/// keyboard input — the OS-level signal raised by password fields, the login
+/// window, and other secret-text contexts.
+public protocol SecureInputProbe: Sendable {
+    func isSecureInputActive() -> Bool
+}
+
 /// Decides whether to auto-paste a transcript and synthesises the ⌘V if so.
 public struct PasteEngine: Sendable {
     public static let pasteableRoles: Set<String> = [
@@ -42,31 +50,47 @@ public struct PasteEngine: Sendable {
 
     private let inspector: AXFocusInspector
     private let keyboard: KeyboardSimulator
+    private let secureProbe: SecureInputProbe
 
     public init(
         inspector: AXFocusInspector = SystemAXFocusInspector(),
-        keyboard: KeyboardSimulator = CGEventKeyboardSimulator()
+        keyboard: KeyboardSimulator = CGEventKeyboardSimulator(),
+        secureProbe: SecureInputProbe = SystemSecureInputProbe()
     ) {
         self.inspector = inspector
         self.keyboard = keyboard
+        self.secureProbe = secureProbe
     }
 
     /// Pure decision function — exposed for testing.
-    public static func decide(for focus: AXFocusInfo?) -> PasteDecision {
-        guard let focus else { return .clipboardOnly }
-        if focus.subrole == secureSubrole { return .clipboardOnly }
-        guard let role = focus.role, pasteableRoles.contains(role) else {
-            return .clipboardOnly
+    ///
+    /// - `focus` carries an AX role/subrole snapshot, or nil when AX could
+    ///   not return the focused element.
+    /// - `secureInputActive` reports whether the system is broadcasting the
+    ///   secure-input signal (e.g. a password field is focused somewhere).
+    ///
+    /// Logic:
+    /// 1. AX subrole `AXSecureTextField` -> never paste.
+    /// 2. AX role on the pasteable allow-list -> paste.
+    /// 3. AX query failed or returned an unknown role: paste only when the
+    ///    OS-level secure-input signal is *not* active. This covers Electron
+    ///    and other apps that don't expose AX while still being safe around
+    ///    real password contexts.
+    public static func decide(for focus: AXFocusInfo?, secureInputActive: Bool) -> PasteDecision {
+        if focus?.subrole == secureSubrole { return .clipboardOnly }
+        if let role = focus?.role, pasteableRoles.contains(role) {
+            return .paste
         }
-        return .paste
+        return secureInputActive ? .clipboardOnly : .paste
     }
 
     /// Inspects the focused element and pastes if the role matrix permits it.
     @discardableResult
     public func attemptPaste() -> PasteDecision {
         let focus = inspector.currentFocus()
-        let decision = Self.decide(for: focus)
-        pasteLog.info("focus role=\(focus?.role ?? "nil", privacy: .public) subrole=\(focus?.subrole ?? "nil", privacy: .public) decision=\(String(describing: decision), privacy: .public)")
+        let secureInputActive = secureProbe.isSecureInputActive()
+        let decision = Self.decide(for: focus, secureInputActive: secureInputActive)
+        pasteLog.info("focus role=\(focus?.role ?? "nil", privacy: .public) subrole=\(focus?.subrole ?? "nil", privacy: .public) secureInput=\(secureInputActive, privacy: .public) decision=\(String(describing: decision), privacy: .public)")
         if decision == .paste {
             keyboard.sendCommandV()
         }
@@ -137,6 +161,16 @@ public struct SystemAXFocusInspector: AXFocusInspector {
         let status = AXUIElementCopyAttributeValue(element, attribute, &raw)
         guard status == .success else { return nil }
         return raw as? String
+    }
+}
+
+// MARK: - System secure-input probe
+
+public struct SystemSecureInputProbe: SecureInputProbe {
+    public init() {}
+
+    public func isSecureInputActive() -> Bool {
+        IsSecureEventInputEnabled()
     }
 }
 
