@@ -6,3 +6,4 @@
 @_exported import HistoryStore
 @_exported import KeychainStore
 @_exported import SettingsStore
+@_exported import ErrorToast
