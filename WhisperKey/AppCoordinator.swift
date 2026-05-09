@@ -21,6 +21,7 @@ final class AppCoordinator: ObservableObject {
 
     @Published private(set) var state: AppState = .idle
     @Published var permissions = PermissionState.current()
+    @Published private(set) var recordingElapsed: TimeInterval = 0
 
     func updateState(_ new: AppState) { state = new }
 
@@ -29,8 +30,11 @@ final class AppCoordinator: ObservableObject {
 
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
+    private let sounds = SoundPlayer()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
     private var cancellables = Set<AnyCancellable>()
+    private var recordingStartedAt: Date?
+    private var recordingTimerTask: Task<Void, Never>?
     var hotkeyStarted = false
     var permissionPollTask: Task<Void, Never>?
     var workspaceActivationObserver: NSObjectProtocol?
@@ -56,9 +60,15 @@ final class AppCoordinator: ObservableObject {
 
     deinit {
         permissionPollTask?.cancel()
+        recordingTimerTask?.cancel()
         if let workspaceActivationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(workspaceActivationObserver)
         }
+    }
+
+    var recordingTimerText: String {
+        let total = Int(recordingElapsed)
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     private func handle(_ output: HotkeyOutput) {
@@ -75,21 +85,27 @@ final class AppCoordinator: ObservableObject {
         guard state == .idle, permissions.allGranted else { return }
         state = .recording
         hotkey.setAppState(.recording)
+        startRecordingTimer()
 
         Task {
             do {
                 try await recorder.start()
+                playSound(.start)
             } catch AudioRecorderError.microphonePermissionDenied {
                 log.error("microphone permission denied")
                 await MainActor.run {
+                    stopRecordingTimer()
                     state = .microphoneDenied
                     hotkey.setAppState(.idle)
+                    playSound(.error)
                 }
             } catch {
                 log.error("recorder.start failed: \(String(describing: error), privacy: .public)")
                 await MainActor.run {
+                    stopRecordingTimer()
                     state = .error("Recording failed: \(error)")
                     hotkey.setAppState(.idle)
+                    playSound(.error)
                 }
             }
         }
@@ -99,6 +115,8 @@ final class AppCoordinator: ObservableObject {
         guard state == .recording else { return }
         state = .transcribing
         hotkey.setAppState(.transcribing)
+        stopRecordingTimer()
+        playSound(.stop)
 
         Task {
             let buffer = await recorder.stop()
@@ -122,6 +140,7 @@ final class AppCoordinator: ObservableObject {
             await MainActor.run {
                 state = .error("Set the API key in Settings")
                 hotkey.setAppState(.idle)
+                playSound(.error)
             }
             return
         }
@@ -137,6 +156,7 @@ final class AppCoordinator: ObservableObject {
                 log.info("transcription written to clipboard, \(text.count, privacy: .public) chars")
                 state = .idle
                 hotkey.setAppState(.idle)
+                playSound(.done)
             }
         } catch {
             log.error("transcription failed: \(String(describing: error), privacy: .public)")
@@ -144,8 +164,34 @@ final class AppCoordinator: ObservableObject {
             await MainActor.run {
                 state = .error(message)
                 hotkey.setAppState(.idle)
+                playSound(.error)
             }
         }
+    }
+
+    private func playSound(_ event: SoundPlayer.Event) {
+        guard settings.soundEffectsEnabled else { return }
+        sounds.play(event)
+    }
+
+    private func startRecordingTimer() {
+        recordingTimerTask?.cancel()
+        recordingStartedAt = Date()
+        recordingElapsed = 0
+        recordingTimerTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard !Task.isCancelled, let self, let started = self.recordingStartedAt else { return }
+                self.recordingElapsed = Date().timeIntervalSince(started)
+            }
+        }
+    }
+
+    private func stopRecordingTimer() {
+        recordingTimerTask?.cancel()
+        recordingTimerTask = nil
+        recordingStartedAt = nil
+        recordingElapsed = 0
     }
 
     private func observeSettings() {
