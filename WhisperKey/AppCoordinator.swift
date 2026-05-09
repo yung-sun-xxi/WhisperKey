@@ -20,15 +20,20 @@ final class AppCoordinator: ObservableObject {
     }
 
     @Published private(set) var state: AppState = .idle
+    @Published var permissions = PermissionState.current()
 
     func updateState(_ new: AppState) { state = new }
 
     let settings: SettingsStore
 
-    private let hotkey = HotkeyEngineRunner(config: HotkeyConfig(trigger: .rightOption, mode: .tap))
+    let hotkey = HotkeyEngineRunner(config: HotkeyConfig(trigger: .rightOption, mode: .tap))
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
+    var hotkeyStarted = false
+    var permissionPollTask: Task<Void, Never>?
+    var workspaceActivationObserver: NSObjectProtocol?
+    var onboardingWindowController: OnboardingWindowController?
 
     init(settings: SettingsStore? = nil) {
         self.settings = settings ?? SettingsStore()
@@ -38,15 +43,17 @@ final class AppCoordinator: ObservableObject {
             Task { @MainActor in self.handle(output) }
         }
 
-        let started = hotkey.start()
-        if !started {
-            log.error("CGEventTap could not be created — Accessibility permission likely missing")
-            state = .accessibilityDenied
-        }
+        observeWorkspaceActivation()
+        startPermissionPolling()
 
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            await self?.bootstrapMicrophonePermission()
+        onboardingWindowController = OnboardingWindowController(coordinator: self)
+        refreshPermissions(forceOnboarding: true)
+    }
+
+    deinit {
+        permissionPollTask?.cancel()
+        if let workspaceActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceActivationObserver)
         }
     }
 
@@ -60,7 +67,8 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func startRecording() {
-        guard state == .idle else { return }
+        refreshPermissions()
+        guard state == .idle, permissions.allGranted else { return }
         state = .recording
         hotkey.setAppState(.recording)
 
