@@ -15,15 +15,17 @@ let package = Package(
         .library(name: "PasteEngine", targets: ["PasteEngine"]),
         .library(name: "HistoryStore", targets: ["HistoryStore"]),
         .library(name: "KeychainStore", targets: ["KeychainStore"]),
+        .library(name: "SettingsStore", targets: ["SettingsStore"]),
     ],
     targets: [
         .target(name: "HotkeyEngine"),
         .target(name: "AudioRecorder"),
         .target(name: "AudioEncoder", dependencies: ["AudioRecorder"]),
-        .target(name: "TranscriptionProvider", dependencies: ["AudioEncoder", "KeychainStore"]),
+        .target(name: "TranscriptionProvider", dependencies: ["AudioEncoder"]),
         .target(name: "PasteEngine"),
         .target(name: "HistoryStore"),
         .target(name: "KeychainStore"),
+        .target(name: "SettingsStore", dependencies: ["KeychainStore", "TranscriptionProvider"]),
         .target(
             name: "WhisperKeyKit",
             dependencies: [
@@ -34,6 +36,7 @@ let package = Package(
                 "PasteEngine",
                 "HistoryStore",
                 "KeychainStore",
+                "SettingsStore",
             ]
         ),
 
@@ -43,5 +46,7 @@ let package = Package(
         .testTarget(name: "TranscriptionProviderTests", dependencies: ["TranscriptionProvider"]),
         .testTarget(name: "PasteEngineTests", dependencies: ["PasteEngine"]),
         .testTarget(name: "HistoryStoreTests", dependencies: ["HistoryStore"]),
+        .testTarget(name: "KeychainStoreTests", dependencies: ["KeychainStore"]),
+        .testTarget(name: "SettingsStoreTests", dependencies: ["SettingsStore"]),
     ]
 )

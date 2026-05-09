@@ -5,3 +5,4 @@
 @_exported import PasteEngine
 @_exported import HistoryStore
 @_exported import KeychainStore
+@_exported import SettingsStore
