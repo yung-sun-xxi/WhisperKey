@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import SettingsStore
 import TranscriptionProvider
@@ -8,7 +9,7 @@ struct PopoverContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             StatusLine(state: coordinator.state)
-            if let banner = PermissionBanner(state: coordinator.state) {
+            if let banner = PermissionBanner(coordinator: coordinator) {
                 banner
             }
             Divider()
@@ -28,19 +29,25 @@ struct PopoverContent: View {
 private struct PermissionBanner: View {
     let title: String
     let message: String
-    let settingsURL: URL
+    let buttonTitle: String
+    let action: () -> Void
 
-    init?(state: AppCoordinator.AppState) {
-        switch state {
-        case .microphoneDenied:
+    init?(coordinator: AppCoordinator) {
+        if !coordinator.permissions.accessibilityGranted {
+            self.title = "Accessibility access required"
+            self.message = "Enable WhisperKey under Privacy & Security → Accessibility."
+            self.buttonTitle = "Open System Settings"
+            self.action = coordinator.openAccessibilitySettings
+        } else if !coordinator.permissions.microphoneGranted {
             self.title = "Microphone access required"
             self.message = "Enable WhisperKey under Privacy & Security → Microphone."
-            self.settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
-        case .accessibilityDenied:
-            self.title = "Accessibility access required"
-            self.message = "Enable WhisperKey under Privacy & Security → Accessibility, then quit and relaunch."
-            self.settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        default:
+            self.buttonTitle = coordinator.permissions.microphoneStatus == .notDetermined
+                ? "Allow Microphone"
+                : "Open System Settings"
+            self.action = coordinator.permissions.microphoneStatus == .notDetermined
+                ? coordinator.requestMicrophonePermission
+                : coordinator.openMicrophoneSettings
+        } else {
             return nil
         }
     }
@@ -49,7 +56,7 @@ private struct PermissionBanner: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.headline)
             Text(message).font(.callout).foregroundStyle(.secondary)
-            Button("Open System Settings") { NSWorkspace.shared.open(settingsURL) }
+            Button(buttonTitle, action: action)
                 .controlSize(.small)
         }
         .padding(8)
