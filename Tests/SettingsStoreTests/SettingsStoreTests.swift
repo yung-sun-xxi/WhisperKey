@@ -1,5 +1,6 @@
 import XCTest
 @testable import SettingsStore
+import HotkeyEngine
 import KeychainStore
 import TranscriptionProvider
 
@@ -26,6 +27,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.provider, .openai)
         XCTAssertEqual(store.openAIModel, .whisper1)
         XCTAssertEqual(store.language, .auto)
+        XCTAssertEqual(store.triggerKey, .rightOption)
+        XCTAssertEqual(store.triggerMode, .tap)
+        XCTAssertEqual(store.hotkeyConfig, HotkeyConfig(trigger: .rightOption, mode: .tap))
         XCTAssertEqual(store.openAIAPIKey, "")
     }
 
@@ -34,11 +38,16 @@ final class SettingsStoreTests: XCTestCase {
         let first = SettingsStore(keychain: keychain, defaults: defaults)
         first.openAIModel = .gpt4oMiniTranscribe
         first.language = .russian
+        first.triggerKey = .rightShift
+        first.triggerMode = .hold
         first.openAIAPIKey = "sk-persisted"
 
         let second = SettingsStore(keychain: keychain, defaults: defaults)
         XCTAssertEqual(second.openAIModel, .gpt4oMiniTranscribe)
         XCTAssertEqual(second.language, .russian)
+        XCTAssertEqual(second.triggerKey, .rightShift)
+        XCTAssertEqual(second.triggerMode, .hold)
+        XCTAssertEqual(second.hotkeyConfig, HotkeyConfig(trigger: .rightShift, mode: .hold))
         XCTAssertEqual(second.openAIAPIKey, "sk-persisted")
     }
 

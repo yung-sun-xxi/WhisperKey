@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import HotkeyEngine
 import SettingsStore
 import TranscriptionProvider
 
@@ -13,7 +14,7 @@ struct PopoverContent: View {
                 banner
             }
             Divider()
-            SettingsForm(settings: coordinator.settings)
+            SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .recording)
             Divider()
             HStack {
                 Spacer()
@@ -88,7 +89,7 @@ private struct StatusLine: View {
 
     private var text: String {
         switch state {
-        case .idle: return "Idle — tap Right Option to record"
+        case .idle: return "Idle — ready to record"
         case .recording: return "Recording…"
         case .transcribing: return "Transcribing…"
         case .error(let message): return message
@@ -109,6 +110,7 @@ private struct StatusLine: View {
 
 private struct SettingsForm: View {
     @ObservedObject var settings: SettingsStore
+    let isRecording: Bool
 
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 10) {
@@ -143,6 +145,28 @@ private struct SettingsForm: View {
                     }
                 }
                 .labelsHidden()
+            }
+            GridRow {
+                Text("Trigger").gridColumnAlignment(.trailing)
+                Picker("", selection: $settings.triggerKey) {
+                    ForEach(TriggerKey.allCases, id: \.self) { trigger in
+                        Text(trigger.displayName).tag(trigger)
+                    }
+                }
+                .labelsHidden()
+                .disabled(isRecording)
+                .help(isRecording ? "Stop recording to change." : "")
+            }
+            GridRow {
+                Text("Mode").gridColumnAlignment(.trailing)
+                Picker("", selection: $settings.triggerMode) {
+                    ForEach(TriggerMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .disabled(isRecording)
+                .help(isRecording ? "Stop recording to change." : "")
             }
         }
     }
