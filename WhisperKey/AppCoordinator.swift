@@ -21,6 +21,8 @@ final class AppCoordinator: ObservableObject {
 
     @Published private(set) var state: AppState = .idle
 
+    func updateState(_ new: AppState) { state = new }
+
     let settings: SettingsStore
 
     private let hotkey = HotkeyEngineRunner(config: HotkeyConfig(trigger: .rightOption, mode: .tap))
@@ -41,6 +43,8 @@ final class AppCoordinator: ObservableObject {
             log.error("CGEventTap could not be created — Accessibility permission likely missing")
             state = .accessibilityDenied
         }
+
+        Task { [weak self] in await self?.bootstrapMicrophonePermission() }
     }
 
     private func handle(_ output: HotkeyOutput) {
