@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import HotkeyEngine
 import KeychainStore
 import TranscriptionProvider
 
@@ -44,6 +45,8 @@ public final class SettingsStore: ObservableObject {
         static let provider = "WhisperKey.settings.provider"
         static let openAIModel = "WhisperKey.settings.openAIModel"
         static let language = "WhisperKey.settings.language"
+        static let triggerKey = "WhisperKey.settings.triggerKey"
+        static let triggerMode = "WhisperKey.settings.triggerMode"
     }
 
     private enum LegacyKeychain {
@@ -67,6 +70,14 @@ public final class SettingsStore: ObservableObject {
         didSet { if !loading { defaults.set(language.rawValue, forKey: DefaultsKey.language) } }
     }
 
+    @Published public var triggerKey: TriggerKey {
+        didSet { if !loading { defaults.set(triggerKey.rawValue, forKey: DefaultsKey.triggerKey) } }
+    }
+
+    @Published public var triggerMode: TriggerMode {
+        didSet { if !loading { defaults.set(triggerMode.rawValue, forKey: DefaultsKey.triggerMode) } }
+    }
+
     @Published public var openAIAPIKey: String {
         didSet { if !loading { persistOpenAIAPIKey() } }
     }
@@ -78,9 +89,15 @@ public final class SettingsStore: ObservableObject {
         self.provider = (defaults.string(forKey: DefaultsKey.provider).flatMap(TranscriptionProviderID.init(rawValue:))) ?? .openai
         self.openAIModel = (defaults.string(forKey: DefaultsKey.openAIModel).flatMap(OpenAIProvider.Model.init(rawValue:))) ?? .whisper1
         self.language = (defaults.string(forKey: DefaultsKey.language).flatMap(TranscriptionLanguage.init(rawValue:))) ?? .auto
+        self.triggerKey = (defaults.string(forKey: DefaultsKey.triggerKey).flatMap(TriggerKey.init(rawValue:))) ?? .rightOption
+        self.triggerMode = (defaults.string(forKey: DefaultsKey.triggerMode).flatMap(TriggerMode.init(rawValue:))) ?? .tap
         self.openAIAPIKey = Self.loadOpenAIAPIKey(keychain: keychain)
 
         self.loading = false
+    }
+
+    public var hotkeyConfig: HotkeyConfig {
+        HotkeyConfig(trigger: triggerKey, mode: triggerMode)
     }
 
     private static func loadOpenAIAPIKey(keychain: KeychainStorage) -> String {
