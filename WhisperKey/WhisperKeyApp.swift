@@ -22,7 +22,7 @@ extension AppCoordinator {
         case .idle: return "mic"
         case .recording: return "mic.fill"
         case .transcribing: return "waveform"
-        case .error: return "mic.slash"
+        case .error, .microphoneDenied, .accessibilityDenied: return "mic.slash"
         }
     }
 }
