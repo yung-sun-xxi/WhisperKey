@@ -7,6 +7,7 @@ import AudioRecorder
 import AudioEncoder
 import SettingsStore
 import TranscriptionProvider
+import PasteEngine
 
 @MainActor
 final class AppCoordinator: ObservableObject {
@@ -31,6 +32,7 @@ final class AppCoordinator: ObservableObject {
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
     private let sounds = SoundPlayer()
+    private let pasteEngine = PasteEngine()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
     private var cancellables = Set<AnyCancellable>()
     private var recordingStartedAt: Date?
@@ -157,6 +159,8 @@ final class AppCoordinator: ObservableObject {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
                 log.info("transcription written to clipboard, \(text.count, privacy: .public) chars")
+                let decision = pasteEngine.attemptPaste()
+                log.info("paste decision: \(String(describing: decision), privacy: .public)")
                 state = .idle
                 hotkey.setAppState(.idle)
                 playSound(.done)
