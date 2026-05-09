@@ -128,8 +128,9 @@ final class AppCoordinator: ObservableObject {
             }
         } catch {
             log.error("transcription failed: \(String(describing: error), privacy: .public)")
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             await MainActor.run {
-                state = .error("Transcription failed: \(error)")
+                state = .error(message)
                 hotkey.setAppState(.idle)
             }
         }
