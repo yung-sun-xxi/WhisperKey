@@ -59,7 +59,7 @@ final class StubURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-private extension Data {
+extension Data {
     func contains(ascii: String) -> Bool {
         guard let needle = ascii.data(using: .ascii) else { return false }
         return range(of: needle) != nil
