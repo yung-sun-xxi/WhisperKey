@@ -40,7 +40,7 @@ public actor AudioRecorder {
 
     public let maxDuration: TimeInterval
 
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
     private let outputFormat: AVAudioFormat = {
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
@@ -137,8 +137,18 @@ public actor AudioRecorder {
     }
 
     private func beginCapture() throws {
+        // Recreate the engine each capture so the input node's cached format
+        // matches the current hardware. AVAudioEngine caches the format from
+        // the first activation; if the user switches audio devices (e.g.
+        // unplugs headphones), reusing the same engine causes installTap to
+        // throw an Obj-C exception on format mismatch, which crashes the app.
+        engine = AVAudioEngine()
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
+
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw AudioRecorderError.engineFailedToStart("invalid input format \(inputFormat)")
+        }
 
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
             throw AudioRecorderError.engineFailedToStart("converter init failed")
