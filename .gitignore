@@ -31,6 +31,9 @@ playground.xcworkspace
 
 .build/
 
+# Release artifacts (signed/notarized builds, archives, DMGs, zips)
+build/
+
 # Claude Code runtime state (lock files, cached transcripts)
 .claude/
 

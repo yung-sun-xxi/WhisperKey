@@ -22,6 +22,10 @@ The app requires:
 - **Microphone** — to record audio
 - **Accessibility** — for the global hotkey (CGEventTap) and auto-paste (AX focus inspection + simulated ⌘V)
 
+## Releasing
+
+Cutting a Developer ID-signed, notarized DMG is documented in [RELEASING.md](RELEASING.md). The pipeline is driven by [`scripts/release.sh`](scripts/release.sh).
+
 ## License
 
 TBD.
