@@ -18,6 +18,7 @@ let package = Package(
         .library(name: "SettingsStore", targets: ["SettingsStore"]),
         .library(name: "ErrorToast", targets: ["ErrorToast"]),
         .library(name: "LoginItem", targets: ["LoginItem"]),
+        .library(name: "SingleInstance", targets: ["SingleInstance"]),
     ],
     targets: [
         .target(name: "HotkeyEngine"),
@@ -30,6 +31,7 @@ let package = Package(
         .target(name: "SettingsStore", dependencies: ["HotkeyEngine", "KeychainStore", "TranscriptionProvider"]),
         .target(name: "ErrorToast", dependencies: ["TranscriptionProvider"]),
         .target(name: "LoginItem"),
+        .target(name: "SingleInstance"),
         .target(
             name: "WhisperKeyKit",
             dependencies: [
@@ -43,6 +45,7 @@ let package = Package(
                 "SettingsStore",
                 "ErrorToast",
                 "LoginItem",
+                "SingleInstance",
             ]
         ),
 
@@ -56,5 +59,6 @@ let package = Package(
         .testTarget(name: "SettingsStoreTests", dependencies: ["SettingsStore"]),
         .testTarget(name: "ErrorToastTests", dependencies: ["ErrorToast", "TranscriptionProvider"]),
         .testTarget(name: "LoginItemTests", dependencies: ["LoginItem"]),
+        .testTarget(name: "SingleInstanceTests", dependencies: ["SingleInstance"]),
     ]
 )

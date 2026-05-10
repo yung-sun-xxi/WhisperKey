@@ -80,6 +80,39 @@ final class HotkeyEngineStateMachineTests: XCTestCase {
         XCTAssertNil(sm.process(.triggerUp(at: 0.1)))
     }
 
+    func testSuppressionCounterIncrementsOnTriggerWhileTranscribing() {
+        var sm = HotkeyStateMachine(appState: .transcribing)
+        XCTAssertEqual(sm.transcribingSuppressionCount, 0)
+        _ = sm.process(.triggerDown(at: 0.0))
+        XCTAssertEqual(sm.transcribingSuppressionCount, 1)
+        _ = sm.process(.triggerUp(at: 0.1))
+        XCTAssertEqual(sm.transcribingSuppressionCount, 2)
+        _ = sm.process(.otherKeyDown(at: 0.2))
+        XCTAssertEqual(sm.transcribingSuppressionCount, 2,
+                       "non-trigger keys are not counted as suppressed")
+    }
+
+    func testSuppressionCounterDoesNotIncrementWhenIdle() {
+        var sm = HotkeyStateMachine()
+        _ = sm.process(.triggerDown(at: 0.0))
+        _ = sm.process(.triggerUp(at: 0.1))
+        XCTAssertEqual(sm.transcribingSuppressionCount, 0)
+    }
+
+    func testSuppressionCounterIncrementsInHoldModeToo() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold), appState: .transcribing)
+        _ = sm.process(.triggerDown(at: 0.0))
+        XCTAssertEqual(sm.transcribingSuppressionCount, 1)
+    }
+
+    func testNextHotkeyAfterTranscriptionResolvesBehavesNormally() {
+        var sm = HotkeyStateMachine(appState: .transcribing)
+        _ = sm.process(.triggerDown(at: 0.0))
+        sm.setAppState(.idle)
+        _ = sm.process(.triggerDown(at: 1.0))
+        XCTAssertEqual(sm.process(.triggerUp(at: 1.05)), .recordingShouldStart)
+    }
+
     // MARK: - Stale press state is reset on app state change
 
     func testHoldStateResetsWhenAppStateChanges() {
