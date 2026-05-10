@@ -7,3 +7,4 @@
 @_exported import KeychainStore
 @_exported import SettingsStore
 @_exported import ErrorToast
+@_exported import LoginItem
