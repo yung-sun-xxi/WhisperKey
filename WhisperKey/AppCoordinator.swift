@@ -10,6 +10,7 @@ import TranscriptionProvider
 import PasteEngine
 import ErrorToast
 import HistoryStore
+import LoginItem
 
 @MainActor
 final class AppCoordinator: ObservableObject {
@@ -25,12 +26,15 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var state: AppState = .idle
     @Published var permissions = PermissionState.current()
     @Published private(set) var recordingElapsed: TimeInterval = 0
+    @Published private(set) var launchAtLoginEnabled: Bool = false
+    @Published var launchAtLoginError: String?
 
     func updateState(_ new: AppState) { state = new }
 
     let settings: SettingsStore
     let hotkey: HotkeyEngineRunner
     let history: HistoryStore
+    private let loginItem: LoginItemController
 
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
@@ -47,11 +51,18 @@ final class AppCoordinator: ObservableObject {
     var workspaceActivationObserver: NSObjectProtocol?
     var onboardingWindowController: OnboardingWindowController?
 
-    init(settings: SettingsStore? = nil, history: HistoryStore? = nil) {
+    init(
+        settings: SettingsStore? = nil,
+        history: HistoryStore? = nil,
+        loginItemService: LoginItemService? = nil
+    ) {
         let resolvedSettings = settings ?? SettingsStore()
         self.settings = resolvedSettings
         self.history = history ?? HistoryStore(maxEntries: resolvedSettings.historyMaxEntries)
         self.hotkey = HotkeyEngineRunner(config: resolvedSettings.hotkeyConfig)
+        let resolvedLoginService = loginItemService ?? SMAppServiceLoginItem()
+        self.loginItem = LoginItemController(service: resolvedLoginService)
+        self.launchAtLoginEnabled = self.loginItem.isEnabled
 
         hotkey.setOutputHandler { [weak self] output in
             guard let self else { return }
@@ -217,6 +228,26 @@ final class AppCoordinator: ObservableObject {
         Task { @MainActor in
             await self.runTranscription(encoded: request.encoded, language: request.language)
         }
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        switch loginItem.setEnabled(enabled) {
+        case .success(let actual):
+            launchAtLoginEnabled = actual
+            launchAtLoginError = nil
+        case .failure(let error):
+            launchAtLoginEnabled = loginItem.isEnabled
+            switch error {
+            case .registerFailed(let message):
+                launchAtLoginError = "Couldn't enable launch at login: \(message)"
+            case .unregisterFailed(let message):
+                launchAtLoginError = "Couldn't disable launch at login: \(message)"
+            }
+        }
+    }
+
+    func refreshLaunchAtLoginState() {
+        launchAtLoginEnabled = loginItem.isEnabled
     }
 
     func openMenuBarPopover() {

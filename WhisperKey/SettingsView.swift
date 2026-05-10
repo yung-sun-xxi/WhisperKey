@@ -178,6 +178,10 @@ private struct SettingsForm: View {
                     .toggleStyle(.switch)
             }
             GridRow {
+                Text("Launch at login").gridColumnAlignment(.trailing)
+                LaunchAtLoginToggle()
+            }
+            GridRow {
                 Text("History size").gridColumnAlignment(.trailing)
                 HStack(spacing: 6) {
                     TextField("", value: $settings.historyMaxEntries, format: .number)
