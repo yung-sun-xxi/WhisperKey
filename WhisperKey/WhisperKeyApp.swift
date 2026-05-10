@@ -22,7 +22,7 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            MenuBarIcon(state: coordinator.state)
+            MenuBarIcon()
             if case .recording = coordinator.state {
                 RecordingTimerLabel(
                     text: coordinator.recordingTimerText,
@@ -72,23 +72,11 @@ private struct RecordingTimerLabel: View {
 }
 
 private struct MenuBarIcon: View {
-    let state: AppCoordinator.AppState
-
     var body: some View {
-        switch state {
-        case .idle:
-            Image(systemName: "mic")
-        case .recording:
-            Image(systemName: "mic.fill")
-                .foregroundStyle(.red)
-                .symbolEffect(.pulse, options: .repeating)
-        case .transcribing:
-            ProgressView()
-                .controlSize(.small)
-                .progressViewStyle(.circular)
-        case .error, .microphoneDenied, .accessibilityDenied:
-            Image(systemName: "mic.slash")
-                .foregroundStyle(.yellow)
-        }
+        Image("MenuBarIcon")
+            .resizable()
+            .renderingMode(.template)
+            .aspectRatio(contentMode: .fit)
+            .frame(height: 18)
     }
 }
