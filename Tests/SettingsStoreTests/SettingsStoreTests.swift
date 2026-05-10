@@ -127,6 +127,46 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.historyMaxEntries, 75)
     }
 
+    func testGroqAPIKeyPersistsToSeparateKeychainEntry() throws {
+        let keychain = InMemoryKeychain()
+        let store = SettingsStore(keychain: keychain, defaults: defaults)
+        store.groqAPIKey = "gsk-secret"
+        XCTAssertEqual(
+            try keychain.read(
+                service: TranscriptionProviderID.groq.keychainService,
+                account: TranscriptionProviderID.groq.keychainAccount
+            ),
+            "gsk-secret"
+        )
+        XCTAssertNil(
+            try keychain.read(
+                service: TranscriptionProviderID.openai.keychainService,
+                account: TranscriptionProviderID.openai.keychainAccount
+            ),
+            "OpenAI key remains untouched"
+        )
+    }
+
+    func testMakeProviderReturnsGroqWhenSelectedAndKeyPresent() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.provider = .groq
+        store.groqAPIKey = "gsk-x"
+        store.groqModel = .whisperLargeV3
+
+        guard let provider = store.makeTranscriptionProvider() as? GroqProvider else {
+            XCTFail("expected GroqProvider")
+            return
+        }
+        XCTAssertEqual(provider.apiKey, "gsk-x")
+        XCTAssertEqual(provider.model, .whisperLargeV3)
+    }
+
+    func testMakeProviderReturnsNilWhenGroqSelectedWithEmptyKey() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.provider = .groq
+        XCTAssertNil(store.makeTranscriptionProvider())
+    }
+
     func testMakeProviderReturnsOpenAIWhenKeyPresent() {
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
         store.openAIAPIKey = "sk-x"

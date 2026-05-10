@@ -28,10 +28,12 @@ public enum TranscriptionLanguage: String, CaseIterable, Codable, Sendable {
 
 public enum TranscriptionProviderID: String, CaseIterable, Codable, Sendable {
     case openai
+    case groq
 
     public var displayName: String {
         switch self {
         case .openai: return "OpenAI"
+        case .groq: return "Groq Whisper"
         }
     }
 
@@ -44,6 +46,7 @@ public final class SettingsStore: ObservableObject {
     private enum DefaultsKey {
         static let provider = "WhisperKey.settings.provider"
         static let openAIModel = "WhisperKey.settings.openAIModel"
+        static let groqModel = "WhisperKey.settings.groqModel"
         static let language = "WhisperKey.settings.language"
         static let triggerKey = "WhisperKey.settings.triggerKey"
         static let triggerMode = "WhisperKey.settings.triggerMode"
@@ -69,6 +72,10 @@ public final class SettingsStore: ObservableObject {
 
     @Published public var openAIModel: OpenAIProvider.Model {
         didSet { if !loading { defaults.set(openAIModel.rawValue, forKey: DefaultsKey.openAIModel) } }
+    }
+
+    @Published public var groqModel: GroqProvider.Model {
+        didSet { if !loading { defaults.set(groqModel.rawValue, forKey: DefaultsKey.groqModel) } }
     }
 
     @Published public var language: TranscriptionLanguage {
@@ -99,7 +106,11 @@ public final class SettingsStore: ObservableObject {
     }
 
     @Published public var openAIAPIKey: String {
-        didSet { if !loading { persistOpenAIAPIKey() } }
+        didSet { if !loading { persistAPIKey(openAIAPIKey, for: .openai) } }
+    }
+
+    @Published public var groqAPIKey: String {
+        didSet { if !loading { persistAPIKey(groqAPIKey, for: .groq) } }
     }
 
     public init(keychain: KeychainStorage = KeychainStore(), defaults: UserDefaults = .standard) {
@@ -108,6 +119,7 @@ public final class SettingsStore: ObservableObject {
 
         self.provider = (defaults.string(forKey: DefaultsKey.provider).flatMap(TranscriptionProviderID.init(rawValue:))) ?? .openai
         self.openAIModel = (defaults.string(forKey: DefaultsKey.openAIModel).flatMap(OpenAIProvider.Model.init(rawValue:))) ?? .whisper1
+        self.groqModel = (defaults.string(forKey: DefaultsKey.groqModel).flatMap(GroqProvider.Model.init(rawValue:))) ?? .whisperLargeV3Turbo
         self.language = (defaults.string(forKey: DefaultsKey.language).flatMap(TranscriptionLanguage.init(rawValue:))) ?? .auto
         self.triggerKey = (defaults.string(forKey: DefaultsKey.triggerKey).flatMap(TriggerKey.init(rawValue:))) ?? .rightOption
         self.triggerMode = (defaults.string(forKey: DefaultsKey.triggerMode).flatMap(TriggerMode.init(rawValue:))) ?? .tap
@@ -115,6 +127,7 @@ public final class SettingsStore: ObservableObject {
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.openAIAPIKey = Self.loadOpenAIAPIKey(keychain: keychain)
+        self.groqAPIKey = Self.loadAPIKey(for: .groq, keychain: keychain)
 
         self.loading = false
     }
@@ -125,6 +138,13 @@ public final class SettingsStore: ObservableObject {
 
     public var hotkeyConfig: HotkeyConfig {
         HotkeyConfig(trigger: triggerKey, mode: triggerMode)
+    }
+
+    private static func loadAPIKey(for id: TranscriptionProviderID, keychain: KeychainStorage) -> String {
+        if let value = (try? keychain.read(service: id.keychainService, account: id.keychainAccount)), !value.isEmpty {
+            return value
+        }
+        return ""
     }
 
     private static func loadOpenAIAPIKey(keychain: KeychainStorage) -> String {
@@ -139,13 +159,11 @@ public final class SettingsStore: ObservableObject {
         return ""
     }
 
-    private func persistOpenAIAPIKey() {
-        let id = TranscriptionProviderID.openai
-        let trimmed = openAIAPIKey
-        if trimmed.isEmpty {
+    private func persistAPIKey(_ key: String, for id: TranscriptionProviderID) {
+        if key.isEmpty {
             try? keychain.delete(service: id.keychainService, account: id.keychainAccount)
         } else {
-            try? keychain.write(trimmed, service: id.keychainService, account: id.keychainAccount)
+            try? keychain.write(key, service: id.keychainService, account: id.keychainAccount)
         }
     }
 
@@ -154,6 +172,9 @@ public final class SettingsStore: ObservableObject {
         case .openai:
             guard !openAIAPIKey.isEmpty else { return nil }
             return OpenAIProvider(apiKey: openAIAPIKey, model: openAIModel)
+        case .groq:
+            guard !groqAPIKey.isEmpty else { return nil }
+            return GroqProvider(apiKey: groqAPIKey, model: groqModel)
         }
     }
 }

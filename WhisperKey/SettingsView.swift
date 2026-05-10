@@ -115,6 +115,36 @@ private struct SettingsForm: View {
     @ObservedObject var settings: SettingsStore
     let isRecording: Bool
 
+    @ViewBuilder private var modelPicker: some View {
+        switch settings.provider {
+        case .openai:
+            Picker("", selection: $settings.openAIModel) {
+                ForEach(OpenAIProvider.Model.allCases, id: \.self) { model in
+                    Text(model.rawValue).tag(model)
+                }
+            }
+            .labelsHidden()
+        case .groq:
+            Picker("", selection: $settings.groqModel) {
+                ForEach(GroqProvider.Model.allCases, id: \.self) { model in
+                    Text(model.displayName).tag(model)
+                }
+            }
+            .labelsHidden()
+        }
+    }
+
+    @ViewBuilder private var apiKeyField: some View {
+        switch settings.provider {
+        case .openai:
+            SecureField("sk-…", text: $settings.openAIAPIKey)
+                .textFieldStyle(.roundedBorder)
+        case .groq:
+            SecureField("gsk_…", text: $settings.groqAPIKey)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 10) {
             GridRow {
@@ -128,17 +158,11 @@ private struct SettingsForm: View {
             }
             GridRow {
                 Text("Model").gridColumnAlignment(.trailing)
-                Picker("", selection: $settings.openAIModel) {
-                    ForEach(OpenAIProvider.Model.allCases, id: \.self) { model in
-                        Text(model.rawValue).tag(model)
-                    }
-                }
-                .labelsHidden()
+                modelPicker
             }
             GridRow {
                 Text("API Key").gridColumnAlignment(.trailing)
-                SecureField("sk-…", text: $settings.openAIAPIKey)
-                    .textFieldStyle(.roundedBorder)
+                apiKeyField
             }
             GridRow {
                 Text("Language").gridColumnAlignment(.trailing)
