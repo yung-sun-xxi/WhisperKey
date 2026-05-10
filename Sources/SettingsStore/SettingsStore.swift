@@ -48,7 +48,11 @@ public final class SettingsStore: ObservableObject {
         static let triggerKey = "WhisperKey.settings.triggerKey"
         static let triggerMode = "WhisperKey.settings.triggerMode"
         static let soundEffectsEnabled = "WhisperKey.settings.soundEffectsEnabled"
+        static let historyMaxEntries = "WhisperKey.settings.historyMaxEntries"
     }
+
+    public static let defaultHistoryMaxEntries = 30
+    public static let historyMaxEntriesRange: ClosedRange<Int> = 0...1000
 
     private enum LegacyKeychain {
         static let service = "WhisperKey"
@@ -83,6 +87,17 @@ public final class SettingsStore: ObservableObject {
         didSet { if !loading { defaults.set(soundEffectsEnabled, forKey: DefaultsKey.soundEffectsEnabled) } }
     }
 
+    @Published public var historyMaxEntries: Int {
+        didSet {
+            let clamped = Self.clampHistoryMax(historyMaxEntries)
+            if clamped != historyMaxEntries {
+                historyMaxEntries = clamped
+                return
+            }
+            if !loading { defaults.set(historyMaxEntries, forKey: DefaultsKey.historyMaxEntries) }
+        }
+    }
+
     @Published public var openAIAPIKey: String {
         didSet { if !loading { persistOpenAIAPIKey() } }
     }
@@ -97,9 +112,15 @@ public final class SettingsStore: ObservableObject {
         self.triggerKey = (defaults.string(forKey: DefaultsKey.triggerKey).flatMap(TriggerKey.init(rawValue:))) ?? .rightOption
         self.triggerMode = (defaults.string(forKey: DefaultsKey.triggerMode).flatMap(TriggerMode.init(rawValue:))) ?? .tap
         self.soundEffectsEnabled = (defaults.object(forKey: DefaultsKey.soundEffectsEnabled) as? Bool) ?? true
+        let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
+        self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.openAIAPIKey = Self.loadOpenAIAPIKey(keychain: keychain)
 
         self.loading = false
+    }
+
+    private static func clampHistoryMax(_ value: Int) -> Int {
+        min(max(value, historyMaxEntriesRange.lowerBound), historyMaxEntriesRange.upperBound)
     }
 
     public var hotkeyConfig: HotkeyConfig {

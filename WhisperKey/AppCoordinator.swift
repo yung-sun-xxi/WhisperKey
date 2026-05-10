@@ -9,6 +9,7 @@ import SettingsStore
 import TranscriptionProvider
 import PasteEngine
 import ErrorToast
+import HistoryStore
 
 @MainActor
 final class AppCoordinator: ObservableObject {
@@ -29,6 +30,7 @@ final class AppCoordinator: ObservableObject {
 
     let settings: SettingsStore
     let hotkey: HotkeyEngineRunner
+    let history: HistoryStore
 
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
@@ -45,9 +47,10 @@ final class AppCoordinator: ObservableObject {
     var workspaceActivationObserver: NSObjectProtocol?
     var onboardingWindowController: OnboardingWindowController?
 
-    init(settings: SettingsStore? = nil) {
+    init(settings: SettingsStore? = nil, history: HistoryStore? = nil) {
         let resolvedSettings = settings ?? SettingsStore()
         self.settings = resolvedSettings
+        self.history = history ?? HistoryStore(maxEntries: resolvedSettings.historyMaxEntries)
         self.hotkey = HotkeyEngineRunner(config: resolvedSettings.hotkeyConfig)
 
         hotkey.setOutputHandler { [weak self] output in
@@ -178,6 +181,13 @@ final class AppCoordinator: ObservableObject {
             log.info("transcription written to clipboard, \(text.count, privacy: .public) chars")
             let decision = pasteEngine.attemptPaste()
             log.info("paste decision: \(String(describing: decision), privacy: .public)")
+            if !text.isEmpty {
+                _ = history.append(
+                    text: text,
+                    providerID: settings.provider.rawValue,
+                    language: language
+                )
+            }
             self.lastTranscriptionRequest = nil
             state = .idle
             hotkey.setAppState(.idle)
@@ -276,6 +286,13 @@ final class AppCoordinator: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] config in
                 self?.hotkey.setConfig(config)
+            }
+            .store(in: &cancellables)
+
+        settings.$historyMaxEntries
+            .removeDuplicates()
+            .sink { [weak self] value in
+                self?.history.setMaxEntries(value)
             }
             .store(in: &cancellables)
     }
