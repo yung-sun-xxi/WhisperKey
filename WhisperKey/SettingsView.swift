@@ -3,6 +3,7 @@ import SwiftUI
 import HotkeyEngine
 import SettingsStore
 import TranscriptionProvider
+import HistoryStore
 
 struct PopoverContent: View {
     @EnvironmentObject private var coordinator: AppCoordinator
@@ -16,6 +17,8 @@ struct PopoverContent: View {
             Divider()
             SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .recording)
             Divider()
+            HistorySection(history: coordinator.history)
+            Divider()
             HStack {
                 Spacer()
                 Button("Quit WhisperKey") { NSApplication.shared.terminate(nil) }
@@ -23,7 +26,7 @@ struct PopoverContent: View {
             }
         }
         .padding(16)
-        .frame(width: 340)
+        .frame(width: 360)
     }
 }
 
@@ -173,6 +176,22 @@ private struct SettingsForm: View {
                 Toggle("", isOn: $settings.soundEffectsEnabled)
                     .labelsHidden()
                     .toggleStyle(.switch)
+            }
+            GridRow {
+                Text("History size").gridColumnAlignment(.trailing)
+                HStack(spacing: 6) {
+                    TextField("", value: $settings.historyMaxEntries, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 64)
+                    Stepper("",
+                            value: $settings.historyMaxEntries,
+                            in: SettingsStore.historyMaxEntriesRange,
+                            step: 1)
+                        .labelsHidden()
+                    Text("entries")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }

@@ -107,6 +107,26 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertNil(store.makeTranscriptionProvider())
     }
 
+    func testHistoryMaxEntriesDefaultIs30() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(store.historyMaxEntries, 30)
+    }
+
+    func testHistoryMaxEntriesIsClamped() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.historyMaxEntries = 5_000
+        XCTAssertEqual(store.historyMaxEntries, 1_000)
+        store.historyMaxEntries = -10
+        XCTAssertEqual(store.historyMaxEntries, 0)
+    }
+
+    func testHistoryMaxEntriesPersists() {
+        let first = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        first.historyMaxEntries = 75
+        let second = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(second.historyMaxEntries, 75)
+    }
+
     func testMakeProviderReturnsOpenAIWhenKeyPresent() {
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
         store.openAIAPIKey = "sk-x"
