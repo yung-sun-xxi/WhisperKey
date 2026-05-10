@@ -2,6 +2,7 @@
 import Foundation
 import CoreGraphics
 import ApplicationServices
+import os
 
 /// Drives a `HotkeyStateMachine` from a `CGEventTap` listening at the session level.
 ///
@@ -11,8 +12,10 @@ public final class HotkeyEngineRunner: @unchecked Sendable {
     public typealias OutputHandler = @Sendable (HotkeyOutput) -> Void
 
     private let queue = DispatchQueue(label: "WhisperKey.HotkeyEngineRunner")
+    private let log = Logger(subsystem: "WhisperKey", category: "HotkeyEngineRunner")
     private var stateMachine: HotkeyStateMachine
     private var handler: OutputHandler?
+    private var lastLoggedSuppressionCount: UInt = 0
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -112,11 +115,17 @@ public final class HotkeyEngineRunner: @unchecked Sendable {
             smEvent = nil
         }
 
-        guard let inputEvent = smEvent,
-              let output = stateMachine.process(inputEvent) else {
-            return
+        guard let inputEvent = smEvent else { return }
+        let output = stateMachine.process(inputEvent)
+
+        if stateMachine.transcribingSuppressionCount > lastLoggedSuppressionCount {
+            lastLoggedSuppressionCount = stateMachine.transcribingSuppressionCount
+            log.info("hotkey suppressed: transcription in flight (count=\(self.lastLoggedSuppressionCount, privacy: .public))")
         }
-        handler?(output)
+
+        if let output {
+            handler?(output)
+        }
     }
 
     private static let tapCallback: CGEventTapCallBack = { _, type, event, refcon in

@@ -139,6 +139,7 @@ final class AppCoordinator: ObservableObject {
         guard state == .recording else { return }
         state = .transcribing
         hotkey.setAppState(.transcribing)
+        log.info("transcription in flight; further hotkey presses will be suppressed")
         stopRecordingTimer()
         playSound(.stop)
 
