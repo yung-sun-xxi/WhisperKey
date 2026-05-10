@@ -72,6 +72,7 @@ public struct HotkeyStateMachine: Sendable {
 
     public private(set) var config: HotkeyConfig
     public private(set) var appState: AppState
+    public private(set) var transcribingSuppressionCount: UInt = 0
 
     private var pressedAt: TimeInterval?
     private var otherKeySeen: Bool
@@ -113,7 +114,10 @@ public struct HotkeyStateMachine: Sendable {
 
     private mutating func processTapMode(_ event: Event) -> HotkeyOutput? {
         switch (appState, event) {
-        case (.transcribing, _):
+        case (.transcribing, .triggerDown), (.transcribing, .triggerUp):
+            transcribingSuppressionCount &+= 1
+            return nil
+        case (.transcribing, .otherKeyDown):
             return nil
 
         case (.idle, .triggerDown(let t)):
@@ -144,7 +148,10 @@ public struct HotkeyStateMachine: Sendable {
 
     private mutating func processHoldMode(_ event: Event) -> HotkeyOutput? {
         switch (appState, event) {
-        case (.transcribing, _):
+        case (.transcribing, .triggerDown), (.transcribing, .triggerUp):
+            transcribingSuppressionCount &+= 1
+            return nil
+        case (.transcribing, .otherKeyDown):
             return nil
 
         case (.idle, .triggerDown(let t)):

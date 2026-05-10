@@ -8,3 +8,4 @@
 @_exported import SettingsStore
 @_exported import ErrorToast
 @_exported import LoginItem
+@_exported import SingleInstance
