@@ -50,6 +50,7 @@ final class AppCoordinator: ObservableObject {
     var permissionPollTask: Task<Void, Never>?
     var workspaceActivationObserver: NSObjectProtocol?
     var onboardingWindowController: OnboardingWindowController?
+    var openMenuBarPopoverHandler: (() -> Void)?
 
     init(
         settings: SettingsStore? = nil,
@@ -252,16 +253,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     func openMenuBarPopover() {
-        DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-            // SwiftUI's `MenuBarExtra` owns its NSStatusItem; the only way to surface
-            // its popover programmatically is via the private `statusItems` key on
-            // NSStatusBar. If Apple ever drops it we still get app activation.
-            let statusBar: AnyObject = NSStatusBar.system
-            guard let items = statusBar.value(forKey: "statusItems") as? [NSStatusItem],
-                  let button = items.first?.button else { return }
-            button.performClick(nil)
-        }
+        openMenuBarPopoverHandler?()
     }
 
     private func handleTranscriptionFailure(reason: ToastReason, message: String) {

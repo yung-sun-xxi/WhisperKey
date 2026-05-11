@@ -10,6 +10,7 @@ enum HistoryFullWindowController {
     static func show(history: HistoryStore) {
         if let existing = window {
             existing.makeKeyAndOrderFront(nil)
+            existing.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
             return
         }
@@ -21,12 +22,14 @@ enum HistoryFullWindowController {
         window.setContentSize(NSSize(width: 560, height: 500))
         window.minSize = NSSize(width: 420, height: 320)
         window.isReleasedWhenClosed = false
+        window.level = .floating
         window.center()
         window.delegate = delegate
 
         Self.window = window
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 
     static func windowDidClose() {
@@ -47,7 +50,7 @@ private struct HistoryFullView: View {
     @ObservedObject var history: HistoryStore
 
     @State private var copiedID: UUID?
-    @State private var showingClearConfirmation = false
+    @State private var ownerWindow: NSWindow?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -56,8 +59,10 @@ private struct HistoryFullView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Clear History…") {
-                    showingClearConfirmation = true
+                Button("Clear history") {
+                    ClearHistoryConfirmation.present(from: ownerWindow) {
+                        history.clear()
+                    }
                 }
                 .controlSize(.small)
                 .disabled(history.entries.isEmpty)
@@ -87,17 +92,10 @@ private struct HistoryFullView: View {
         }
         .padding(14)
         .frame(minWidth: 420, minHeight: 320)
-        .confirmationDialog(
-            "Clear all transcription history?",
-            isPresented: $showingClearConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Clear History", role: .destructive) {
-                history.clear()
+        .background {
+            WindowAccessor { window in
+                ownerWindow = window
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently removes all stored transcriptions from this device.")
         }
     }
 
@@ -112,7 +110,7 @@ private struct HistoryFullView: View {
             Image(systemName: "tray")
                 .font(.title)
                 .foregroundStyle(.tertiary)
-            Text("No transcriptions yet.")
+            Text("No transcriptions yet")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

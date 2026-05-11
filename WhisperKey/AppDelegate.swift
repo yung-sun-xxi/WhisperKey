@@ -2,8 +2,10 @@ import AppKit
 import os
 import SingleInstance
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let log = Logger(subsystem: "WhisperKey", category: "AppDelegate")
+    private var menuBarController: MenuBarController?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let snapshot = NSWorkspace.shared.runningApplications.map {
@@ -34,5 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
 
         NSApplication.shared.terminate(nil)
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        menuBarController = MenuBarController()
     }
 }
