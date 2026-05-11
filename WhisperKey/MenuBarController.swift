@@ -11,7 +11,7 @@ final class MenuBarController: NSObject {
 
     private let statusItem: NSStatusItem
     private let panel: MenuBarPanel
-    private let hostingController: NSHostingController<AnyView>
+    private let hostingView: TransparentHostingView<AnyView>
     private var cancellables = Set<AnyCancellable>()
     private var blinkTimer: Timer?
     private var blinkOn = true
@@ -19,7 +19,7 @@ final class MenuBarController: NSObject {
     override init() {
         coordinator = AppCoordinator()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        hostingController = NSHostingController(rootView: AnyView(EmptyView()))
+        hostingView = TransparentHostingView(rootView: AnyView(EmptyView()))
         panel = MenuBarPanel()
 
         super.init()
@@ -76,30 +76,37 @@ final class MenuBarController: NSObject {
     }
 
     private func configurePanel() {
-        let rootView = PopoverContent()
-            .environmentObject(coordinator)
-            .background {
-                RoundedRectangle(cornerRadius: MenuBarPanel.cornerRadius, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor))
-            }
-            .clipShape(RoundedRectangle(cornerRadius: MenuBarPanel.cornerRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: MenuBarPanel.cornerRadius, style: .continuous)
-                    .stroke(Color(nsColor: .separatorColor).opacity(0.35), lineWidth: 0.5)
-            }
+        hostingView.rootView = AnyView(
+            PopoverContent().environmentObject(coordinator)
+        )
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
 
-        hostingController.rootView = AnyView(rootView)
-        hostingController.view.wantsLayer = true
-        hostingController.view.layer?.cornerRadius = MenuBarPanel.cornerRadius
-        hostingController.view.layer?.masksToBounds = true
-        hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
-        panel.contentViewController = hostingController
+        let backdrop = NSVisualEffectView()
+        backdrop.material = .sidebar
+        backdrop.blendingMode = .behindWindow
+        backdrop.state = .active
+        backdrop.wantsLayer = true
+        backdrop.layer?.cornerRadius = MenuBarPanel.cornerRadius
+        backdrop.layer?.masksToBounds = true
+        backdrop.layer?.borderWidth = 0.5
+        backdrop.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.addSubview(hostingView)
+
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: backdrop.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
+        ])
+
+        panel.contentView = backdrop
     }
 
     private func updatePanelSize() {
-        hostingController.view.frame.size.width = 360
-        hostingController.view.layoutSubtreeIfNeeded()
-        let fittingSize = hostingController.view.fittingSize
+        panel.contentView?.frame.size.width = 360
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let fittingSize = hostingView.fittingSize
         panel.setContentSize(NSSize(width: 360, height: fittingSize.height))
     }
 
@@ -237,4 +244,28 @@ private final class MenuBarPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+private final class TransparentHostingView<Content: View>: NSHostingView<Content> {
+    override var isOpaque: Bool { false }
+
+    required init(rootView: Content) {
+        super.init(rootView: rootView)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    @MainActor required dynamic init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
 }
