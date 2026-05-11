@@ -97,7 +97,7 @@ enum ClearHistoryConfirmation {
     static func present(from ownerWindow: NSWindow?, onClear: @escaping @MainActor () -> Void) {
         let alert = NSAlert()
         alert.messageText = "Clear all transcription history?"
-        alert.informativeText = "This permanently removes all stored transcriptions from this device."
+        alert.informativeText = "This permanently removes all stored transcriptions from this device"
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Clear history")
         alert.addButton(withTitle: "Cancel")
