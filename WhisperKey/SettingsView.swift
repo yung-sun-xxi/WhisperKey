@@ -10,11 +10,12 @@ struct PopoverContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            StatusLine(state: coordinator.state)
+            PopoverHeader()
             if let banner = PermissionBanner(coordinator: coordinator) {
                 banner
             }
             Divider()
+            SectionHeader("Settings")
             SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .recording)
             Divider()
             HistorySection(history: coordinator.history)
@@ -27,6 +28,20 @@ struct PopoverContent: View {
         }
         .padding(16)
         .frame(width: 360)
+    }
+}
+
+private struct SectionHeader: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.headline)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -69,45 +84,19 @@ private struct PermissionBanner: View {
     }
 }
 
-private struct StatusLine: View {
-    let state: AppCoordinator.AppState
-
+private struct PopoverHeader: View {
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbolName)
-            Text(text)
-                .font(.system(.body, design: .rounded))
+        HStack(spacing: 10) {
+            Image("HeaderIcon")
+                .resizable()
+                .renderingMode(.template)
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 22)
+            Text("WhisperKey")
+                .font(.system(.body, design: .rounded).weight(.medium))
         }
-        .foregroundStyle(color)
-    }
-
-    private var symbolName: String {
-        switch state {
-        case .idle: return "mic"
-        case .recording: return "mic.fill"
-        case .transcribing: return "waveform"
-        case .error, .microphoneDenied, .accessibilityDenied: return "mic.slash"
-        }
-    }
-
-    private var text: String {
-        switch state {
-        case .idle: return "Idle — ready to record"
-        case .recording: return "Recording…"
-        case .transcribing: return "Transcribing…"
-        case .error(let message): return message
-        case .microphoneDenied: return "Microphone access denied"
-        case .accessibilityDenied: return "Accessibility access denied"
-        }
-    }
-
-    private var color: Color {
-        switch state {
-        case .idle: return .primary
-        case .recording: return .red
-        case .transcribing: return .blue
-        case .error, .microphoneDenied, .accessibilityDenied: return .yellow
-        }
+        .foregroundStyle(.primary)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -146,9 +135,8 @@ private struct SettingsForm: View {
     }
 
     var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 10) {
-            GridRow {
-                Text("Provider").gridColumnAlignment(.trailing)
+        VStack(alignment: .leading, spacing: 10) {
+            SettingsRow("Provider") {
                 Picker("", selection: $settings.provider) {
                     ForEach(TranscriptionProviderID.allCases, id: \.self) { id in
                         Text(id.displayName).tag(id)
@@ -156,16 +144,13 @@ private struct SettingsForm: View {
                 }
                 .labelsHidden()
             }
-            GridRow {
-                Text("Model").gridColumnAlignment(.trailing)
+            SettingsRow("Model") {
                 modelPicker
             }
-            GridRow {
-                Text("API Key").gridColumnAlignment(.trailing)
+            SettingsRow("API Key") {
                 apiKeyField
             }
-            GridRow {
-                Text("Language").gridColumnAlignment(.trailing)
+            SettingsRow("Language") {
                 Picker("", selection: $settings.language) {
                     ForEach(TranscriptionLanguage.allCases, id: \.self) { language in
                         Text(language.displayName).tag(language)
@@ -173,8 +158,7 @@ private struct SettingsForm: View {
                 }
                 .labelsHidden()
             }
-            GridRow {
-                Text("Trigger").gridColumnAlignment(.trailing)
+            SettingsRow("Trigger") {
                 Picker("", selection: $settings.triggerKey) {
                     ForEach(TriggerKey.allCases, id: \.self) { trigger in
                         Text(trigger.displayName).tag(trigger)
@@ -184,8 +168,7 @@ private struct SettingsForm: View {
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
-            GridRow {
-                Text("Mode").gridColumnAlignment(.trailing)
+            SettingsRow("Mode") {
                 Picker("", selection: $settings.triggerMode) {
                     ForEach(TriggerMode.allCases, id: \.self) { mode in
                         Text(mode.displayName).tag(mode)
@@ -195,18 +178,15 @@ private struct SettingsForm: View {
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
-            GridRow {
-                Text("Sound effects").gridColumnAlignment(.trailing)
+            SettingsRow("Sound effects") {
                 Toggle("", isOn: $settings.soundEffectsEnabled)
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
-            GridRow {
-                Text("Launch at login").gridColumnAlignment(.trailing)
+            SettingsRow("Launch at login") {
                 LaunchAtLoginToggle()
             }
-            GridRow {
-                Text("History size").gridColumnAlignment(.trailing)
+            SettingsRow("History size") {
                 HStack(spacing: 6) {
                     TextField("", value: $settings.historyMaxEntries, format: .number)
                         .textFieldStyle(.roundedBorder)
@@ -222,5 +202,26 @@ private struct SettingsForm: View {
                 }
             }
         }
+    }
+}
+
+private struct SettingsRow<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            content
+                .frame(width: 190, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity)
     }
 }

@@ -5,10 +5,11 @@ import HistoryStore
 struct HistorySection: View {
     @ObservedObject var history: HistoryStore
 
-    static let inlineLimit = 10
+    private static let visibleRowCount = 5
+    private static let inlineRowHeight: CGFloat = 26
 
     @State private var copiedID: UUID?
-    @State private var showingClearConfirmation = false
+    @State private var ownerWindow: NSWindow?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -19,53 +20,52 @@ struct HistorySection: View {
             }
 
             if history.entries.isEmpty {
-                Text("No transcriptions yet.")
+                Text("No transcriptions yet")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 4)
             } else {
-                VStack(spacing: 0) {
-                    let shown = Array(history.entries.prefix(Self.inlineLimit))
-                    ForEach(shown) { entry in
-                        HistoryInlineRow(
-                            entry: entry,
-                            copied: copiedID == entry.id,
-                            onCopy: { copy(entry: entry) },
-                            onOpenReadWindow: { openReadWindow(entry: entry) }
-                        )
-                        if entry.id != shown.last?.id {
-                            Divider()
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(history.entries) { entry in
+                            HistoryInlineRow(
+                                entry: entry,
+                                copied: copiedID == entry.id,
+                                onCopy: { copy(entry: entry) },
+                                onOpenReadWindow: { openReadWindow(entry: entry) }
+                            )
+                            .frame(height: Self.inlineRowHeight)
+                            if entry.id != history.entries.last?.id {
+                                Divider()
+                            }
                         }
                     }
                 }
+                .frame(height: inlineListHeight)
+                .scrollIndicators(.visible)
             }
 
             HStack(spacing: 8) {
                 Spacer()
-                Button("Full History…") {
+                Button("Full history") {
                     HistoryFullWindowController.show(history: history)
                 }
                 .controlSize(.small)
                 .disabled(history.entries.isEmpty)
-                Button("Clear history…") {
-                    showingClearConfirmation = true
+                Button("Clear history") {
+                    ClearHistoryConfirmation.present(from: ownerWindow) {
+                        history.clear()
+                    }
                 }
                 .controlSize(.small)
                 .disabled(history.entries.isEmpty)
             }
         }
-        .confirmationDialog(
-            "Clear all transcription history?",
-            isPresented: $showingClearConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Clear History", role: .destructive) {
-                history.clear()
+        .background {
+            WindowAccessor { window in
+                ownerWindow = window
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently removes all stored transcriptions from this device.")
         }
     }
 
@@ -83,6 +83,61 @@ struct HistorySection: View {
 
     private func openReadWindow(entry: HistoryEntry) {
         HistoryReadWindowController.show(entry: entry)
+    }
+
+    private var inlineListHeight: CGFloat {
+        let visibleRows = min(history.entries.count, Self.visibleRowCount)
+        let dividerCount = max(visibleRows - 1, 0)
+        return (CGFloat(visibleRows) * Self.inlineRowHeight) + CGFloat(dividerCount)
+    }
+}
+
+@MainActor
+enum ClearHistoryConfirmation {
+    static func present(from ownerWindow: NSWindow?, onClear: @escaping @MainActor () -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "Clear all transcription history?"
+        alert.informativeText = "This permanently removes all stored transcriptions from this device."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clear history")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.buttons.first?.keyEquivalent = "\r"
+        alert.buttons.dropFirst().first?.keyEquivalent = "\u{1b}"
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            onClear()
+        }
+
+        let resolvedOwnerWindow = ownerWindow ?? NSApp.keyWindow
+        if let resolvedOwnerWindow {
+            alert.beginSheetModal(for: resolvedOwnerWindow) { response in
+                Task { @MainActor in
+                    handleResponse(response)
+                }
+            }
+        } else {
+            handleResponse(alert.runModal())
+        }
+    }
+}
+
+struct WindowAccessor: NSViewRepresentable {
+    let onResolve: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            onResolve(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            onResolve(nsView.window)
+        }
     }
 }
 
