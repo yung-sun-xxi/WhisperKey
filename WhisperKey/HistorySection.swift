@@ -5,6 +5,8 @@ import HistoryStore
 struct HistorySection: View {
     @ObservedObject var history: HistoryStore
 
+    static let inlineLimit = 10
+
     @State private var copiedID: UUID?
     @State private var showingClearConfirmation = false
 
@@ -14,11 +16,6 @@ struct HistorySection: View {
                 Text("History")
                     .font(.headline)
                 Spacer()
-                if !history.entries.isEmpty {
-                    Text("\(history.entries.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             if history.entries.isEmpty {
@@ -28,26 +25,29 @@ struct HistorySection: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 4)
             } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(history.entries) { entry in
-                            HistoryRow(
-                                entry: entry,
-                                copied: copiedID == entry.id,
-                                onCopy: { copy(entry: entry) },
-                                onOpenReadWindow: { openReadWindow(entry: entry) }
-                            )
-                            if entry.id != history.entries.last?.id {
-                                Divider()
-                            }
+                VStack(spacing: 0) {
+                    let shown = Array(history.entries.prefix(Self.inlineLimit))
+                    ForEach(shown) { entry in
+                        HistoryInlineRow(
+                            entry: entry,
+                            copied: copiedID == entry.id,
+                            onCopy: { copy(entry: entry) },
+                            onOpenReadWindow: { openReadWindow(entry: entry) }
+                        )
+                        if entry.id != shown.last?.id {
+                            Divider()
                         }
                     }
                 }
-                .frame(maxHeight: 220)
             }
 
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
+                Button("Full History…") {
+                    HistoryFullWindowController.show(history: history)
+                }
+                .controlSize(.small)
+                .disabled(history.entries.isEmpty)
                 Button("Clear history…") {
                     showingClearConfirmation = true
                 }
@@ -86,7 +86,7 @@ struct HistorySection: View {
     }
 }
 
-private struct HistoryRow: View {
+private struct HistoryInlineRow: View {
     let entry: HistoryEntry
     let copied: Bool
     let onCopy: () -> Void
@@ -94,24 +94,13 @@ private struct HistoryRow: View {
 
     var body: some View {
         Button(action: handlePrimaryClick) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.preview())
-                        .font(.system(.callout))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 4) {
-                        Text(entry.createdAt.formatted(date: .omitted, time: .shortened))
-                        if let language = entry.language, !language.isEmpty {
-                            Text("·")
-                            Text(language.uppercased())
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                }
-                Spacer(minLength: 4)
+            HStack(spacing: 6) {
+                Text(entry.preview(maxLength: 240))
+                    .font(.system(.callout))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if copied {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.green)
@@ -119,8 +108,8 @@ private struct HistoryRow: View {
                 }
             }
             .contentShape(Rectangle())
-            .padding(.vertical, 6)
-            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 2)
         }
         .buttonStyle(.plain)
         .contextMenu {
