@@ -9,24 +9,26 @@ struct PopoverContent: View {
     @EnvironmentObject private var coordinator: AppCoordinator
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             PopoverHeader()
-            if let banner = PermissionBanner(coordinator: coordinator) {
-                banner
+            VStack(alignment: .leading, spacing: 12) {
+                if let banner = PermissionBanner(coordinator: coordinator) {
+                    banner
+                }
+                Divider()
+                SectionHeader("Settings")
+                SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .recording)
+                Divider()
+                HistorySection(history: coordinator.history)
+                Divider()
+                HStack {
+                    Spacer()
+                    Button("Quit WhisperKey") { NSApplication.shared.terminate(nil) }
+                        .keyboardShortcut("q")
+                }
             }
-            Divider()
-            SectionHeader("Settings")
-            SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .recording)
-            Divider()
-            HistorySection(history: coordinator.history)
-            Divider()
-            HStack {
-                Spacer()
-                Button("Quit WhisperKey") { NSApplication.shared.terminate(nil) }
-                    .keyboardShortcut("q")
-            }
+            .padding(16)
         }
-        .padding(16)
         .frame(width: 360)
     }
 }
@@ -86,17 +88,10 @@ private struct PermissionBanner: View {
 
 private struct PopoverHeader: View {
     var body: some View {
-        HStack(spacing: 10) {
-            Image("HeaderIcon")
-                .resizable()
-                .renderingMode(.template)
-                .aspectRatio(contentMode: .fit)
-                .frame(height: 22)
-            Text("WhisperKey")
-                .font(.system(.body, design: .rounded).weight(.medium))
-        }
-        .foregroundStyle(.primary)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Image("HeaderBanner")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: .infinity)
     }
 }
 
