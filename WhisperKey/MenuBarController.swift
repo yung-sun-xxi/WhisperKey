@@ -1,9 +1,15 @@
 import AppKit
 import Combine
+import os
 import SwiftUI
+
+enum MenuBarLayout {
+    static let popoverWidth: CGFloat = 306
+}
 
 @MainActor
 final class MenuBarController: NSObject {
+    private static let log = Logger(subsystem: "WhisperKey", category: "MenuBarController")
     private static let yellowThreshold: TimeInterval = 9 * 60 + 30
     private static let redThreshold: TimeInterval = 9 * 60 + 55
 
@@ -15,6 +21,9 @@ final class MenuBarController: NSObject {
     private var cancellables = Set<AnyCancellable>()
     private var blinkTimer: Timer?
     private var blinkOn = true
+    private var localMouseMonitor: Any?
+    private var globalMouseMonitor: Any?
+    private var suppressPanelResignClose = false
 
     override init() {
         coordinator = AppCoordinator()
@@ -29,36 +38,79 @@ final class MenuBarController: NSObject {
         observeCoordinator()
         observeAppActivation()
 
+        Self.log.info("initialized pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) bundleID=\(Bundle.main.bundleIdentifier ?? "nil", privacy: .public) bundlePath=\(Bundle.main.bundlePath, privacy: .public) executablePath=\(Bundle.main.executablePath ?? "nil", privacy: .public)")
+
         coordinator.openMenuBarPopoverHandler = { [weak self] in
             self?.showPopover()
         }
+        coordinator.closeMenuBarPopoverHandler = { [weak self] in
+            self?.closePopover()
+        }
+
+        prewarmSettingsWindow()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+        }
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+        }
         blinkTimer?.invalidate()
     }
 
     func togglePopover() {
+        Self.log.info("togglePopover visibleBefore=\(self.panel.isVisible, privacy: .public) isKeyBefore=\(self.panel.isKeyWindow, privacy: .public) appActive=\(NSApp.isActive, privacy: .public)")
         if panel.isVisible {
-            closePopover()
+            closePopover(reason: "toggle-visible")
         } else {
             showPopover()
         }
     }
 
     func showPopover() {
+        Self.log.info("showPopover begin appActive=\(NSApp.isActive, privacy: .public) visibleBefore=\(self.panel.isVisible, privacy: .public) isKeyBefore=\(self.panel.isKeyWindow, privacy: .public) buttonWindowExists=\((self.statusItem.button?.window != nil), privacy: .public) currentFrame=\(String(describing: self.panel.frame), privacy: .public)")
         NSApp.activate(ignoringOtherApps: true)
         updatePanelSize()
         positionPanel()
+        panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
         statusItem.button?.state = .on
-        clearPanelFocus()
+        startMouseMonitoring()
+        Self.log.info("showPopover ordered appActive=\(NSApp.isActive, privacy: .public) visibleAfter=\(self.panel.isVisible, privacy: .public) isKeyAfter=\(self.panel.isKeyWindow, privacy: .public) frame=\(String(describing: self.panel.frame), privacy: .public)")
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.panel.isVisible else { return }
+            self.panel.makeKeyAndOrderFront(nil)
+            Self.log.info("showPopover deferred makeKey visible=\(self.panel.isVisible, privacy: .public) isKey=\(self.panel.isKeyWindow, privacy: .public) appActive=\(NSApp.isActive, privacy: .public) frame=\(String(describing: self.panel.frame), privacy: .public)")
+        }
     }
 
     func closePopover() {
+        closePopover(reason: "external")
+    }
+
+    private func closePopover(reason: String, closeRelatedWindows: Bool = false) {
+        Self.log.info("closePopover reason=\(reason, privacy: .public) closeRelatedWindows=\(closeRelatedWindows, privacy: .public) visibleBefore=\(self.panel.isVisible, privacy: .public) isKeyBefore=\(self.panel.isKeyWindow, privacy: .public) appActive=\(NSApp.isActive, privacy: .public) frame=\(String(describing: self.panel.frame), privacy: .public)")
+        stopMouseMonitoring()
+        suppressPanelResignClose = false
         panel.orderOut(nil)
+        if closeRelatedWindows {
+            SettingsWindowController.hide()
+            HistoryFullWindowController.hide()
+        }
         statusItem.button?.state = .off
+        Self.log.info("closePopover complete reason=\(reason, privacy: .public) visibleAfter=\(self.panel.isVisible, privacy: .public) isKeyAfter=\(self.panel.isKeyWindow, privacy: .public)")
+    }
+
+    private func prewarmSettingsWindow() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+
+            SettingsWindowController.prepare(coordinator: self.coordinator)
+        }
     }
 
     private func configureStatusItem() {
@@ -104,15 +156,19 @@ final class MenuBarController: NSObject {
     }
 
     private func updatePanelSize() {
-        panel.contentView?.frame.size.width = 360
+        panel.contentView?.frame.size.width = MenuBarLayout.popoverWidth
         panel.contentView?.layoutSubtreeIfNeeded()
         let fittingSize = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: 360, height: fittingSize.height))
+        panel.setContentSize(NSSize(width: MenuBarLayout.popoverWidth, height: fittingSize.height))
+        Self.log.info("updatePanelSize fittingSize=\(String(describing: fittingSize), privacy: .public) contentSize=\(String(describing: self.panel.frame.size), privacy: .public)")
     }
 
     private func positionPanel() {
         guard let button = statusItem.button,
-              let buttonWindow = button.window else { return }
+              let buttonWindow = button.window else {
+            Self.log.error("positionPanel failed missing status button window buttonExists=\((self.statusItem.button != nil), privacy: .public)")
+            return
+        }
 
         let buttonFrameInWindow = button.convert(button.bounds, to: nil)
         let buttonFrameInScreen = buttonWindow.convertToScreen(buttonFrameInWindow)
@@ -127,13 +183,7 @@ final class MenuBarController: NSObject {
         let y = buttonFrameInScreen.minY - panelSize.height - padding
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
-    }
-
-    private func clearPanelFocus() {
-        panel.makeFirstResponder(nil)
-        DispatchQueue.main.async { [weak self] in
-            self?.panel.makeFirstResponder(nil)
-        }
+        Self.log.info("positionPanel buttonFrame=\(String(describing: buttonFrameInScreen), privacy: .public) visibleFrame=\(String(describing: visibleFrame), privacy: .public) panelSize=\(String(describing: panelSize), privacy: .public) origin=\(String(describing: NSPoint(x: x, y: y)), privacy: .public)")
     }
 
     private func observeCoordinator() {
@@ -153,6 +203,95 @@ final class MenuBarController: NSObject {
             name: NSApplication.didResignActiveNotification,
             object: NSApp
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePanelDidResignKey),
+            name: NSWindow.didResignKeyNotification,
+            object: panel
+        )
+    }
+
+    private func startMouseMonitoring() {
+        stopMouseMonitoring()
+
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self else { return event }
+            return self.handleLocalMouseDown(event)
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.panel.isVisible else { return }
+            self.globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                Task { @MainActor in
+                    self?.closePopover(reason: "global-mouse-down", closeRelatedWindows: true)
+                }
+            }
+            Self.log.info("globalMouseMonitoring started deferred global=\((self.globalMouseMonitor != nil), privacy: .public)")
+        }
+        Self.log.info("mouseMonitoring started local=\((self.localMouseMonitor != nil), privacy: .public) global=\((self.globalMouseMonitor != nil), privacy: .public)")
+    }
+
+    private func stopMouseMonitoring() {
+        let hadLocalMouseMonitor = localMouseMonitor != nil
+        let hadGlobalMouseMonitor = globalMouseMonitor != nil
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+            self.localMouseMonitor = nil
+        }
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+            self.globalMouseMonitor = nil
+        }
+        if hadLocalMouseMonitor || hadGlobalMouseMonitor {
+            Self.log.info("mouseMonitoring stopped hadLocal=\(hadLocalMouseMonitor, privacy: .public) hadGlobal=\(hadGlobalMouseMonitor, privacy: .public)")
+        }
+    }
+
+    private func handleLocalMouseDown(_ event: NSEvent) -> NSEvent? {
+        guard panel.isVisible else { return event }
+        guard !eventIsInsideRelatedWindow(event) else { return event }
+
+        if eventIsInsideStatusItem(event) {
+            suppressPanelResignClose = true
+            Self.log.info("localMouseDown inside status item suppressPanelResignClose=true eventWindow=\(String(describing: event.window), privacy: .public)")
+            return event
+        }
+
+        Self.log.info("localMouseDown outside panel/status eventWindow=\(String(describing: event.window), privacy: .public) location=\(String(describing: event.locationInWindow), privacy: .public)")
+        closePopover(reason: "local-mouse-outside", closeRelatedWindows: true)
+        return event
+    }
+
+    private func eventIsInsideRelatedWindow(_ event: NSEvent) -> Bool {
+        isRelatedWindow(event.window)
+    }
+
+    private func isRelatedWindow(_ window: NSWindow?) -> Bool {
+        guard let window else { return false }
+
+        return relatedWindows.contains { relatedWindow in
+            window === relatedWindow
+                || window.parent === relatedWindow
+                || relatedWindow.childWindows?.contains(where: { $0 === window }) == true
+        }
+    }
+
+    private var relatedWindows: [NSWindow] {
+        [
+            panel,
+            SettingsWindowController.relatedWindow,
+            HistoryFullWindowController.relatedWindow,
+            NSApp.modalWindow,
+        ].compactMap(\.self)
+    }
+
+    private func eventIsInsideStatusItem(_ event: NSEvent) -> Bool {
+        guard let button = statusItem.button,
+              event.window === button.window
+        else { return false }
+
+        let location = button.convert(event.locationInWindow, from: nil)
+        return button.bounds.contains(location)
     }
 
     private func updateStatusItem() {
@@ -208,10 +347,26 @@ final class MenuBarController: NSObject {
 
     @objc private func handleStatusItemClick() {
         togglePopover()
+        suppressPanelResignClose = false
+        Self.log.info("statusItemClick complete suppressPanelResignClose=false visible=\(self.panel.isVisible, privacy: .public) isKey=\(self.panel.isKeyWindow, privacy: .public)")
     }
 
     @objc private func handleAppDidResignActive() {
-        closePopover()
+        Self.log.info("appDidResignActive visible=\(self.panel.isVisible, privacy: .public) isKey=\(self.panel.isKeyWindow, privacy: .public)")
+        closePopover(reason: "app-did-resign-active", closeRelatedWindows: panel.isVisible)
+    }
+
+    @objc private func handlePanelDidResignKey() {
+        Self.log.info("panelDidResignKey visible=\(self.panel.isVisible, privacy: .public) suppress=\(self.suppressPanelResignClose, privacy: .public) appActive=\(NSApp.isActive, privacy: .public)")
+        guard !suppressPanelResignClose else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.panel.isVisible, !self.suppressPanelResignClose else { return }
+            guard !self.isRelatedWindow(NSApp.keyWindow) else {
+                Self.log.info("panelDidResignKey kept open relatedKeyWindow=\(String(describing: NSApp.keyWindow), privacy: .public)")
+                return
+            }
+            self.closePopover(reason: "panel-did-resign-key", closeRelatedWindows: true)
+        }
     }
 
     @objc private func handleBlinkTimer() {
@@ -225,7 +380,7 @@ private final class MenuBarPanel: NSPanel {
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 1),
+            contentRect: NSRect(x: 0, y: 0, width: MenuBarLayout.popoverWidth, height: 1),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -235,6 +390,7 @@ private final class MenuBarPanel: NSPanel {
         hasShadow = true
         isOpaque = false
         isReleasedWhenClosed = false
+        hidesOnDeactivate = false
         level = .floating
         collectionBehavior = [.transient, .fullScreenAuxiliary]
         contentView?.wantsLayer = true

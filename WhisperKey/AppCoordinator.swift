@@ -39,18 +39,19 @@ final class AppCoordinator: ObservableObject {
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
     private let sounds = SoundPlayer()
-    private let pasteEngine = PasteEngine()
+    private let outputRouter = TranscriptionOutputRouter()
     private let toastPresenter = ToastPresenter()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
     private var cancellables = Set<AnyCancellable>()
     private var recordingStartedAt: Date?
     private var recordingTimerTask: Task<Void, Never>?
-    private var lastTranscriptionRequest: (encoded: EncodedAudio, language: String?)?
+    private var lastTranscriptionRequest: (encoded: EncodedAudio, language: String?, audioDuration: TimeInterval)?
     var hotkeyStarted = false
     var permissionPollTask: Task<Void, Never>?
     var workspaceActivationObserver: NSObjectProtocol?
     var onboardingWindowController: OnboardingWindowController?
     var openMenuBarPopoverHandler: (() -> Void)?
+    var closeMenuBarPopoverHandler: (() -> Void)?
 
     init(
         settings: SettingsStore? = nil,
@@ -173,11 +174,15 @@ final class AppCoordinator: ObservableObject {
             return
         }
 
-        self.lastTranscriptionRequest = (encoded, language)
-        await runTranscription(encoded: encoded, language: language)
+        let audioDuration = buffer.duration
+        let levels = Self.audioLevels(buffer)
+        log.info("recording captured duration=\(audioDuration, privacy: .public) pcmBytes=\(buffer.samples.count, privacy: .public) sampleRate=\(buffer.sampleRate, privacy: .public) channels=\(buffer.channelCount, privacy: .public) rmsDbFS=\(levels.rmsDbFS, privacy: .public) peakDbFS=\(levels.peakDbFS, privacy: .public)")
+
+        self.lastTranscriptionRequest = (encoded, language, audioDuration)
+        await runTranscription(encoded: encoded, language: language, audioDuration: audioDuration)
     }
 
-    private func runTranscription(encoded: EncodedAudio, language: String?) async {
+    private func runTranscription(encoded: EncodedAudio, language: String?, audioDuration: TimeInterval) async {
         guard let provider = settings.makeTranscriptionProvider() else {
             log.error("no provider configured; cannot transcribe")
             handleTranscriptionFailure(
@@ -188,19 +193,43 @@ final class AppCoordinator: ObservableObject {
         }
 
         do {
+            log.info("transcription request provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public) mimeType=\(encoded.mimeType, privacy: .public) extension=\(encoded.fileExtension, privacy: .public) bytes=\(encoded.data.count, privacy: .public) duration=\(audioDuration, privacy: .public)")
             let text = try await provider.transcribe(audio: encoded, language: language)
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            log.info("transcription written to clipboard, \(text.count, privacy: .public) chars")
-            let decision = pasteEngine.attemptPaste()
-            log.info("paste decision: \(String(describing: decision), privacy: .public)")
-            if !text.isEmpty {
-                _ = history.append(
-                    text: text,
-                    providerID: settings.provider.rawValue,
-                    language: language
-                )
+            let trimmedLength = text.trimmingCharacters(in: .whitespacesAndNewlines).count
+            log.info("transcription parsed chars=\(text.count, privacy: .public) trimmedChars=\(trimmedLength, privacy: .public)")
+
+            guard trimmedLength > 0 else {
+                log.info("empty transcription result; clipboard and paste skipped provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public)")
+                self.lastTranscriptionRequest = nil
+                state = .idle
+                hotkey.setAppState(.idle)
+                playSound(.done)
+                return
             }
+
+            let outputSettings = TranscriptionOutputSettings(
+                saveToClipboard: settings.saveTranscriptionToClipboard,
+                autoPaste: settings.autoPasteTranscription
+            )
+            let output = await outputRouter.deliver(text: text, settings: outputSettings)
+            log.info("transcription output saveToClipboard=\(outputSettings.saveToClipboard, privacy: .public) autoPaste=\(outputSettings.autoPaste, privacy: .public) wroteClipboard=\(output.wroteClipboard, privacy: .public) pasteDecision=\(String(describing: output.pasteDecision), privacy: .public) restoredClipboard=\(output.restoredClipboard, privacy: .public)")
+            let priceEstimate = TranscriptionCostEstimator.estimate(
+                providerID: settings.provider.rawValue,
+                model: currentTranscriptionModelID,
+                audioDurationSeconds: audioDuration
+            )
+            _ = history.append(
+                text: text,
+                providerID: settings.provider.rawValue,
+                language: language,
+                audioDurationSeconds: audioDuration,
+                model: currentTranscriptionModelID,
+                estimatedPriceAtTime: priceEstimate?.amount,
+                currency: priceEstimate?.currency,
+                destinationUsed: Self.destinationUsed(for: outputSettings),
+                copiedToClipboard: outputSettings.saveToClipboard && output.wroteClipboard,
+                autoPasted: output.pasteDecision == .paste
+            )
             self.lastTranscriptionRequest = nil
             state = .idle
             hotkey.setAppState(.idle)
@@ -228,8 +257,76 @@ final class AppCoordinator: ObservableObject {
         state = .transcribing
         hotkey.setAppState(.transcribing)
         Task { @MainActor in
-            await self.runTranscription(encoded: request.encoded, language: request.language)
+            await self.runTranscription(
+                encoded: request.encoded,
+                language: request.language,
+                audioDuration: request.audioDuration
+            )
         }
+    }
+
+    var currentTranscriptionModelID: String {
+        switch settings.provider {
+        case .openai:
+            settings.openAIModel.rawValue
+        case .groq:
+            settings.groqModel.rawValue
+        }
+    }
+
+    func openSettingsWindow() {
+        SettingsWindowController.show(coordinator: self)
+    }
+
+    private static func destinationUsed(for settings: TranscriptionOutputSettings) -> String {
+        switch (settings.saveToClipboard, settings.autoPaste) {
+        case (true, true):
+            return "clipboardAndAutoPaste"
+        case (true, false):
+            return "clipboard"
+        case (false, true):
+            return "autoPaste"
+        case (false, false):
+            return "none"
+        }
+    }
+
+    private static func audioLevels(_ buffer: AudioBuffer) -> (rmsDbFS: Double, peakDbFS: Double) {
+        let bytes = buffer.samples
+        guard bytes.count >= 2 else {
+            return (-Double.infinity, -Double.infinity)
+        }
+
+        var sumSquares = 0.0
+        var peak = 0.0
+        var sampleCount = 0
+
+        bytes.withUnsafeBytes { rawBuffer in
+            let byteBuffer = rawBuffer.bindMemory(to: UInt8.self)
+            var index = 0
+            while index + 1 < byteBuffer.count {
+                let low = UInt16(byteBuffer[index])
+                let high = UInt16(byteBuffer[index + 1]) << 8
+                let sample = Int16(bitPattern: high | low)
+                let normalized = abs(Double(sample) / Double(Int16.max))
+                sumSquares += normalized * normalized
+                peak = max(peak, normalized)
+                sampleCount += 1
+                index += 2
+            }
+        }
+
+        guard sampleCount > 0 else {
+            return (-Double.infinity, -Double.infinity)
+        }
+
+        let rms = sqrt(sumSquares / Double(sampleCount))
+        return (dbFS(rms), dbFS(peak))
+    }
+
+    private static func dbFS(_ value: Double) -> Double {
+        guard value > 0 else { return -Double.infinity }
+        return 20 * log10(value)
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -271,7 +368,7 @@ final class AppCoordinator: ObservableObject {
             case .retry:
                 self.retryLastTranscription()
             case .openSettings:
-                self.openMenuBarPopover()
+                self.openSettingsWindow()
             case .none:
                 break
             }

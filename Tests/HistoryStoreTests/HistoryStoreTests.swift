@@ -59,14 +59,30 @@ final class HistoryStoreTests: XCTestCase {
         let url = makeURL()
         do {
             let store = HistoryStore(url: url, maxEntries: 10)
-            _ = store.append(text: "alpha", providerID: "openai", language: "en", now: Date(timeIntervalSince1970: 100))
+            _ = store.append(
+                text: "alpha beta",
+                providerID: "openai",
+                language: "en",
+                now: Date(timeIntervalSince1970: 100),
+                audioDurationSeconds: 4,
+                model: "whisper-1",
+                destinationUsed: "clipboard",
+                copiedToClipboard: true,
+                autoPasted: false
+            )
             _ = store.append(text: "beta", providerID: "openai", language: nil, now: Date(timeIntervalSince1970: 200))
         }
 
         let reloaded = HistoryStore(url: url, maxEntries: 10)
-        XCTAssertEqual(reloaded.entries.map(\.text), ["beta", "alpha"])
+        XCTAssertEqual(reloaded.entries.map(\.text), ["beta", "alpha beta"])
         XCTAssertEqual(reloaded.entries.first?.language, nil)
         XCTAssertEqual(reloaded.entries.last?.language, "en")
+        XCTAssertEqual(reloaded.entries.last?.wordCount, 2)
+        XCTAssertEqual(reloaded.entries.last?.audioDurationSeconds, 4)
+        XCTAssertEqual(reloaded.entries.last?.model, "whisper-1")
+        XCTAssertEqual(reloaded.entries.last?.destinationUsed, "clipboard")
+        XCTAssertEqual(reloaded.entries.last?.copiedToClipboard, true)
+        XCTAssertEqual(reloaded.entries.last?.autoPasted, false)
     }
 
     func testJSONUsesISO8601Dates() throws {
@@ -186,11 +202,180 @@ final class HistoryStoreTests: XCTestCase {
                 text: "hello",
                 createdAt: Date(timeIntervalSince1970: 1_700_000_000),
                 providerID: "openai",
-                language: "ru"
+                language: "ru",
+                audioDurationSeconds: 1.5,
+                wordCount: 1,
+                model: "whisper-1",
+                estimatedPriceAtTime: 0.01,
+                currency: "USD",
+                destinationUsed: "clipboardAndAutoPaste",
+                copiedToClipboard: true,
+                autoPasted: true,
+                estimatedSavedSecondsAtTime: 0
             )
         ]
         let data = try HistoryStore.makeEncoder().encode(original)
         let decoded = try HistoryStore.makeDecoder().decode([HistoryEntry].self, from: data)
         XCTAssertEqual(decoded, original)
+    }
+
+    func testLegacyProviderIDSchemaStillDecodes() throws {
+        let json = """
+        [
+          {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "text": "legacy entry",
+            "createdAt": "2024-01-01T00:00:00Z",
+            "providerID": "openai",
+            "language": "en"
+          }
+        ]
+        """.data(using: .utf8)!
+
+        let decoded = try HistoryStore.makeDecoder().decode([HistoryEntry].self, from: json)
+        XCTAssertEqual(decoded.first?.providerID, "openai")
+        XCTAssertEqual(decoded.first?.provider, "openai")
+        XCTAssertEqual(decoded.first?.wordCount, 2)
+    }
+
+    func testTodayUsageSummaryUsesLocalCalendarDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let today = Date(timeIntervalSince1970: 1_700_000_000)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+
+        let entries = [
+            HistoryEntry(
+                text: "one two three",
+                createdAt: today,
+                providerID: "openai",
+                language: "en",
+                audioDurationSeconds: 30,
+                wordCount: 3,
+                estimatedPriceAtTime: 0.02,
+                currency: "USD",
+                estimatedSavedSecondsAtTime: 12
+            ),
+            HistoryEntry(
+                text: "four five",
+                createdAt: today,
+                providerID: "openai",
+                language: "en",
+                audioDurationSeconds: 20,
+                wordCount: 2,
+                estimatedPriceAtTime: 0.03,
+                currency: "USD",
+                estimatedSavedSecondsAtTime: 8
+            ),
+            HistoryEntry(
+                text: "old",
+                createdAt: yesterday,
+                providerID: "openai",
+                language: "en",
+                audioDurationSeconds: 99,
+                wordCount: 1,
+                estimatedPriceAtTime: 99,
+                currency: "USD",
+                estimatedSavedSecondsAtTime: 99
+            ),
+        ]
+
+        let summary = HistoryUsageSummary.today(from: entries, now: today, calendar: calendar)
+        XCTAssertEqual(summary.audioDurationSeconds, 50)
+        XCTAssertEqual(summary.wordCount, 5)
+        XCTAssertEqual(summary.estimatedCost ?? 0, 0.05, accuracy: 0.0001)
+        XCTAssertEqual(summary.currency, "USD")
+        XCTAssertEqual(summary.estimatedSavedSeconds, 20)
+    }
+
+    func testTodayUsageSummaryIgnoresEntriesWithIncompleteCostMetadata() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let entries = [
+            HistoryEntry(
+                text: "priced",
+                createdAt: now,
+                providerID: "openai",
+                language: nil,
+                audioDurationSeconds: 12,
+                estimatedPriceAtTime: 0.02,
+                currency: "USD"
+            ),
+            HistoryEntry(
+                text: "unpriced",
+                createdAt: now,
+                providerID: "groq",
+                language: nil,
+                audioDurationSeconds: 12
+            ),
+        ]
+
+        let summary = HistoryUsageSummary.today(from: entries, now: now)
+        XCTAssertEqual(summary.wordCount, 1)
+        XCTAssertEqual(summary.estimatedCost, 0.02)
+        XCTAssertEqual(summary.currency, "USD")
+    }
+
+    func testTodayUsageSummaryIgnoresLegacyEntriesWithoutCostMetadata() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let entries = [
+            HistoryEntry(
+                text: "legacy words should not count",
+                createdAt: now,
+                providerID: "openai",
+                language: nil
+            )
+        ]
+
+        let summary = HistoryUsageSummary.today(from: entries, now: now)
+        XCTAssertEqual(summary.audioDurationSeconds, 0)
+        XCTAssertEqual(summary.wordCount, 0)
+        XCTAssertEqual(summary.estimatedCost, 0)
+        XCTAssertEqual(summary.currency, "USD")
+    }
+
+    func testTodayUsageSummaryIgnoresIntermediateEntriesWithDurationButNoCost() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let entries = [
+            HistoryEntry(
+                text: "duration exists but cost is missing",
+                createdAt: now,
+                providerID: "openai",
+                language: nil,
+                audioDurationSeconds: 10
+            )
+        ]
+
+        let summary = HistoryUsageSummary.today(from: entries, now: now)
+        XCTAssertEqual(summary.audioDurationSeconds, 0)
+        XCTAssertEqual(summary.wordCount, 0)
+        XCTAssertEqual(summary.estimatedCost, 0)
+        XCTAssertEqual(summary.currency, "USD")
+    }
+
+    func testTranscriptionCostEstimatorUsesKnownProviderPrices() {
+        let openAI = TranscriptionCostEstimator.estimate(
+            providerID: "openai",
+            model: "gpt-4o-mini-transcribe",
+            audioDurationSeconds: 60
+        )
+        XCTAssertEqual(openAI?.amount ?? 0, 0.003, accuracy: 0.000001)
+        XCTAssertEqual(openAI?.currency, "USD")
+
+        let groq = TranscriptionCostEstimator.estimate(
+            providerID: "groq",
+            model: "whisper-large-v3-turbo",
+            audioDurationSeconds: 3_600
+        )
+        XCTAssertEqual(groq?.amount ?? 0, 0.04, accuracy: 0.000001)
+        XCTAssertEqual(groq?.currency, "USD")
+    }
+
+    func testGroqCostEstimatorAppliesTenSecondMinimum() {
+        let estimate = TranscriptionCostEstimator.estimate(
+            providerID: "groq",
+            model: "whisper-large-v3-turbo",
+            audioDurationSeconds: 1
+        )
+        XCTAssertEqual(estimate?.amount ?? 0, 10.0 / 3_600 * 0.04, accuracy: 0.000001)
     }
 }

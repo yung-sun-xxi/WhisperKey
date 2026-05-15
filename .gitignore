@@ -30,6 +30,7 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
+*.profraw
 
 # Release artifacts (signed/notarized builds, archives, DMGs, zips)
 build/

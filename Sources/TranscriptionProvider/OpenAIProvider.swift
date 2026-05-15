@@ -1,5 +1,8 @@
 import Foundation
 import AudioEncoder
+import os
+
+private let openAIProviderLog = Logger(subsystem: "WhisperKey", category: "OpenAIProvider")
 
 public struct OpenAIProvider: TranscriptionProvider {
 
@@ -54,6 +57,8 @@ public struct OpenAIProvider: TranscriptionProvider {
         guard let http = response as? HTTPURLResponse else {
             throw TranscriptionError.unknown
         }
+
+        openAIProviderLog.info("transcription response provider=openai model=\(model.rawValue, privacy: .public) status=\(http.statusCode, privacy: .public) bytes=\(data.count, privacy: .public)")
 
         if let mapped = WhisperResponseParser.mapHTTPStatus(http.statusCode, data: data) {
             throw mapped

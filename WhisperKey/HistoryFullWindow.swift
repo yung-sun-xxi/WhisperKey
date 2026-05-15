@@ -6,12 +6,19 @@ import HistoryStore
 enum HistoryFullWindowController {
     private static var window: NSWindow?
     private static let delegate = WindowDelegate()
+    private static var localMouseMonitor: Any?
+    private static var globalMouseMonitor: Any?
+
+    static var relatedWindow: NSWindow? {
+        window
+    }
 
     static func show(history: HistoryStore) {
         if let existing = window {
             existing.makeKeyAndOrderFront(nil)
             existing.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
+            startDismissMonitoring()
             return
         }
 
@@ -30,10 +37,60 @@ enum HistoryFullWindowController {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+        startDismissMonitoring()
+    }
+
+    static func hide() {
+        stopDismissMonitoring()
+
+        guard let window else { return }
+
+        window.orderOut(nil)
     }
 
     static func windowDidClose() {
+        stopDismissMonitoring()
         window = nil
+    }
+
+    private static func startDismissMonitoring() {
+        stopDismissMonitoring()
+
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            guard !eventIsInsideHistoryWindow(event) else { return event }
+
+            HistoryFullWindowController.hide()
+            return event
+        }
+
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { _ in
+            Task { @MainActor in
+                HistoryFullWindowController.hide()
+            }
+        }
+    }
+
+    private static func stopDismissMonitoring() {
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+            self.localMouseMonitor = nil
+        }
+
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+            self.globalMouseMonitor = nil
+        }
+    }
+
+    private static func eventIsInsideHistoryWindow(_ event: NSEvent) -> Bool {
+        guard let historyWindow = window,
+              let eventWindow = event.window
+        else { return false }
+
+        return eventWindow === historyWindow
+            || eventWindow.parent === historyWindow
+            || historyWindow.childWindows?.contains(where: { $0 === eventWindow }) == true
+            || eventWindow === NSApp.modalWindow
     }
 }
 
