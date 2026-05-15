@@ -31,6 +31,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.triggerMode, .tap)
         XCTAssertEqual(store.hotkeyConfig, HotkeyConfig(trigger: .rightOption, mode: .tap))
         XCTAssertTrue(store.soundEffectsEnabled)
+        XCTAssertTrue(store.saveTranscriptionToClipboard)
+        XCTAssertTrue(store.autoPasteTranscription)
         XCTAssertEqual(store.openAIAPIKey, "")
     }
 
@@ -42,6 +44,8 @@ final class SettingsStoreTests: XCTestCase {
         first.triggerKey = .rightShift
         first.triggerMode = .hold
         first.soundEffectsEnabled = false
+        first.saveTranscriptionToClipboard = false
+        first.autoPasteTranscription = false
         first.openAIAPIKey = "sk-persisted"
 
         let second = SettingsStore(keychain: keychain, defaults: defaults)
@@ -51,6 +55,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.triggerMode, .hold)
         XCTAssertEqual(second.hotkeyConfig, HotkeyConfig(trigger: .rightShift, mode: .hold))
         XCTAssertFalse(second.soundEffectsEnabled)
+        XCTAssertFalse(second.saveTranscriptionToClipboard)
+        XCTAssertFalse(second.autoPasteTranscription)
         XCTAssertEqual(second.openAIAPIKey, "sk-persisted")
     }
 

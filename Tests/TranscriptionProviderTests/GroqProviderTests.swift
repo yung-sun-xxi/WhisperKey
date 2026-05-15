@@ -83,6 +83,18 @@ final class GroqProviderTests: XCTestCase {
         XCTAssertFalse(body.contains(ascii: "name=\"language\""))
     }
 
+    func testEmptyTextResponseIsReturnedAsProviderSuccess() async throws {
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 200,
+            body: #"{"text":""}"#.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+
+        let result = try await makeProvider().transcribe(audio: sampleAudio, language: nil)
+
+        XCTAssertEqual(result, "")
+    }
+
     // MARK: - Error mapping (shared parser)
 
     func testUnauthorizedMaps() async {

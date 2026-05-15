@@ -5,7 +5,7 @@ import HistoryStore
 struct HistorySection: View {
     @ObservedObject var history: HistoryStore
 
-    private static let visibleRowCount = 5
+    private static let visibleRowCount = 7
     private static let inlineRowHeight: CGFloat = 26
 
     @State private var copiedID: UUID?
@@ -47,12 +47,12 @@ struct HistorySection: View {
             }
 
             HStack(spacing: 8) {
-                Spacer()
                 Button("Full history") {
                     HistoryFullWindowController.show(history: history)
                 }
                 .controlSize(.small)
                 .disabled(history.entries.isEmpty)
+                Spacer()
                 Button("Clear history") {
                     ClearHistoryConfirmation.present(from: ownerWindow) {
                         history.clear()
@@ -111,7 +111,7 @@ enum ClearHistoryConfirmation {
         }
 
         let resolvedOwnerWindow = ownerWindow ?? NSApp.keyWindow
-        if let resolvedOwnerWindow {
+        if let resolvedOwnerWindow, !resolvedOwnerWindow.styleMask.contains(.borderless) {
             alert.beginSheetModal(for: resolvedOwnerWindow) { response in
                 Task { @MainActor in
                     handleResponse(response)

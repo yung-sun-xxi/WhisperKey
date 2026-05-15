@@ -1,5 +1,8 @@
 import Foundation
 import AudioEncoder
+import os
+
+private let groqProviderLog = Logger(subsystem: "WhisperKey", category: "GroqProvider")
 
 public struct GroqProvider: TranscriptionProvider {
 
@@ -63,6 +66,8 @@ public struct GroqProvider: TranscriptionProvider {
         guard let http = response as? HTTPURLResponse else {
             throw TranscriptionError.unknown
         }
+
+        groqProviderLog.info("transcription response provider=groq model=\(model.rawValue, privacy: .public) status=\(http.statusCode, privacy: .public) bytes=\(data.count, privacy: .public)")
 
         if let mapped = WhisperResponseParser.mapHTTPStatus(http.statusCode, data: data) {
             throw mapped

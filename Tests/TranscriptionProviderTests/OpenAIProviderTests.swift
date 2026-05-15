@@ -165,6 +165,19 @@ final class OpenAIProviderTests: XCTestCase {
         XCTAssertTrue(body.contains(ascii: "\r\n\r\nru\r\n"))
     }
 
+    func testEmptyTextResponseIsReturnedAsProviderSuccess() async throws {
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 200,
+            body: #"{"text":""}"#.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+
+        let provider = makeProvider()
+        let result = try await provider.transcribe(audio: sampleAudio, language: nil)
+
+        XCTAssertEqual(result, "")
+    }
+
     // MARK: Error mapping
 
     func testUnauthorizedMapsTo401() async {

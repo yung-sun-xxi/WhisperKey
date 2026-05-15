@@ -52,6 +52,8 @@ public final class SettingsStore: ObservableObject {
         static let triggerMode = "WhisperKey.settings.triggerMode"
         static let soundEffectsEnabled = "WhisperKey.settings.soundEffectsEnabled"
         static let historyMaxEntries = "WhisperKey.settings.historyMaxEntries"
+        static let saveTranscriptionToClipboard = "WhisperKey.settings.saveTranscriptionToClipboard"
+        static let autoPasteTranscription = "WhisperKey.settings.autoPasteTranscription"
     }
 
     public static let defaultHistoryMaxEntries = 30
@@ -94,6 +96,22 @@ public final class SettingsStore: ObservableObject {
         didSet { if !loading { defaults.set(soundEffectsEnabled, forKey: DefaultsKey.soundEffectsEnabled) } }
     }
 
+    @Published public var saveTranscriptionToClipboard: Bool {
+        didSet {
+            if !loading {
+                defaults.set(saveTranscriptionToClipboard, forKey: DefaultsKey.saveTranscriptionToClipboard)
+            }
+        }
+    }
+
+    @Published public var autoPasteTranscription: Bool {
+        didSet {
+            if !loading {
+                defaults.set(autoPasteTranscription, forKey: DefaultsKey.autoPasteTranscription)
+            }
+        }
+    }
+
     @Published public var historyMaxEntries: Int {
         didSet {
             let clamped = Self.clampHistoryMax(historyMaxEntries)
@@ -124,6 +142,8 @@ public final class SettingsStore: ObservableObject {
         self.triggerKey = (defaults.string(forKey: DefaultsKey.triggerKey).flatMap(TriggerKey.init(rawValue:))) ?? .rightOption
         self.triggerMode = (defaults.string(forKey: DefaultsKey.triggerMode).flatMap(TriggerMode.init(rawValue:))) ?? .tap
         self.soundEffectsEnabled = (defaults.object(forKey: DefaultsKey.soundEffectsEnabled) as? Bool) ?? true
+        self.saveTranscriptionToClipboard = (defaults.object(forKey: DefaultsKey.saveTranscriptionToClipboard) as? Bool) ?? true
+        self.autoPasteTranscription = (defaults.object(forKey: DefaultsKey.autoPasteTranscription) as? Bool) ?? true
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.openAIAPIKey = Self.loadOpenAIAPIKey(keychain: keychain)
