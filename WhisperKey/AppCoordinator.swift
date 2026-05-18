@@ -54,6 +54,8 @@ final class AppCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var recordingStartedAt: Date?
     private var recordingTimerTask: Task<Void, Never>?
+    private var activeRecordingID: UUID?
+    private var recordingCancellationRequested = false
     private var lastTranscriptionRequest: (encoded: EncodedAudio, language: String?, audioDuration: TimeInterval)?
     var hotkeyStarted = false
     var permissionPollTask: Task<Void, Never>?
@@ -107,12 +109,17 @@ final class AppCoordinator: ObservableObject {
             startRecording()
         case .recordingShouldStop:
             stopRecording()
+        case .recordingShouldCancel:
+            cancelRecording()
         }
     }
 
     private func startRecording() {
         refreshPermissions()
         guard Self.canStartRecording(from: state), permissions.allGranted else { return }
+        let recordingID = UUID()
+        activeRecordingID = recordingID
+        recordingCancellationRequested = false
         state = .recording
         hotkey.setAppState(.recording)
         startRecordingTimer()
@@ -124,20 +131,52 @@ final class AppCoordinator: ObservableObject {
                     guard let self else { return }
                     await MainActor.run { self.stopRecording() }
                 }
+
+                guard activeRecordingID == recordingID, !recordingCancellationRequested else {
+                    finishCanceledRecording(recordingID: recordingID)
+                    return
+                }
+
                 try await recorder.start()
+
+                guard activeRecordingID == recordingID else {
+                    _ = await recorder.stop()
+                    return
+                }
+
+                if recordingCancellationRequested {
+                    _ = await recorder.stop()
+                    finishCanceledRecording(recordingID: recordingID)
+                    return
+                }
+
                 playSound(.start)
             } catch AudioRecorderError.microphonePermissionDenied {
+                guard activeRecordingID == recordingID else { return }
+                if recordingCancellationRequested {
+                    finishCanceledRecording(recordingID: recordingID)
+                    return
+                }
                 log.error("microphone permission denied")
                 await MainActor.run {
                     stopRecordingTimer()
+                    activeRecordingID = nil
+                    recordingCancellationRequested = false
                     state = .microphoneDenied
                     hotkey.setAppState(.idle)
                     playSound(.error)
                 }
             } catch {
+                guard activeRecordingID == recordingID else { return }
+                if recordingCancellationRequested {
+                    finishCanceledRecording(recordingID: recordingID)
+                    return
+                }
                 log.error("recorder.start failed: \(String(describing: error), privacy: .public)")
                 await MainActor.run {
                     stopRecordingTimer()
+                    activeRecordingID = nil
+                    recordingCancellationRequested = false
                     state = .error("Recording failed: \(error)")
                     hotkey.setAppState(.idle)
                     playSound(.error)
@@ -148,6 +187,8 @@ final class AppCoordinator: ObservableObject {
 
     private func stopRecording() {
         guard state == .recording else { return }
+        let recordingID = activeRecordingID
+        recordingCancellationRequested = false
         state = .transcribing
         hotkey.setAppState(.transcribing)
         log.info("transcription in flight; further hotkey presses will be suppressed")
@@ -156,6 +197,9 @@ final class AppCoordinator: ObservableObject {
 
         Task {
             let buffer = await recorder.stop()
+
+            guard activeRecordingID == recordingID else { return }
+            activeRecordingID = nil
 
             guard let buffer else {
                 log.info("recording discarded (under min duration)")
@@ -168,6 +212,31 @@ final class AppCoordinator: ObservableObject {
 
             await transcribeNew(buffer: buffer)
         }
+    }
+
+    private func cancelRecording() {
+        guard state == .recording else { return }
+        let recordingID = activeRecordingID
+        recordingCancellationRequested = true
+        lastTranscriptionRequest = nil
+        stopRecordingTimer()
+        log.info("recording cancellation requested")
+
+        Task {
+            _ = await recorder.stop()
+            finishCanceledRecording(recordingID: recordingID)
+        }
+    }
+
+    private func finishCanceledRecording(recordingID: UUID?) {
+        guard activeRecordingID == recordingID else { return }
+        log.info("recording canceled; captured audio discarded")
+        activeRecordingID = nil
+        recordingCancellationRequested = false
+        lastTranscriptionRequest = nil
+        stopRecordingTimer()
+        state = .idle
+        hotkey.setAppState(.idle)
     }
 
     private func transcribeNew(buffer: AudioBuffer) async {
@@ -412,7 +481,14 @@ final class AppCoordinator: ObservableObject {
     private func observeSettings() {
         settings.$triggerKey
             .combineLatest(settings.$triggerMode)
-            .map { trigger, mode in HotkeyConfig(trigger: trigger, mode: mode) }
+            .combineLatest(settings.$escapeToCancelRecording)
+            .map { triggerAndMode, escapeToCancelRecording in
+                HotkeyConfig(
+                    trigger: triggerAndMode.0,
+                    mode: triggerAndMode.1,
+                    escapeToCancelRecording: escapeToCancelRecording
+                )
+            }
             .removeDuplicates()
             .sink { [weak self] config in
                 self?.hotkey.setConfig(config)

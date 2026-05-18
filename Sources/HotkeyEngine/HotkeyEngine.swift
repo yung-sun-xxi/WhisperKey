@@ -37,16 +37,23 @@ public enum TriggerMode: String, CaseIterable, Codable, Sendable, Equatable {
 public struct HotkeyConfig: Sendable, Equatable {
     public var trigger: TriggerKey
     public var mode: TriggerMode
+    public var escapeToCancelRecording: Bool
 
-    public init(trigger: TriggerKey = .rightOption, mode: TriggerMode = .tap) {
+    public init(
+        trigger: TriggerKey = .rightOption,
+        mode: TriggerMode = .tap,
+        escapeToCancelRecording: Bool = true
+    ) {
         self.trigger = trigger
         self.mode = mode
+        self.escapeToCancelRecording = escapeToCancelRecording
     }
 }
 
 public enum HotkeyOutput: Sendable, Equatable {
     case recordingShouldStart
     case recordingShouldStop
+    case recordingShouldCancel
 }
 
 /// Pure state machine for hotkey detection. Has no system dependencies and is fully testable.
@@ -65,6 +72,7 @@ public struct HotkeyStateMachine: Sendable {
         case triggerDown(at: TimeInterval)
         case triggerUp(at: TimeInterval)
         case otherKeyDown(at: TimeInterval)
+        case escapeDown(at: TimeInterval)
     }
 
     public static let tapMaxDuration: TimeInterval = 0.4
@@ -113,11 +121,17 @@ public struct HotkeyStateMachine: Sendable {
     }
 
     private mutating func processTapMode(_ event: Event) -> HotkeyOutput? {
+        if case .escapeDown(let t) = event, !config.escapeToCancelRecording {
+            return processTapMode(.otherKeyDown(at: t))
+        }
+
         switch (appState, event) {
         case (.transcribing, .triggerDown), (.transcribing, .triggerUp):
             transcribingSuppressionCount &+= 1
             return nil
         case (.transcribing, .otherKeyDown):
+            return nil
+        case (.transcribing, .escapeDown):
             return nil
 
         case (.idle, .triggerDown(let t)):
@@ -133,6 +147,11 @@ public struct HotkeyStateMachine: Sendable {
                 otherKeySeen = true
             }
             return nil
+        case (.idle, .escapeDown):
+            if pressedAt != nil {
+                otherKeySeen = true
+            }
+            return nil
 
         case (.recording, .triggerDown):
             resetHoldState()
@@ -143,15 +162,25 @@ public struct HotkeyStateMachine: Sendable {
 
         case (.recording, .otherKeyDown):
             return nil
+
+        case (.recording, .escapeDown):
+            resetHoldState()
+            return .recordingShouldCancel
         }
     }
 
     private mutating func processHoldMode(_ event: Event) -> HotkeyOutput? {
+        if case .escapeDown(let t) = event, !config.escapeToCancelRecording {
+            return processHoldMode(.otherKeyDown(at: t))
+        }
+
         switch (appState, event) {
         case (.transcribing, .triggerDown), (.transcribing, .triggerUp):
             transcribingSuppressionCount &+= 1
             return nil
         case (.transcribing, .otherKeyDown):
+            return nil
+        case (.transcribing, .escapeDown):
             return nil
 
         case (.idle, .triggerDown(let t)):
@@ -164,6 +193,9 @@ public struct HotkeyStateMachine: Sendable {
         case (.idle, .otherKeyDown(let t)):
             return abortActiveHoldIfNeeded(now: t)
 
+        case (.idle, .escapeDown):
+            return cancelActiveHoldIfNeeded()
+
         case (.recording, .triggerDown):
             return nil
 
@@ -172,6 +204,10 @@ public struct HotkeyStateMachine: Sendable {
 
         case (.recording, .otherKeyDown(let t)):
             return abortActiveHoldIfNeeded(now: t)
+
+        case (.recording, .escapeDown):
+            resetHoldState()
+            return .recordingShouldCancel
         }
     }
 
@@ -205,5 +241,11 @@ public struct HotkeyStateMachine: Sendable {
         }
         resetHoldState()
         return .recordingShouldStop
+    }
+
+    private mutating func cancelActiveHoldIfNeeded() -> HotkeyOutput? {
+        guard activeHoldStartedAt != nil else { return nil }
+        resetHoldState()
+        return .recordingShouldCancel
     }
 }
