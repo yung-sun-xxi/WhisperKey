@@ -132,6 +132,38 @@ final class GroqProviderTests: XCTestCase {
         await assertThrows(makeProvider(), expected: .network)
     }
 
+    // MARK: - API key validation
+
+    func testValidateAPIKeyHitsGroqModelsEndpoint() async throws {
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 200,
+            body: #"{"object":"list","data":[]}"#.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+
+        let result = await GroqProvider.validateAPIKey("gsk-test", urlSession: makeSession())
+
+        XCTAssertEqual(result, .accepted)
+        let request = try XCTUnwrap(StubURLProtocol.lastRequest)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url, GroqProvider.defaultModelsEndpoint)
+        XCTAssertEqual(request.url?.host, "api.groq.com")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer gsk-test")
+    }
+
+    func testValidateAPIKeyRejectsForbiddenGroqResponse() async {
+        let body = #"{"error":{"message":"Forbidden"}}"#
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 403,
+            body: body.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+
+        let result = await GroqProvider.validateAPIKey("gsk-forbidden", urlSession: makeSession())
+
+        XCTAssertEqual(result, .rejected(message: "Forbidden"))
+    }
+
     private func assertThrows(_ provider: GroqProvider, expected: TranscriptionError, file: StaticString = #filePath, line: UInt = #line) async {
         do {
             _ = try await provider.transcribe(audio: sampleAudio, language: nil)

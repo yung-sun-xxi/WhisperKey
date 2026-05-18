@@ -8,6 +8,14 @@ import HistoryStore
 
 private enum SettingsWindowLayout {
     static let contentWidth: CGFloat = 460
+    static let contentPadding: CGFloat = 18
+    static let settingsRowColumnSpacing: CGFloat = 12
+    static let settingsRowSpacing: CGFloat = 8
+    static let settingsRowHeight: CGFloat = 24
+    static let settingsControlHeight: CGFloat = 22
+    static let settingsActionIconSize: CGFloat = 14
+    static let settingsRowLabelWidth: CGFloat = 136
+    static let settingsRowContentWidth: CGFloat = 276
     static let backgroundColor = NSColor.controlBackgroundColor
 }
 
@@ -400,7 +408,7 @@ private struct SettingsWindowContent: View {
                 .font(.title2.weight(.semibold))
             SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .recording)
         }
-        .padding(18)
+        .padding(SettingsWindowLayout.contentPadding)
         .frame(width: SettingsWindowLayout.contentWidth, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
         .background(Color(nsColor: SettingsWindowLayout.backgroundColor))
@@ -411,6 +419,11 @@ private struct SettingsForm: View {
     @ObservedObject var settings: SettingsStore
     let isRecording: Bool
     @State private var ownerWindow: NSWindow?
+    @State private var apiKeyDraft = ""
+    @State private var apiKeyValidationState = APIKeyValidationState.idle
+    @State private var apiKeyValidationTask: Task<Void, Never>?
+    @State private var apiKeyValidationNotice: APIKeyValidationNotice?
+    @FocusState private var apiKeyFieldFocused: Bool
 
     @ViewBuilder private var modelPicker: some View {
         switch settings.provider {
@@ -421,6 +434,7 @@ private struct SettingsForm: View {
                 }
             }
             .labelsHidden()
+            .settingsControlFrame()
         case .groq:
             Picker("", selection: $settings.groqModel) {
                 ForEach(GroqProvider.Model.allCases, id: \.self) { model in
@@ -428,34 +442,59 @@ private struct SettingsForm: View {
                 }
             }
             .labelsHidden()
+            .settingsControlFrame()
         }
     }
 
     @ViewBuilder private var apiKeyField: some View {
         HStack(spacing: 6) {
-            Button(role: .destructive) {
-                let provider = settings.provider
-                APIKeyDeletionConfirmation.present(from: ownerWindow) {
-                    settings.deleteAPIKey(for: provider)
-                }
+            if let status = apiKeyValidationState.status {
+                APIKeyValidationBadge(status: status)
+            }
+
+            Button {
+                scheduleAPIKeyValidation(presentNotice: true, debounceNanoseconds: 0)
             } label: {
-                Image(systemName: "trash")
+                Image(systemName: "checkmark.shield")
+                    .font(.system(size: SettingsWindowLayout.settingsActionIconSize, weight: .semibold))
             }
             .buttonStyle(.borderless)
-            .controlSize(.small)
-            .disabled(currentAPIKey.isEmpty)
-            .help("Delete saved API key")
-            .accessibilityLabel("Delete saved API key")
+            .settingsControlFrame()
+            .foregroundStyle(apiKeyValidationState.validationIconColor)
+            .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || apiKeyValidationState == .checking)
+            .help("Validate and save API key")
+            .accessibilityLabel("Validate and save API key")
 
-            switch settings.provider {
-            case .openai:
-                SecureField("sk-…", text: $settings.openAIAPIKey)
-                    .textFieldStyle(.roundedBorder)
-            case .groq:
-                SecureField("gsk_…", text: $settings.groqAPIKey)
-                    .textFieldStyle(.roundedBorder)
+            SecureField(apiKeyPlaceholder, text: $apiKeyDraft)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 108)
+                .settingsControlFrame()
+                .focused($apiKeyFieldFocused)
+                .onSubmit {
+                    scheduleAPIKeyValidation(presentNotice: true, debounceNanoseconds: 0)
+                }
+                .onChange(of: apiKeyDraft) { oldValue, newValue in
+                    handleAPIKeyDraftChange(oldValue: oldValue, newValue: newValue)
+                }
+
+            if !currentAPIKey.isEmpty {
+                Button(role: .destructive) {
+                    let provider = settings.provider
+                    APIKeyDeletionConfirmation.present(from: ownerWindow) {
+                        clearAPIKey(for: provider)
+                    }
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: SettingsWindowLayout.settingsActionIconSize, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                .settingsControlFrame()
+                .foregroundStyle(.red)
+                .help("Delete saved API key")
+                .accessibilityLabel("Delete saved API key")
             }
         }
+        .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
     }
 
     private var currentAPIKey: String {
@@ -467,8 +506,17 @@ private struct SettingsForm: View {
         }
     }
 
+    private var apiKeyPlaceholder: String {
+        switch settings.provider {
+        case .openai:
+            "sk-…"
+        case .groq:
+            "gsk_…"
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SettingsWindowLayout.settingsRowSpacing) {
             SettingsRow("Provider") {
                 Picker("", selection: $settings.provider) {
                     ForEach(TranscriptionProviderID.allCases, id: \.self) { id in
@@ -476,6 +524,7 @@ private struct SettingsForm: View {
                     }
                 }
                 .labelsHidden()
+                .settingsControlFrame()
             }
             SettingsRow("Model") {
                 modelPicker
@@ -490,6 +539,7 @@ private struct SettingsForm: View {
                     }
                 }
                 .labelsHidden()
+                .settingsControlFrame()
             }
             SettingsRow("Trigger") {
                 Picker("", selection: $settings.triggerKey) {
@@ -498,6 +548,7 @@ private struct SettingsForm: View {
                     }
                 }
                 .labelsHidden()
+                .settingsControlFrame()
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
@@ -508,6 +559,7 @@ private struct SettingsForm: View {
                     }
                 }
                 .labelsHidden()
+                .settingsControlFrame()
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
@@ -515,6 +567,7 @@ private struct SettingsForm: View {
                 Toggle("", isOn: $settings.escapeToCancelRecording)
                     .labelsHidden()
                     .toggleStyle(.switch)
+                    .settingsControlFrame()
                     .disabled(isRecording)
                     .help(isRecording ? "Stop recording to change." : "")
             }
@@ -522,6 +575,7 @@ private struct SettingsForm: View {
                 Toggle("", isOn: $settings.soundEffectsEnabled)
                     .labelsHidden()
                     .toggleStyle(.switch)
+                    .settingsControlFrame()
             }
             SettingsRow("Launch at login") {
                 LaunchAtLoginToggle()
@@ -531,21 +585,282 @@ private struct SettingsForm: View {
                     TextField("", value: $settings.historyMaxEntries, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 64)
+                        .settingsControlFrame()
                     Stepper("",
                             value: $settings.historyMaxEntries,
                             in: SettingsStore.historyMaxEntriesRange,
                             step: 1)
                         .labelsHidden()
+                        .settingsControlFrame()
                     Text("entries")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
                 }
+                .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
             }
         }
         .background {
             WindowAccessor { window in
                 ownerWindow = window
             }
+        }
+        .alert(item: $apiKeyValidationNotice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .onAppear {
+            syncAPIKeyDraftWithStoredKey(resetState: true)
+        }
+        .onDisappear {
+            apiKeyValidationTask?.cancel()
+            apiKeyValidationTask = nil
+        }
+        .onChange(of: settings.provider) {
+            syncAPIKeyDraftWithStoredKey(resetState: true)
+        }
+        .onChange(of: currentAPIKey) {
+            guard apiKeyValidationState != .checking else { return }
+            syncAPIKeyDraftWithStoredKey(resetState: false)
+        }
+    }
+
+    private func handleAPIKeyDraftChange(oldValue: String, newValue: String) {
+        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            apiKeyValidationTask?.cancel()
+            apiKeyValidationTask = nil
+            apiKeyValidationState = .idle
+            settings.deleteAPIKey(for: settings.provider)
+            return
+        }
+
+        if trimmed == currentAPIKey.trimmingCharacters(in: .whitespacesAndNewlines) {
+            apiKeyValidationTask?.cancel()
+            apiKeyValidationTask = nil
+            apiKeyValidationState = currentAPIKey.isEmpty ? .idle : .accepted("API key saved")
+            return
+        }
+
+        apiKeyValidationState = .idle
+        let likelyPaste = abs(newValue.count - oldValue.count) > 3
+        scheduleAPIKeyValidation(presentNotice: likelyPaste)
+    }
+
+    private func scheduleAPIKeyValidation(
+        presentNotice: Bool,
+        debounceNanoseconds: UInt64 = 700_000_000
+    ) {
+        apiKeyValidationTask?.cancel()
+
+        let provider = settings.provider
+        let key = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            apiKeyValidationState = .idle
+            return
+        }
+
+        apiKeyValidationTask = Task { @MainActor in
+            if debounceNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: debounceNanoseconds)
+            }
+            guard !Task.isCancelled,
+                  provider == settings.provider,
+                  key == apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            else { return }
+
+            apiKeyValidationState = .checking
+            let result = await validateAPIKey(key, for: provider)
+
+            guard !Task.isCancelled,
+                  provider == settings.provider,
+                  key == apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            else { return }
+
+            applyAPIKeyValidationResult(result, key: key, provider: provider, presentNotice: presentNotice)
+        }
+    }
+
+    private func validateAPIKey(_ key: String, for provider: TranscriptionProviderID) async -> APIKeyValidationResult {
+        switch provider {
+        case .openai:
+            return await OpenAIProvider.validateAPIKey(key)
+        case .groq:
+            return await GroqProvider.validateAPIKey(key)
+        }
+    }
+
+    private func applyAPIKeyValidationResult(
+        _ result: APIKeyValidationResult,
+        key: String,
+        provider: TranscriptionProviderID,
+        presentNotice: Bool
+    ) {
+        switch result {
+        case .accepted:
+            saveAPIKey(key, for: provider)
+            apiKeyValidationState = .accepted("API key saved")
+            clearAPIKeyFieldFocus()
+        case .acceptedWithWarning(let message):
+            saveAPIKey(key, for: provider)
+            apiKeyValidationState = .accepted(message)
+            clearAPIKeyFieldFocus()
+        case .rejected(let message):
+            apiKeyValidationState = .rejected(message)
+        case .unavailable(let message):
+            apiKeyValidationState = .unavailable(message)
+        }
+
+        guard presentNotice else { return }
+        apiKeyValidationNotice = APIKeyValidationNotice(result: result)
+    }
+
+    private func saveAPIKey(_ key: String, for provider: TranscriptionProviderID) {
+        switch provider {
+        case .openai:
+            settings.openAIAPIKey = key
+        case .groq:
+            settings.groqAPIKey = key
+        }
+    }
+
+    private func clearAPIKey(for provider: TranscriptionProviderID) {
+        apiKeyValidationTask?.cancel()
+        apiKeyValidationTask = nil
+        settings.deleteAPIKey(for: provider)
+        if provider == settings.provider {
+            apiKeyDraft = ""
+            apiKeyValidationState = .idle
+            clearAPIKeyFieldFocus()
+        }
+    }
+
+    private func clearAPIKeyFieldFocus() {
+        apiKeyFieldFocused = false
+        DispatchQueue.main.async {
+            let window = ownerWindow ?? SettingsWindowController.relatedWindow
+            window?.makeFirstResponder(nil)
+        }
+    }
+
+    private func syncAPIKeyDraftWithStoredKey(resetState: Bool) {
+        let storedKey = currentAPIKey
+        guard apiKeyDraft != storedKey else {
+            if resetState {
+                apiKeyValidationState = storedKey.isEmpty ? .idle : .accepted("API key saved")
+            }
+            return
+        }
+
+        apiKeyValidationTask?.cancel()
+        apiKeyValidationTask = nil
+        apiKeyDraft = storedKey
+        if resetState {
+            apiKeyValidationState = storedKey.isEmpty ? .idle : .accepted("API key saved")
+        }
+    }
+}
+
+private enum APIKeyValidationState: Equatable {
+    case idle
+    case checking
+    case accepted(String)
+    case rejected(String)
+    case unavailable(String)
+
+    struct Status {
+        let message: String
+        let systemImage: String?
+        let color: Color
+        let helpMessage: String?
+    }
+
+    var status: Status? {
+        switch self {
+        case .idle:
+            return nil
+        case .checking:
+            return Status(
+                message: "Checking",
+                systemImage: "clock",
+                color: .secondary,
+                helpMessage: "Checking API key"
+            )
+        case .accepted(let message):
+            return Status(message: message, systemImage: nil, color: .green, helpMessage: message)
+        case .rejected(let message):
+            return Status(
+                message: "Invalid key",
+                systemImage: "xmark.circle.fill",
+                color: .red,
+                helpMessage: message
+            )
+        case .unavailable(let message):
+            return Status(
+                message: "Not verified",
+                systemImage: "exclamationmark.triangle.fill",
+                color: .orange,
+                helpMessage: message
+            )
+        }
+    }
+
+    var validationIconColor: Color {
+        switch self {
+        case .accepted:
+            return .green
+        default:
+            return .primary
+        }
+    }
+}
+
+private struct APIKeyValidationBadge: View {
+    let status: APIKeyValidationState.Status
+
+    var body: some View {
+        content
+            .font(.caption2)
+            .foregroundStyle(status.color)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(minHeight: SettingsWindowLayout.settingsControlHeight, alignment: .leading)
+            .help(status.helpMessage ?? status.message)
+            .accessibilityLabel(status.helpMessage ?? status.message)
+    }
+
+    @ViewBuilder private var content: some View {
+        if let systemImage = status.systemImage {
+            Label(status.message, systemImage: systemImage)
+        } else {
+            Text(status.message)
+        }
+    }
+}
+
+private struct APIKeyValidationNotice: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+
+    init(result: APIKeyValidationResult) {
+        switch result {
+        case .accepted:
+            self.title = "API key accepted"
+            self.message = "The API key was validated and saved"
+        case .acceptedWithWarning(let message):
+            self.title = "API key saved"
+            self.message = message
+        case .rejected(let message):
+            self.title = "Invalid API key"
+            self.message = message
+        case .unavailable(let message):
+            self.title = "Could not verify API key"
+            self.message = message
         }
     }
 }
@@ -601,13 +916,24 @@ private struct SettingsRow<Content: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .center, spacing: SettingsWindowLayout.settingsRowColumnSpacing) {
             Text(title)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .frame(width: SettingsWindowLayout.settingsRowLabelWidth, alignment: .leading)
+                .frame(minHeight: SettingsWindowLayout.settingsControlHeight, alignment: .center)
 
             content
-                .frame(width: 230, alignment: .trailing)
+                .controlSize(.small)
+                .frame(width: SettingsWindowLayout.settingsRowContentWidth, alignment: .trailing)
+                .frame(minHeight: SettingsWindowLayout.settingsControlHeight, alignment: .center)
         }
-        .frame(maxWidth: .infinity)
+        .frame(minHeight: SettingsWindowLayout.settingsRowHeight, alignment: .center)
+    }
+}
+
+private extension View {
+    func settingsControlFrame() -> some View {
+        controlSize(.small)
+            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
     }
 }

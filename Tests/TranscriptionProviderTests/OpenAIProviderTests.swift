@@ -249,6 +249,58 @@ final class OpenAIProviderTests: XCTestCase {
         await assertThrows(provider, expected: .network)
     }
 
+    // MARK: API key validation
+
+    func testValidateAPIKeyAcceptsSuccessfulModelsResponse() async throws {
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 200,
+            body: #"{"object":"list","data":[]}"#.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+
+        let result = await OpenAIProvider.validateAPIKey(" sk-test-key\n", urlSession: makeSession())
+
+        XCTAssertEqual(result, .accepted)
+        let request = try XCTUnwrap(StubURLProtocol.lastRequest)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url, OpenAIProvider.defaultModelsEndpoint)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer sk-test-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+    }
+
+    func testValidateAPIKeyRejectsUnauthorizedResponse() async {
+        let body = #"{"error":{"message":"Incorrect API key provided.","code":"invalid_api_key"}}"#
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 401,
+            body: body.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+
+        let result = await OpenAIProvider.validateAPIKey("sk-bad", urlSession: makeSession())
+
+        XCTAssertEqual(result, .rejected(message: "Incorrect API key provided."))
+    }
+
+    func testValidateAPIKeyTreatsRateLimitAsAcceptedWithWarning() async {
+        StubURLProtocol.nextOutcome = .http(.init(statusCode: 429, body: Data(), headers: [:]))
+
+        let result = await OpenAIProvider.validateAPIKey("sk-rate-limited", urlSession: makeSession())
+
+        XCTAssertTrue(result.isAccepted)
+        XCTAssertEqual(result, .acceptedWithWarning(message: "API key accepted, but OpenAI is rate limiting validation."))
+    }
+
+    func testValidateAPIKeyReportsNetworkAsUnavailable() async {
+        StubURLProtocol.nextOutcome = .failure(URLError(.notConnectedToInternet))
+
+        let result = await OpenAIProvider.validateAPIKey("sk-network", urlSession: makeSession())
+
+        XCTAssertEqual(
+            result,
+            .unavailable(message: "Could not verify the API key. Check your internet connection.")
+        )
+    }
+
     // MARK: LocalizedError
 
     func testQuotaExceededErrorDescriptionMentionsBilling() {
