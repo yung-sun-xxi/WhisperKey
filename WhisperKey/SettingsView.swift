@@ -32,9 +32,12 @@ enum SettingsWindowController {
     static func hide() {
         stopDismissMonitoring()
 
-        guard let window else { return }
+        guard let closingWindow = window else { return }
 
-        window.orderOut(nil)
+        // Close instead of ordering out so SwiftUI-owned transient state is rebuilt next time.
+        window = nil
+        dismissModalUI(attachedTo: closingWindow)
+        closingWindow.close()
     }
 
     static func show(coordinator: AppCoordinator) {
@@ -48,9 +51,11 @@ enum SettingsWindowController {
         present(window)
     }
 
-    static func windowDidClose() {
+    static func windowDidClose(_ closedWindow: NSWindow) {
         stopDismissMonitoring()
-        window = nil
+        if window === closedWindow {
+            window = nil
+        }
     }
 
     private static func makeWindow(coordinator: AppCoordinator) -> NSWindow {
@@ -123,9 +128,32 @@ enum SettingsWindowController {
               let eventWindow = event.window
         else { return false }
 
+        return eventWindowIsPartOfSettingsUI(eventWindow, settingsWindow: settingsWindow)
+    }
+
+    private static func eventWindowIsPartOfSettingsUI(_ eventWindow: NSWindow, settingsWindow: NSWindow) -> Bool {
+        // Local monitors can see sheet/modal button clicks before the alert action runs.
+        // Treat those windows as Settings-owned so Cancel only dismisses the confirmation.
         return eventWindow === settingsWindow
             || eventWindow.parent === settingsWindow
+            || eventWindow.sheetParent === settingsWindow
             || settingsWindow.childWindows?.contains(where: { $0 === eventWindow }) == true
+            || settingsWindow.attachedSheet === eventWindow
+            || eventWindow === NSApp.modalWindow
+    }
+
+    private static func dismissModalUI(attachedTo settingsWindow: NSWindow) {
+        if let attachedSheet = settingsWindow.attachedSheet {
+            settingsWindow.endSheet(attachedSheet, returnCode: .cancel)
+            attachedSheet.orderOut(nil)
+        }
+
+        guard let modalWindow = NSApp.modalWindow,
+              modalWindow !== settingsWindow
+        else { return }
+
+        NSApp.stopModal(withCode: .cancel)
+        modalWindow.orderOut(nil)
     }
 
     private static func focusParkingView(in window: NSWindow) {
@@ -147,8 +175,10 @@ enum SettingsWindowController {
 @MainActor
 private final class SettingsWindowDelegate: NSObject, NSWindowDelegate {
     nonisolated func windowWillClose(_ notification: Notification) {
+        guard let closedWindow = notification.object as? NSWindow else { return }
+
         Task { @MainActor in
-            SettingsWindowController.windowDidClose()
+            SettingsWindowController.windowDidClose(closedWindow)
         }
     }
 }
@@ -380,6 +410,7 @@ private struct SettingsWindowContent: View {
 private struct SettingsForm: View {
     @ObservedObject var settings: SettingsStore
     let isRecording: Bool
+    @State private var ownerWindow: NSWindow?
 
     @ViewBuilder private var modelPicker: some View {
         switch settings.provider {
@@ -401,13 +432,38 @@ private struct SettingsForm: View {
     }
 
     @ViewBuilder private var apiKeyField: some View {
+        HStack(spacing: 6) {
+            Button(role: .destructive) {
+                let provider = settings.provider
+                APIKeyDeletionConfirmation.present(from: ownerWindow) {
+                    settings.deleteAPIKey(for: provider)
+                }
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .disabled(currentAPIKey.isEmpty)
+            .help("Delete saved API key")
+            .accessibilityLabel("Delete saved API key")
+
+            switch settings.provider {
+            case .openai:
+                SecureField("sk-…", text: $settings.openAIAPIKey)
+                    .textFieldStyle(.roundedBorder)
+            case .groq:
+                SecureField("gsk_…", text: $settings.groqAPIKey)
+                    .textFieldStyle(.roundedBorder)
+            }
+        }
+    }
+
+    private var currentAPIKey: String {
         switch settings.provider {
         case .openai:
-            SecureField("sk-…", text: $settings.openAIAPIKey)
-                .textFieldStyle(.roundedBorder)
+            settings.openAIAPIKey
         case .groq:
-            SecureField("gsk_…", text: $settings.groqAPIKey)
-                .textFieldStyle(.roundedBorder)
+            settings.groqAPIKey
         }
     }
 
@@ -486,6 +542,52 @@ private struct SettingsForm: View {
                 }
             }
         }
+        .background {
+            WindowAccessor { window in
+                ownerWindow = window
+            }
+        }
+    }
+}
+
+@MainActor
+private enum APIKeyDeletionConfirmation {
+    static func present(
+        from ownerWindow: NSWindow?,
+        onDelete: @escaping @MainActor () -> Void
+    ) {
+        let alert = NSAlert()
+        alert.messageText = "Delete saved API key?"
+        alert.informativeText = "This will remove the saved API key from this Mac and you will need to enter it again before using transcription"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete API Key")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.buttons.first?.keyEquivalent = "\r"
+        alert.buttons.dropFirst().first?.keyEquivalent = "\u{1b}"
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            onDelete()
+        }
+
+        guard let resolvedOwnerWindow = self.resolvedOwnerWindow(from: ownerWindow) else {
+            return
+        }
+
+        alert.beginSheetModal(for: resolvedOwnerWindow) { response in
+            Task { @MainActor in
+                handleResponse(response)
+            }
+        }
+    }
+
+    private static func resolvedOwnerWindow(from ownerWindow: NSWindow?) -> NSWindow? {
+        if let ownerWindow, !ownerWindow.styleMask.contains(.borderless) {
+            return ownerWindow
+        }
+
+        return SettingsWindowController.relatedWindow
     }
 }
 

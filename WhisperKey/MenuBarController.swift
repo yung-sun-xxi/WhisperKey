@@ -272,7 +272,9 @@ final class MenuBarController: NSObject {
         return relatedWindows.contains { relatedWindow in
             window === relatedWindow
                 || window.parent === relatedWindow
+                || window.sheetParent === relatedWindow
                 || relatedWindow.childWindows?.contains(where: { $0 === window }) == true
+                || relatedWindow.attachedSheet === window
         }
     }
 

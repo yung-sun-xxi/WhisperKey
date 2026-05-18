@@ -60,11 +60,6 @@ public final class SettingsStore: ObservableObject {
     public static let defaultHistoryMaxEntries = 30
     public static let historyMaxEntriesRange: ClosedRange<Int> = 0...1000
 
-    private enum LegacyKeychain {
-        static let service = "WhisperKey"
-        static let account = "OPENAI_API_KEY"
-    }
-
     private let keychain: KeychainStorage
     private let defaults: UserDefaults
     private var loading = true
@@ -156,7 +151,7 @@ public final class SettingsStore: ObservableObject {
         self.escapeToCancelRecording = (defaults.object(forKey: DefaultsKey.escapeToCancelRecording) as? Bool) ?? true
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
-        self.openAIAPIKey = Self.loadOpenAIAPIKey(keychain: keychain)
+        self.openAIAPIKey = Self.loadAPIKey(for: .openai, keychain: keychain)
         self.groqAPIKey = Self.loadAPIKey(for: .groq, keychain: keychain)
 
         self.loading = false
@@ -181,24 +176,22 @@ public final class SettingsStore: ObservableObject {
         return ""
     }
 
-    private static func loadOpenAIAPIKey(keychain: KeychainStorage) -> String {
-        let id = TranscriptionProviderID.openai
-        if let value = (try? keychain.read(service: id.keychainService, account: id.keychainAccount)), !value.isEmpty {
-            return value
-        }
-        if let legacy = (try? keychain.read(service: LegacyKeychain.service, account: LegacyKeychain.account)), !legacy.isEmpty {
-            try? keychain.write(legacy, service: id.keychainService, account: id.keychainAccount)
-            return legacy
-        }
-        return ""
-    }
-
     private func persistAPIKey(_ key: String, for id: TranscriptionProviderID) {
         if key.isEmpty {
             try? keychain.delete(service: id.keychainService, account: id.keychainAccount)
         } else {
             try? keychain.write(key, service: id.keychainService, account: id.keychainAccount)
         }
+    }
+
+    public func deleteAPIKey(for id: TranscriptionProviderID) {
+        switch id {
+        case .openai:
+            openAIAPIKey = ""
+        case .groq:
+            groqAPIKey = ""
+        }
+        try? keychain.delete(service: id.keychainService, account: id.keychainAccount)
     }
 
     public func makeTranscriptionProvider() -> TranscriptionProvider? {
