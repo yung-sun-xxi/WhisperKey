@@ -8,7 +8,7 @@ In active development. The PRD lives in [Issue #1](https://github.com/yung-sun-x
 
 ## Concept
 
-Lives in the menu bar. Push-to-talk via a configurable hotkey (Right Option / Right Cmd / Right Shift). Audio is sent to a configurable transcription provider; the resulting text lands in the clipboard and auto-pastes into the focused text field if there is one.
+Lives in the menu bar. Push-to-talk via a configurable hotkey (Right Option / Right Cmd / Right Shift). Audio is sent to a configurable transcription provider; the resulting text lands in the clipboard and auto-pastes into the focused text field if there is one. By default, Esc cancels an active recording without transcription, output, or history; this can be disabled in Settings.
 
 ## Requirements
 

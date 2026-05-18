@@ -33,6 +33,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.soundEffectsEnabled)
         XCTAssertTrue(store.saveTranscriptionToClipboard)
         XCTAssertTrue(store.autoPasteTranscription)
+        XCTAssertTrue(store.escapeToCancelRecording)
         XCTAssertEqual(store.openAIAPIKey, "")
     }
 
@@ -46,6 +47,7 @@ final class SettingsStoreTests: XCTestCase {
         first.soundEffectsEnabled = false
         first.saveTranscriptionToClipboard = false
         first.autoPasteTranscription = false
+        first.escapeToCancelRecording = false
         first.openAIAPIKey = "sk-persisted"
 
         let second = SettingsStore(keychain: keychain, defaults: defaults)
@@ -53,10 +55,14 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.language, .russian)
         XCTAssertEqual(second.triggerKey, .rightShift)
         XCTAssertEqual(second.triggerMode, .hold)
-        XCTAssertEqual(second.hotkeyConfig, HotkeyConfig(trigger: .rightShift, mode: .hold))
+        XCTAssertEqual(
+            second.hotkeyConfig,
+            HotkeyConfig(trigger: .rightShift, mode: .hold, escapeToCancelRecording: false)
+        )
         XCTAssertFalse(second.soundEffectsEnabled)
         XCTAssertFalse(second.saveTranscriptionToClipboard)
         XCTAssertFalse(second.autoPasteTranscription)
+        XCTAssertFalse(second.escapeToCancelRecording)
         XCTAssertEqual(second.openAIAPIKey, "sk-persisted")
     }
 

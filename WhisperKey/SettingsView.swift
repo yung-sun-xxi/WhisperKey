@@ -455,6 +455,13 @@ private struct SettingsForm: View {
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
+            SettingsRow("Esc to cancel record") {
+                Toggle("", isOn: $settings.escapeToCancelRecording)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .disabled(isRecording)
+                    .help(isRecording ? "Stop recording to change." : "")
+            }
             SettingsRow("Sound effects") {
                 Toggle("", isOn: $settings.soundEffectsEnabled)
                     .labelsHidden()

@@ -10,6 +10,8 @@ import os
 /// disables it (e.g. on timeout or after losing accessibility privileges).
 public final class HotkeyEngineRunner: @unchecked Sendable {
     public typealias OutputHandler = @Sendable (HotkeyOutput) -> Void
+    // kVK_Escape.
+    private static let escapeVirtualKeyCode: Int64 = 53
 
     private let queue = DispatchQueue(label: "WhisperKey.HotkeyEngineRunner")
     private let log = Logger(subsystem: "WhisperKey", category: "HotkeyEngineRunner")
@@ -110,7 +112,9 @@ public final class HotkeyEngineRunner: @unchecked Sendable {
                 smEvent = .otherKeyDown(at: now)
             }
         case .keyDown:
-            smEvent = .otherKeyDown(at: now)
+            smEvent = keyCode == Self.escapeVirtualKeyCode
+                ? .escapeDown(at: now)
+                : .otherKeyDown(at: now)
         default:
             smEvent = nil
         }

@@ -71,6 +71,43 @@ final class HotkeyEngineStateMachineTests: XCTestCase {
         XCTAssertEqual(output, .recordingShouldStop)
     }
 
+    // MARK: - Escape cancels active recording
+
+    func testEscapeDuringRecordingCancelsInTapMode() {
+        var sm = HotkeyStateMachine(appState: .recording)
+
+        let output = sm.process(.escapeDown(at: 10.0))
+
+        XCTAssertEqual(output, .recordingShouldCancel)
+    }
+
+    func testEscapeDuringRecordingDoesNotCancelWhenDisabledInTapMode() {
+        var sm = HotkeyStateMachine(
+            config: HotkeyConfig(escapeToCancelRecording: false),
+            appState: .recording
+        )
+
+        let output = sm.process(.escapeDown(at: 10.0))
+
+        XCTAssertNil(output)
+    }
+
+    func testEscapeWhileIdleDoesNotStartRecording() {
+        var sm = HotkeyStateMachine()
+
+        XCTAssertNil(sm.process(.escapeDown(at: 0.0)))
+        XCTAssertEqual(sm.appState, .idle)
+    }
+
+    func testEscapeDuringPendingTapPreventsStart() {
+        var sm = HotkeyStateMachine()
+
+        _ = sm.process(.triggerDown(at: 0.0))
+        _ = sm.process(.escapeDown(at: 0.05))
+
+        XCTAssertNil(sm.process(.triggerUp(at: 0.1)))
+    }
+
     // MARK: - Trigger events ignored while transcribing
 
     func testTriggerIgnoredWhileTranscribing() {
@@ -90,6 +127,9 @@ final class HotkeyEngineStateMachineTests: XCTestCase {
         _ = sm.process(.otherKeyDown(at: 0.2))
         XCTAssertEqual(sm.transcribingSuppressionCount, 2,
                        "non-trigger keys are not counted as suppressed")
+        _ = sm.process(.escapeDown(at: 0.3))
+        XCTAssertEqual(sm.transcribingSuppressionCount, 2,
+                       "Escape is not counted as a suppressed trigger")
     }
 
     func testSuppressionCounterDoesNotIncrementWhenIdle() {
@@ -191,6 +231,34 @@ final class HotkeyEngineStateMachineTests: XCTestCase {
         XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
 
         XCTAssertEqual(sm.process(.otherKeyDown(at: 0.05)), .recordingShouldStop)
+    }
+
+    func testHoldModeEscapeCancelsBeforeAppStateCatchesUp() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
+
+        XCTAssertEqual(sm.process(.escapeDown(at: 0.05)), .recordingShouldCancel)
+    }
+
+    func testHoldModeEscapeCancelsWhileRecording() {
+        var sm = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
+        sm.setAppState(.recording)
+
+        XCTAssertEqual(sm.process(.escapeDown(at: 0.5)), .recordingShouldCancel)
+    }
+
+    func testHoldModeEscapeDoesNotCancelWhenDisabled() {
+        var sm = HotkeyStateMachine(
+            config: HotkeyConfig(mode: .hold, escapeToCancelRecording: false)
+        )
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingShouldStart)
+        sm.setAppState(.recording)
+
+        XCTAssertNil(sm.process(.escapeDown(at: 0.5)))
     }
 
     func testHoldModeOtherKeyAfterAbortWindowDoesNotStopRecording() {

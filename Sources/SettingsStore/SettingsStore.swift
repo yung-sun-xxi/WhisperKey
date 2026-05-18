@@ -54,6 +54,7 @@ public final class SettingsStore: ObservableObject {
         static let historyMaxEntries = "WhisperKey.settings.historyMaxEntries"
         static let saveTranscriptionToClipboard = "WhisperKey.settings.saveTranscriptionToClipboard"
         static let autoPasteTranscription = "WhisperKey.settings.autoPasteTranscription"
+        static let escapeToCancelRecording = "WhisperKey.settings.escapeToCancelRecording"
     }
 
     public static let defaultHistoryMaxEntries = 30
@@ -112,6 +113,14 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published public var escapeToCancelRecording: Bool {
+        didSet {
+            if !loading {
+                defaults.set(escapeToCancelRecording, forKey: DefaultsKey.escapeToCancelRecording)
+            }
+        }
+    }
+
     @Published public var historyMaxEntries: Int {
         didSet {
             let clamped = Self.clampHistoryMax(historyMaxEntries)
@@ -144,6 +153,7 @@ public final class SettingsStore: ObservableObject {
         self.soundEffectsEnabled = (defaults.object(forKey: DefaultsKey.soundEffectsEnabled) as? Bool) ?? true
         self.saveTranscriptionToClipboard = (defaults.object(forKey: DefaultsKey.saveTranscriptionToClipboard) as? Bool) ?? true
         self.autoPasteTranscription = (defaults.object(forKey: DefaultsKey.autoPasteTranscription) as? Bool) ?? true
+        self.escapeToCancelRecording = (defaults.object(forKey: DefaultsKey.escapeToCancelRecording) as? Bool) ?? true
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.openAIAPIKey = Self.loadOpenAIAPIKey(keychain: keychain)
@@ -157,7 +167,11 @@ public final class SettingsStore: ObservableObject {
     }
 
     public var hotkeyConfig: HotkeyConfig {
-        HotkeyConfig(trigger: triggerKey, mode: triggerMode)
+        HotkeyConfig(
+            trigger: triggerKey,
+            mode: triggerMode,
+            escapeToCancelRecording: escapeToCancelRecording
+        )
     }
 
     private static func loadAPIKey(for id: TranscriptionProviderID, keychain: KeychainStorage) -> String {
