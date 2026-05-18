@@ -31,6 +31,15 @@ final class AppCoordinator: ObservableObject {
 
     func updateState(_ new: AppState) { state = new }
 
+    static func canStartRecording(from state: AppState) -> Bool {
+        switch state {
+        case .idle, .error:
+            return true
+        case .recording, .transcribing, .microphoneDenied, .accessibilityDenied:
+            return false
+        }
+    }
+
     let settings: SettingsStore
     let hotkey: HotkeyEngineRunner
     let history: HistoryStore
@@ -103,7 +112,7 @@ final class AppCoordinator: ObservableObject {
 
     private func startRecording() {
         refreshPermissions()
-        guard state == .idle, permissions.allGranted else { return }
+        guard Self.canStartRecording(from: state), permissions.allGranted else { return }
         state = .recording
         hotkey.setAppState(.recording)
         startRecordingTimer()

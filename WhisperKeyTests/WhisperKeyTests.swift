@@ -10,10 +10,18 @@ import Testing
 
 struct WhisperKeyTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
-        // Swift Testing Documentation
-        // https://developer.apple.com/documentation/testing
+    @MainActor
+    @Test func recoverableErrorsDoNotBlockNextRecordingStart() {
+        #expect(AppCoordinator.canStartRecording(from: .idle))
+        #expect(AppCoordinator.canStartRecording(from: .error("Set the API key in Settings.")))
+    }
+
+    @MainActor
+    @Test func activeAndPermissionStatesBlockRecordingStart() {
+        #expect(!AppCoordinator.canStartRecording(from: .recording))
+        #expect(!AppCoordinator.canStartRecording(from: .transcribing))
+        #expect(!AppCoordinator.canStartRecording(from: .microphoneDenied))
+        #expect(!AppCoordinator.canStartRecording(from: .accessibilityDenied))
     }
 
 }
