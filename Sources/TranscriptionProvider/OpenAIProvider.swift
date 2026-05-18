@@ -12,6 +12,7 @@ public struct OpenAIProvider: TranscriptionProvider {
     }
 
     public static let defaultEndpoint = URL(string: "https://api.openai.com/v1/audio/transcriptions")!
+    public static let defaultModelsEndpoint = URL(string: "https://api.openai.com/v1/models")!
 
     public let apiKey: String
     public let model: Model
@@ -64,5 +65,18 @@ public struct OpenAIProvider: TranscriptionProvider {
             throw mapped
         }
         return try WhisperResponseParser.parseSuccess(data)
+    }
+
+    public static func validateAPIKey(
+        _ apiKey: String,
+        modelsEndpoint: URL = OpenAIProvider.defaultModelsEndpoint,
+        urlSession: URLSession = .shared
+    ) async -> APIKeyValidationResult {
+        await APIKeyValidator.validate(
+            apiKey: apiKey,
+            modelsEndpoint: modelsEndpoint,
+            providerDisplayName: "OpenAI",
+            urlSession: urlSession
+        )
     }
 }

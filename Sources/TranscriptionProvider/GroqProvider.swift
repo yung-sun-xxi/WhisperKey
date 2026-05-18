@@ -21,6 +21,7 @@ public struct GroqProvider: TranscriptionProvider {
     }
 
     public static let defaultEndpoint = URL(string: "https://api.groq.com/openai/v1/audio/transcriptions")!
+    public static let defaultModelsEndpoint = URL(string: "https://api.groq.com/openai/v1/models")!
 
     public let apiKey: String
     public let model: Model
@@ -73,5 +74,18 @@ public struct GroqProvider: TranscriptionProvider {
             throw mapped
         }
         return try WhisperResponseParser.parseSuccess(data)
+    }
+
+    public static func validateAPIKey(
+        _ apiKey: String,
+        modelsEndpoint: URL = GroqProvider.defaultModelsEndpoint,
+        urlSession: URLSession = .shared
+    ) async -> APIKeyValidationResult {
+        await APIKeyValidator.validate(
+            apiKey: apiKey,
+            modelsEndpoint: modelsEndpoint,
+            providerDisplayName: "Groq",
+            urlSession: urlSession
+        )
     }
 }
