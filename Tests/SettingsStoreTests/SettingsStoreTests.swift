@@ -86,32 +86,34 @@ final class SettingsStoreTests: XCTestCase {
         )
     }
 
-    func testLegacyKeychainEntryMigrates() throws {
+    func testOpenAIAPIKeyUsesOnlyProviderSpecificKeychainEntry() throws {
         let keychain = InMemoryKeychain()
         try keychain.write("sk-legacy", service: "WhisperKey", account: "OPENAI_API_KEY")
 
         let store = SettingsStore(keychain: keychain, defaults: defaults)
-        XCTAssertEqual(store.openAIAPIKey, "sk-legacy")
-        XCTAssertEqual(
+        XCTAssertEqual(store.openAIAPIKey, "")
+        XCTAssertNil(
             try keychain.read(
                 service: TranscriptionProviderID.openai.keychainService,
                 account: TranscriptionProviderID.openai.keychainAccount
-            ),
-            "sk-legacy"
+            )
         )
     }
 
-    func testNewFormatTakesPrecedenceOverLegacy() throws {
+    func testDeletingOpenAIAPIKeyRemovesProviderSpecificKeychainEntry() throws {
         let keychain = InMemoryKeychain()
-        try keychain.write("sk-legacy", service: "WhisperKey", account: "OPENAI_API_KEY")
-        try keychain.write(
-            "sk-new",
-            service: TranscriptionProviderID.openai.keychainService,
-            account: TranscriptionProviderID.openai.keychainAccount
-        )
-
         let store = SettingsStore(keychain: keychain, defaults: defaults)
-        XCTAssertEqual(store.openAIAPIKey, "sk-new")
+        store.openAIAPIKey = "sk-temp"
+
+        store.deleteAPIKey(for: .openai)
+
+        XCTAssertEqual(store.openAIAPIKey, "")
+        XCTAssertNil(
+            try keychain.read(
+                service: TranscriptionProviderID.openai.keychainService,
+                account: TranscriptionProviderID.openai.keychainAccount
+            )
+        )
     }
 
     func testMakeProviderReturnsNilWhenKeyEmpty() {
@@ -156,6 +158,31 @@ final class SettingsStoreTests: XCTestCase {
                 account: TranscriptionProviderID.openai.keychainAccount
             ),
             "OpenAI key remains untouched"
+        )
+    }
+
+    func testDeletingGroqAPIKeyRemovesOnlyGroqKeychainEntry() throws {
+        let keychain = InMemoryKeychain()
+        let store = SettingsStore(keychain: keychain, defaults: defaults)
+        store.openAIAPIKey = "sk-openai"
+        store.groqAPIKey = "gsk-temp"
+
+        store.deleteAPIKey(for: .groq)
+
+        XCTAssertEqual(store.groqAPIKey, "")
+        XCTAssertEqual(store.openAIAPIKey, "sk-openai")
+        XCTAssertNil(
+            try keychain.read(
+                service: TranscriptionProviderID.groq.keychainService,
+                account: TranscriptionProviderID.groq.keychainAccount
+            )
+        )
+        XCTAssertEqual(
+            try keychain.read(
+                service: TranscriptionProviderID.openai.keychainService,
+                account: TranscriptionProviderID.openai.keychainAccount
+            ),
+            "sk-openai"
         )
     }
 
