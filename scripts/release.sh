@@ -30,6 +30,7 @@ APP_PATH="$EXPORT_PATH/WhisperKey.app"
 DMG_PATH="$BUILD_DIR/WhisperKey-$VERSION.dmg"
 ZIP_PATH="$BUILD_DIR/WhisperKey-$VERSION.zip"
 NOTARY_PROFILE="WhisperKey-Notary"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Resolve the Developer ID Application identity (requires exactly one match).
 SIGN_IDENTITY=$(security find-identity -v -p codesigning login.keychain-db \
@@ -117,9 +118,13 @@ echo "==> Final verification..."
 spctl --assess --verbose=4 --type install "$DMG_PATH"
 spctl --assess --verbose=4 --type execute "$APP_PATH"
 
+echo "==> Installing app to /Applications..."
+"$SCRIPT_DIR/install-app.sh" "$APP_PATH"
+
 echo
 echo "Done. Artifacts:"
 echo "  $APP_PATH"
 echo "  $DMG_PATH"
+echo "  /Applications/WhisperKey.app"
 echo
 echo "Next: gh release create v$VERSION $DMG_PATH --title \"WhisperKey v$VERSION\" --notes-file <changelog>"

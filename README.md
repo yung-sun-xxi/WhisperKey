@@ -26,6 +26,14 @@ The app requires:
 
 Cutting a Developer ID-signed, notarized DMG is documented in [RELEASING.md](RELEASING.md). The pipeline is driven by [`scripts/release.sh`](scripts/release.sh).
 
+## Local install
+
+Building the shared `WhisperKey` Xcode scheme installs the built app into `/Applications/WhisperKey.app`, then registers it with LaunchServices and Spotlight so it is discoverable via Command+Space. CI skips this automatically; local builds can opt out with:
+
+```sh
+WHISPERKEY_SKIP_APPLICATIONS_INSTALL=1 xcodebuild -project WhisperKey.xcodeproj -scheme WhisperKey build
+```
+
 ## License
 
 TBD.

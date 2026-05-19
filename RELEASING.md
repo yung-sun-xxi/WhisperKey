@@ -45,6 +45,7 @@ Outputs:
 
 - `build/export/WhisperKey.app` — signed, notarized, stapled
 - `build/WhisperKey-<VERSION>.dmg` — signed, notarized, stapled
+- `/Applications/WhisperKey.app` — installed from the signed, notarized, stapled app
 
 Publish:
 
