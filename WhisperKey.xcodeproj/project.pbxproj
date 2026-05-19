@@ -10,7 +10,29 @@
 		CF0C8A892FAE5AA20057B58F /* WhisperKeyKit in Frameworks */ = {isa = PBXBuildFile; productRef = CF0C8A882FAE5AA20057B58F /* WhisperKeyKit */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXAggregateTarget section */
+		CF1A10012FB0000000000001 /* Install WhisperKey */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = CF1A10062FB0000000000006 /* Build configuration list for PBXAggregateTarget "Install WhisperKey" */;
+			buildPhases = (
+				CF1A10022FB0000000000002 /* Install to /Applications */,
+			);
+			dependencies = (
+				CF1A10042FB0000000000004 /* PBXTargetDependency */,
+			);
+			name = "Install WhisperKey";
+			productName = "Install WhisperKey";
+		};
+/* End PBXAggregateTarget section */
+
 /* Begin PBXContainerItemProxy section */
+		CF1A10032FB0000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CFBE7F7C2FAE5606006A3BF0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CFBE7F832FAE5606006A3BF0;
+			remoteInfo = WhisperKey;
+		};
 		CFBE7F922FAE5608006A3BF0 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CFBE7F7C2FAE5606006A3BF0 /* Project object */;
@@ -210,6 +232,7 @@
 			projectRoot = "";
 			targets = (
 				CFBE7F832FAE5606006A3BF0 /* WhisperKey */,
+				CF1A10012FB0000000000001 /* Install WhisperKey */,
 				CFBE7F902FAE5608006A3BF0 /* WhisperKeyTests */,
 				CFBE7F9A2FAE5608006A3BF0 /* WhisperKeyUITests */,
 			);
@@ -240,6 +263,33 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		CF1A10022FB0000000000002 /* Install to /Applications */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/install-app.sh",
+				"$(BUILT_PRODUCTS_DIR)/WhisperKey.app",
+				"$(BUILT_PRODUCTS_DIR)/WhisperKey.app/Contents/Info.plist",
+				"$(BUILT_PRODUCTS_DIR)/WhisperKey.app/Contents/MacOS/WhisperKey",
+			);
+			name = "Install to /Applications";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				/Applications/WhisperKey.app,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\n\nif [[ \"${CI:-}\" == \"true\" || \"${WHISPERKEY_SKIP_APPLICATIONS_INSTALL:-}\" == \"1\" ]]; then\n    exit 0\nfi\n\n\"$SRCROOT/scripts/install-app.sh\" \"$BUILT_PRODUCTS_DIR/WhisperKey.app\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		CFBE7F802FAE5606006A3BF0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -265,6 +315,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		CF1A10042FB0000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CFBE7F832FAE5606006A3BF0 /* WhisperKey */;
+			targetProxy = CF1A10032FB0000000000003 /* PBXContainerItemProxy */;
+		};
 		CFBE7F932FAE5608006A3BF0 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = CFBE7F832FAE5606006A3BF0 /* WhisperKey */;
@@ -278,6 +333,20 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		CF1A10052FB0000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+			};
+			name = Debug;
+		};
+		CF1A10072FB0000000000007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+			};
+			name = Release;
+		};
 		CFBE7FA32FAE5608006A3BF0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -415,6 +484,7 @@
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhisperKey records audio when you press the dictation hotkey and converts it to text";
+				INSTALL_PATH = /Applications;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -424,6 +494,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "yung-sun-xxi.WhisperKey";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -450,6 +521,7 @@
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhisperKey records audio when you press the dictation hotkey and converts it to text";
+				INSTALL_PATH = /Applications;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -459,6 +531,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "yung-sun-xxi.WhisperKey";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -551,6 +624,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		CF1A10062FB0000000000006 /* Build configuration list for PBXAggregateTarget "Install WhisperKey" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF1A10052FB0000000000005 /* Debug */,
+				CF1A10072FB0000000000007 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		CFBE7F7F2FAE5606006A3BF0 /* Build configuration list for PBXProject "WhisperKey" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
