@@ -54,6 +54,7 @@ final class AppCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var recordingStartedAt: Date?
     private var recordingTimerTask: Task<Void, Never>?
+    private var welcomePresentationWorkItem: DispatchWorkItem?
     private var activeRecordingID: UUID?
     private var recordingCancellationRequested = false
     private var lastTranscriptionRequest: (encoded: EncodedAudio, language: String?, audioDuration: TimeInterval)?
@@ -61,6 +62,7 @@ final class AppCoordinator: ObservableObject {
     var permissionPollTask: Task<Void, Never>?
     var workspaceActivationObserver: NSObjectProtocol?
     var onboardingWindowController: OnboardingWindowController?
+    var welcomeWindowController: WelcomeWindowController?
     var openMenuBarPopoverHandler: (() -> Void)?
     var closeMenuBarPopoverHandler: (() -> Void)?
 
@@ -87,12 +89,14 @@ final class AppCoordinator: ObservableObject {
         startPermissionPolling()
 
         onboardingWindowController = OnboardingWindowController(coordinator: self)
-        refreshPermissions(forceOnboarding: true)
+        welcomeWindowController = WelcomeWindowController(coordinator: self)
+        refreshPermissions(forceOnboarding: !resolvedSettings.hasPendingInstallWelcome)
     }
 
     deinit {
         permissionPollTask?.cancel()
         recordingTimerTask?.cancel()
+        welcomePresentationWorkItem?.cancel()
         if let workspaceActivationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(workspaceActivationObserver)
         }
@@ -354,6 +358,47 @@ final class AppCoordinator: ObservableObject {
 
     func openSettingsWindow() {
         SettingsWindowController.show(coordinator: self)
+    }
+
+    func presentWelcomeIfNeeded() {
+        let hasPendingInstallWelcome = settings.hasPendingInstallWelcome
+        log.info("presentWelcomeIfNeeded pending=\(hasPendingInstallWelcome, privacy: .public)")
+        guard hasPendingInstallWelcome else { return }
+
+        welcomeWindowController?.show()
+    }
+
+    func scheduleWelcomePresentationAfterLaunch() {
+        welcomePresentationWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+
+                self.presentWelcomeIfNeeded()
+            }
+        }
+        welcomePresentationWorkItem = workItem
+        log.info("scheduled welcome presentation after launch")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
+    }
+
+    var shouldSuppressPermissionOnboardingForWelcome: Bool {
+        settings.hasPendingInstallWelcome
+    }
+
+    func completeWelcome(openSettings: Bool) {
+        welcomePresentationWorkItem?.cancel()
+        settings.markInstallWelcomePresented()
+        welcomeWindowController?.close()
+
+        guard openSettings else { return }
+        openMenuBarPopover()
+
+        // Let the popover finish its deferred ordering before putting Settings on top.
+        DispatchQueue.main.async { [weak self] in
+            self?.openSettingsWindow()
+        }
     }
 
     private static func destinationUsed(for settings: TranscriptionOutputSettings) -> String {

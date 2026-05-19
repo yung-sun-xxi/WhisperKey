@@ -34,6 +34,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.saveTranscriptionToClipboard)
         XCTAssertTrue(store.autoPasteTranscription)
         XCTAssertTrue(store.escapeToCancelRecording)
+        XCTAssertFalse(store.hasPendingInstallWelcome)
         XCTAssertEqual(store.openAIAPIKey, "")
     }
 
@@ -64,6 +65,34 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(second.autoPasteTranscription)
         XCTAssertFalse(second.escapeToCancelRecording)
         XCTAssertEqual(second.openAIAPIKey, "sk-persisted")
+    }
+
+    func testPendingInstallWelcomeIsDetected() {
+        defaults.set("install-1", forKey: "WhisperKey.settings.pendingInstallWelcomeID")
+
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+
+        XCTAssertTrue(store.hasPendingInstallWelcome)
+    }
+
+    func testMatchingPresentedInstallWelcomeIsNotPending() {
+        defaults.set("install-1", forKey: "WhisperKey.settings.pendingInstallWelcomeID")
+        defaults.set("install-1", forKey: "WhisperKey.settings.presentedInstallWelcomeID")
+
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+
+        XCTAssertFalse(store.hasPendingInstallWelcome)
+    }
+
+    func testMarkInstallWelcomePresentedConsumesPendingInstall() {
+        defaults.set("install-1", forKey: "WhisperKey.settings.pendingInstallWelcomeID")
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+
+        store.markInstallWelcomePresented()
+
+        XCTAssertFalse(store.hasPendingInstallWelcome)
+        XCTAssertEqual(defaults.string(forKey: "WhisperKey.settings.presentedInstallWelcomeID"), "install-1")
+        XCTAssertNil(defaults.string(forKey: "WhisperKey.settings.pendingInstallWelcomeID"))
     }
 
     func testClearingAPIKeyRemovesKeychainEntry() throws {
