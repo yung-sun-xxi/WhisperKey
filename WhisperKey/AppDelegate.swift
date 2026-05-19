@@ -42,13 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             other.activate(options: [.activateAllWindows])
         }
 
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = "WhisperKey is already running"
-        alert.informativeText = "Click the menu bar icon to use it."
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-
         NSApplication.shared.terminate(nil)
     }
 

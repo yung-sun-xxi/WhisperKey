@@ -48,6 +48,7 @@ final class MenuBarController: NSObject {
         }
 
         prewarmSettingsWindow()
+        coordinator.scheduleWelcomePresentationAfterLaunch()
     }
 
     deinit {
@@ -205,6 +206,12 @@ final class MenuBarController: NSObject {
         )
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(handleAppDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: NSApp
+        )
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(handlePanelDidResignKey),
             name: NSWindow.didResignKeyNotification,
             object: panel
@@ -356,6 +363,10 @@ final class MenuBarController: NSObject {
     @objc private func handleAppDidResignActive() {
         Self.log.info("appDidResignActive visible=\(self.panel.isVisible, privacy: .public) isKey=\(self.panel.isKeyWindow, privacy: .public)")
         closePopover(reason: "app-did-resign-active", closeRelatedWindows: panel.isVisible)
+    }
+
+    @objc private func handleAppDidBecomeActive() {
+        coordinator.presentWelcomeIfNeeded()
     }
 
     @objc private func handlePanelDidResignKey() {

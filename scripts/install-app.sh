@@ -6,6 +6,7 @@ set -euo pipefail
 APP_PATH="${1:-}"
 DESTINATION_DIR="${2:-/Applications}"
 EXPECTED_BUNDLE_ID="yung-sun-xxi.WhisperKey"
+USER_PREFS_DOMAIN="$HOME/Library/Preferences/$EXPECTED_BUNDLE_ID"
 
 if [[ -z "$APP_PATH" ]]; then
     echo "Usage: $0 <path-to-WhisperKey.app> [destination-dir]" >&2
@@ -40,8 +41,72 @@ APP_NAME="$(basename "$APP_PATH")"
 DESTINATION_APP="$DESTINATION_DIR/$APP_NAME"
 TEMP_APP="$DESTINATION_DIR/.$APP_NAME.installing.$$"
 
+show_welcome_on_next_launch() {
+    local install_id
+    install_id="$(date -u +"%Y%m%dT%H%M%SZ")-$$"
+
+    defaults write "$USER_PREFS_DOMAIN" WhisperKey.settings.pendingInstallWelcomeID -string "$install_id"
+    defaults write "$EXPECTED_BUNDLE_ID" WhisperKey.settings.pendingInstallWelcomeID -string "$install_id"
+    defaults synchronize "$USER_PREFS_DOMAIN" >/dev/null 2>&1 || true
+    defaults synchronize "$EXPECTED_BUNDLE_ID" >/dev/null 2>&1 || true
+}
+
+terminate_debugservers_for_running_app() {
+    local pid
+    local ppid
+    local parent_name
+
+    while IFS= read -r pid; do
+        [[ -n "$pid" ]] || continue
+
+        ppid="$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d '[:space:]')"
+        [[ -n "$ppid" ]] || continue
+
+        parent_name="$(ps -p "$ppid" -o comm= 2>/dev/null | awk -F/ '{ print $NF }')"
+        if [[ "$parent_name" == "debugserver" ]]; then
+            kill -TERM "$ppid" >/dev/null 2>&1 || true
+        fi
+    done < <(pgrep -x WhisperKey || true)
+}
+
+terminate_running_app() {
+    terminate_debugservers_for_running_app
+    pkill -TERM -x WhisperKey >/dev/null 2>&1 || true
+
+    for _ in {1..30}; do
+        if ! pgrep -x WhisperKey >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.1
+    done
+
+    if pgrep -x WhisperKey >/dev/null 2>&1; then
+        terminate_debugservers_for_running_app
+        pkill -KILL -x WhisperKey >/dev/null 2>&1 || true
+
+        for _ in {1..20}; do
+            if ! pgrep -x WhisperKey >/dev/null 2>&1; then
+                break
+            fi
+            sleep 0.1
+        done
+    fi
+
+    if pgrep -x WhisperKey >/dev/null 2>&1; then
+        echo "ERROR: Could not stop the existing WhisperKey process." >&2
+        exit 1
+    fi
+}
+
+restart_installed_app() {
+    terminate_running_app
+    open -n "$DESTINATION_APP"
+}
+
 if [[ -e "$DESTINATION_APP" && "$APP_PATH" -ef "$DESTINATION_APP" ]]; then
     echo "WhisperKey is already installed at $DESTINATION_APP"
+    show_welcome_on_next_launch
+    restart_installed_app
     exit 0
 fi
 
@@ -64,5 +129,8 @@ fi
 if command -v mdimport >/dev/null 2>&1; then
     mdimport "$DESTINATION_APP" >/dev/null 2>&1 || true
 fi
+
+show_welcome_on_next_launch
+restart_installed_app
 
 echo "Installed WhisperKey to $DESTINATION_APP"

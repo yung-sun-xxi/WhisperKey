@@ -3,6 +3,7 @@ import AppKit
 import AVFoundation
 import CoreGraphics
 import HotkeyEngine
+import SettingsStore
 import os
 
 extension AppCoordinator {
@@ -16,7 +17,10 @@ extension AppCoordinator {
 
         synchronizeHotkey(with: snapshot)
         synchronizePermissionDrivenState(with: snapshot)
-        onboardingWindowController?.sync(with: snapshot, forceShow: forceOnboarding)
+        onboardingWindowController?.sync(
+            with: snapshot,
+            forceShow: forceOnboarding && !shouldSuppressPermissionOnboardingForWelcome
+        )
     }
 
     func requestMicrophonePermission() {

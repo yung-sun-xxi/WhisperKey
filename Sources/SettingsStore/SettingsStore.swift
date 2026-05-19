@@ -55,6 +55,8 @@ public final class SettingsStore: ObservableObject {
         static let saveTranscriptionToClipboard = "WhisperKey.settings.saveTranscriptionToClipboard"
         static let autoPasteTranscription = "WhisperKey.settings.autoPasteTranscription"
         static let escapeToCancelRecording = "WhisperKey.settings.escapeToCancelRecording"
+        static let pendingInstallWelcomeID = "WhisperKey.settings.pendingInstallWelcomeID"
+        static let presentedInstallWelcomeID = "WhisperKey.settings.presentedInstallWelcomeID"
     }
 
     public static let defaultHistoryMaxEntries = 30
@@ -62,6 +64,7 @@ public final class SettingsStore: ObservableObject {
 
     private let keychain: KeychainStorage
     private let defaults: UserDefaults
+    private let installMarkerDefaults: UserDefaults?
     private var loading = true
 
     @Published public var provider: TranscriptionProviderID {
@@ -138,6 +141,13 @@ public final class SettingsStore: ObservableObject {
     public init(keychain: KeychainStorage = KeychainStore(), defaults: UserDefaults = .standard) {
         self.keychain = keychain
         self.defaults = defaults
+        self.installMarkerDefaults = defaults === UserDefaults.standard
+            ? UserDefaults(suiteName: "yung-sun-xxi.WhisperKey")
+            : nil
+
+        // Pull in install markers written by the installer before loading cached preferences.
+        defaults.synchronize()
+        installMarkerDefaults?.synchronize()
 
         self.provider = (defaults.string(forKey: DefaultsKey.provider).flatMap(TranscriptionProviderID.init(rawValue:))) ?? .openai
         self.openAIModel = (defaults.string(forKey: DefaultsKey.openAIModel).flatMap(OpenAIProvider.Model.init(rawValue:))) ?? .whisper1
@@ -174,6 +184,29 @@ public final class SettingsStore: ObservableObject {
             return value
         }
         return ""
+    }
+
+    public var hasPendingInstallWelcome: Bool {
+        guard let pendingID = installMarkerString(forKey: DefaultsKey.pendingInstallWelcomeID),
+              !pendingID.isEmpty
+        else { return false }
+
+        return installMarkerString(forKey: DefaultsKey.presentedInstallWelcomeID) != pendingID
+    }
+
+    public func markInstallWelcomePresented() {
+        guard let pendingID = installMarkerString(forKey: DefaultsKey.pendingInstallWelcomeID),
+              !pendingID.isEmpty
+        else { return }
+
+        defaults.set(pendingID, forKey: DefaultsKey.presentedInstallWelcomeID)
+        defaults.removeObject(forKey: DefaultsKey.pendingInstallWelcomeID)
+        installMarkerDefaults?.set(pendingID, forKey: DefaultsKey.presentedInstallWelcomeID)
+        installMarkerDefaults?.removeObject(forKey: DefaultsKey.pendingInstallWelcomeID)
+    }
+
+    private func installMarkerString(forKey key: String) -> String? {
+        defaults.string(forKey: key) ?? installMarkerDefaults?.string(forKey: key)
     }
 
     private func persistAPIKey(_ key: String, for id: TranscriptionProviderID) {
