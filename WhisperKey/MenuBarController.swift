@@ -17,7 +17,7 @@ final class MenuBarController: NSObject {
 
     private let statusItem: NSStatusItem
     private let panel: MenuBarPanel
-    private let hostingView: TransparentHostingView<AnyView>
+    private let hostingView: TransparentHostingView
     private var cancellables = Set<AnyCancellable>()
     private var blinkTimer: Timer?
     private var blinkOn = true
@@ -416,10 +416,10 @@ private final class MenuBarPanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
-private final class TransparentHostingView<Content: View>: NSHostingView<Content> {
+private final class TransparentHostingView: NSHostingView<AnyView> {
     override var isOpaque: Bool { false }
 
-    required init(rootView: Content) {
+    required init(rootView: AnyView) {
         super.init(rootView: rootView)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
