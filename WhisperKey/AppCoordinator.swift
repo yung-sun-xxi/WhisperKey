@@ -12,6 +12,13 @@ import ErrorToast
 import HistoryStore
 import LoginItem
 
+enum PermissionWindowZOrderState: Equatable {
+    case aboveOrdinaryApps
+    case yieldingToMicrophonePrompt
+    case yieldingToAccessibilityPrompt
+    case yieldingToSystemSettings
+}
+
 @MainActor
 final class AppCoordinator: ObservableObject {
     enum AppState: Equatable {
@@ -65,6 +72,7 @@ final class AppCoordinator: ObservableObject {
     var welcomeWindowController: WelcomeWindowController?
     var openMenuBarPopoverHandler: (() -> Void)?
     var closeMenuBarPopoverHandler: (() -> Void)?
+    var permissionWindowZOrderState: PermissionWindowZOrderState = .aboveOrdinaryApps
 
     init(
         settings: SettingsStore? = nil,

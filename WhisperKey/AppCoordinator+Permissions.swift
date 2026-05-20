@@ -15,24 +15,36 @@ extension AppCoordinator {
         let snapshot = PermissionState.current()
         permissions = snapshot
 
+        if snapshot.allGranted {
+            setPermissionWindowZOrder(.aboveOrdinaryApps)
+        }
+
         synchronizeHotkey(with: snapshot)
         synchronizePermissionDrivenState(with: snapshot)
         onboardingWindowController?.sync(
             with: snapshot,
-            forceShow: forceOnboarding && !shouldSuppressPermissionOnboardingForWelcome
+            forceShow: forceOnboarding && !shouldSuppressPermissionOnboardingForWelcome,
+            zOrderState: permissionWindowZOrderState
         )
     }
 
     func requestMicrophonePermission() {
+        closeTransientWindowsBeforeExternalPermissionUI()
+        refreshPermissions(forceOnboarding: true)
         Task { await requestMicrophonePermissionAsync() }
     }
 
     func openMicrophoneSettings() {
-        NSWorkspace.shared.open(Self.microphoneSettingsURL)
+        closeTransientWindowsBeforeExternalPermissionUI()
+        refreshPermissions(forceOnboarding: true)
+        setPermissionWindowZOrder(.yieldingToSystemSettings)
+        openSystemSettings(Self.microphoneSettingsURL)
         refreshPermissions()
     }
 
     func openAccessibilitySettings() {
+        closeTransientWindowsBeforeExternalPermissionUI()
+        refreshPermissions(forceOnboarding: true)
         Task { await requestAccessibilityPermissionAndOpenSettings() }
     }
 
@@ -41,9 +53,15 @@ extension AppCoordinator {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            let activatedApplication = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let activatedProcessID = activatedApplication?.processIdentifier
+            let activatedBundleIdentifier = activatedApplication?.bundleIdentifier
             Task { @MainActor [weak self] in
-                self?.refreshPermissions(forceOnboarding: true)
+                self?.handleWorkspaceActivation(
+                    bundleIdentifier: activatedBundleIdentifier,
+                    processIdentifier: activatedProcessID
+                )
             }
         }
     }
@@ -55,6 +73,41 @@ extension AppCoordinator {
                 self?.refreshPermissions()
             }
         }
+    }
+
+    private func handleWorkspaceActivation(bundleIdentifier: String?, processIdentifier: pid_t?) {
+        let whisperKeyBecameActive = processIdentifier == ProcessInfo.processInfo.processIdentifier
+
+        if permissionWindowZOrderState == .yieldingToSystemSettings,
+           !Self.isSystemSettingsBundleIdentifier(bundleIdentifier) {
+            restorePermissionWindowAboveOrdinaryApps()
+            return
+        }
+
+        refreshPermissions(forceOnboarding: whisperKeyBecameActive)
+    }
+
+    private static func isSystemSettingsBundleIdentifier(_ bundleIdentifier: String?) -> Bool {
+        bundleIdentifier == "com.apple.systempreferences"
+            || bundleIdentifier == "com.apple.SystemSettings"
+    }
+
+    private func setPermissionWindowZOrder(
+        _ state: PermissionWindowZOrderState,
+        bringToFront: Bool = false
+    ) {
+        permissionWindowZOrderState = state
+        onboardingWindowController?.applyZOrder(state, bringToFront: bringToFront)
+    }
+
+    private func closeTransientWindowsBeforeExternalPermissionUI() {
+        closeMenuBarPopoverHandler?()
+        SettingsWindowController.hide()
+    }
+
+    private func restorePermissionWindowAboveOrdinaryApps() {
+        setPermissionWindowZOrder(.aboveOrdinaryApps, bringToFront: true)
+        refreshPermissions(forceOnboarding: true)
     }
 
     private func requestMicrophonePermissionAsync() async {
@@ -81,6 +134,7 @@ extension AppCoordinator {
         let previousPolicy = NSApp.activationPolicy()
         log.info("temporarily switching activation policy from \(previousPolicy.rawValue, privacy: .public) to regular for mic prompt")
 
+        setPermissionWindowZOrder(.yieldingToMicrophonePrompt)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
@@ -88,24 +142,39 @@ extension AppCoordinator {
         log.info("microphone requestAccess returned: \(granted, privacy: .public)")
 
         NSApp.setActivationPolicy(previousPolicy)
+        restorePermissionWindowAboveOrdinaryApps()
     }
 
     private func requestAccessibilityPermissionAndOpenSettings() async {
         let previousPolicy = NSApp.activationPolicy()
         Self.permissionLog.info("temporarily switching activation policy from \(previousPolicy.rawValue, privacy: .public) to regular for Accessibility prompt")
 
+        setPermissionWindowZOrder(.yieldingToAccessibilityPrompt)
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
 
         requestAccessibilityRegistration()
         provokeAccessibilityRegistrationViaEventTap()
 
         try? await Task.sleep(nanoseconds: 250_000_000)
-        NSWorkspace.shared.open(Self.accessibilitySettingsURL)
+        setPermissionWindowZOrder(.yieldingToSystemSettings)
+        openSystemSettings(Self.accessibilitySettingsURL)
 
         try? await Task.sleep(nanoseconds: 750_000_000)
         NSApp.setActivationPolicy(previousPolicy)
         refreshPermissions(forceOnboarding: true)
+    }
+
+    private func openSystemSettings(_ url: URL) {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+
+        NSWorkspace.shared.open(url, configuration: configuration) { _, _ in
+            Task { @MainActor in
+                NSWorkspace.shared.runningApplications
+                    .first { Self.isSystemSettingsBundleIdentifier($0.bundleIdentifier) }?
+                    .activate(options: [.activateAllWindows])
+            }
+        }
     }
 
     private func requestAccessibilityRegistration() {
