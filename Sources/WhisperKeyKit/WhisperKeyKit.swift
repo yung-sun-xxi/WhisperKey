@@ -6,6 +6,7 @@
 @_exported import HistoryStore
 @_exported import KeychainStore
 @_exported import SettingsStore
+@_exported import UsageStatsStore
 @_exported import ErrorToast
 @_exported import LoginItem
 @_exported import SingleInstance

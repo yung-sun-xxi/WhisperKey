@@ -11,6 +11,7 @@ import PasteEngine
 import ErrorToast
 import HistoryStore
 import LoginItem
+import UsageStatsStore
 
 @MainActor
 final class AppCoordinator: ObservableObject {
@@ -43,6 +44,7 @@ final class AppCoordinator: ObservableObject {
     let settings: SettingsStore
     let hotkey: HotkeyEngineRunner
     let history: HistoryStore
+    let usageStats: UsageStatsStore
     private let loginItem: LoginItemController
 
     private let recorder = AudioRecorder()
@@ -69,15 +71,23 @@ final class AppCoordinator: ObservableObject {
     init(
         settings: SettingsStore? = nil,
         history: HistoryStore? = nil,
+        usageStats: UsageStatsStore? = nil,
         loginItemService: LoginItemService? = nil
     ) {
         let resolvedSettings = settings ?? SettingsStore()
         self.settings = resolvedSettings
         self.history = history ?? HistoryStore(maxEntries: resolvedSettings.historyMaxEntries)
+        let resolvedUsageStats = usageStats ?? UsageStatsStore()
+        self.usageStats = resolvedUsageStats
         self.hotkey = HotkeyEngineRunner(config: resolvedSettings.hotkeyConfig)
         let resolvedLoginService = loginItemService ?? SMAppServiceLoginItem()
         self.loginItem = LoginItemController(service: resolvedLoginService)
         self.launchAtLoginEnabled = self.loginItem.isEnabled
+
+        if resolvedSettings.consumePendingInstallUsageReset() {
+            resolvedUsageStats.resetAll()
+            log.info("usage counters reset due to fresh install marker")
+        }
 
         hotkey.setOutputHandler { [weak self] output in
             guard let self else { return }
@@ -311,6 +321,17 @@ final class AppCoordinator: ObservableObject {
                 destinationUsed: Self.destinationUsed(for: outputSettings),
                 copiedToClipboard: outputSettings.saveToClipboard && output.wroteClipboard,
                 autoPasted: output.pasteDecision == .paste
+            )
+            if priceEstimate == nil {
+                log.error("missing pricing rule for provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public); usage cost will be omitted")
+            }
+            usageStats.record(
+                providerID: settings.provider.rawValue,
+                modelID: currentTranscriptionModelID,
+                wordCount: HistoryEntry.countWords(in: text),
+                audioDurationSeconds: audioDuration,
+                estimatedPriceAtTime: priceEstimate?.amount,
+                currency: priceEstimate?.currency
             )
             self.lastTranscriptionRequest = nil
             state = .idle
