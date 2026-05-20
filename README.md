@@ -1,39 +1,128 @@
 # WhisperKey
 
-Native macOS menu bar voice dictation utility — fast push-to-talk transcription via OpenAI / Groq Whisper.
+WhisperKey is a native macOS menu bar app for push-to-talk dictation. Press a
+configurable hotkey, speak, and send the transcript to the clipboard and, when
+safe, into the focused text field.
 
-## Status
+It supports OpenAI and Groq Whisper-compatible transcription APIs.
 
-In active development. The PRD lives in [Issue #1](https://github.com/yung-sun-xxi/WhisperKey/issues/1); see the [Implementation Order](https://github.com/yung-sun-xxi/WhisperKey/issues/1#implementation-order) section for the locked-in ticket sequence and milestones.
+## Features
 
-## Concept
-
-Lives in the menu bar. Push-to-talk via a configurable hotkey (Right Option / Right Cmd / Right Shift). Audio is sent to a configurable transcription provider; the resulting text lands in the clipboard and auto-pastes into the focused text field if there is one. By default, Esc cancels an active recording without transcription, output, or history; this can be disabled in Settings.
+- Menu bar app with a compact command center.
+- Configurable trigger key: Right Option, Right Command, or Right Shift.
+- Tap and hold trigger modes.
+- Esc-to-cancel while recording.
+- OpenAI and Groq provider support with selectable models.
+- API key validation and storage in the macOS Keychain.
+- Optional clipboard output and auto-paste.
+- Local transcription history with configurable retention.
+- Local usage counters by provider and model.
+- Optional sound effects and launch-at-login support.
 
 ## Requirements
 
-- macOS 14 (Sonoma) or later
-- Xcode 15+
-- An API key for one of the supported providers (OpenAI, Groq)
+- macOS 14 Sonoma or later.
+- An API key for OpenAI or Groq.
+- Xcode 15 or later for local development.
 
-## Permissions
+## Install
 
-The app requires:
-- **Microphone** — to record audio
-- **Accessibility** — for the global hotkey (CGEventTap) and auto-paste (AX focus inspection + simulated ⌘V)
+Download the latest signed and notarized DMG from
+[GitHub Releases](https://github.com/yung-sun-xxi/WhisperKey/releases).
 
-## Releasing
+Open the DMG, install `WhisperKey.app`, and launch it from `/Applications` or
+Spotlight.
 
-Cutting a Developer ID-signed, notarized DMG is documented in [RELEASING.md](RELEASING.md). The pipeline is driven by [`scripts/release.sh`](scripts/release.sh).
+## First Run
 
-## Local install
+WhisperKey needs two macOS permissions:
 
-Building the shared `WhisperKey` Xcode scheme installs the built app into `/Applications/WhisperKey.app`, then registers it with LaunchServices and Spotlight so it is discoverable via Command+Space. CI skips this automatically; local builds can opt out with:
+- Microphone access to record audio while the hotkey is active.
+- Accessibility access for the global hotkey and optional auto-paste.
+
+The app opens the relevant System Settings panes during onboarding. If you deny a
+permission, enable it later in System Settings under Privacy & Security.
+
+## Provider Setup
+
+Open Settings from the menu bar app, choose a provider, paste your API key, and
+let WhisperKey validate and save it.
+
+Supported providers:
+
+- OpenAI: `whisper-1`, `gpt-4o-mini-transcribe`
+- Groq: `whisper-large-v3`, `whisper-large-v3-turbo`,
+  `distil-whisper-large-v3-en`
+
+Language can be left on Auto or set to English or Russian.
+
+## Privacy
+
+WhisperKey runs locally on your Mac, but transcription is performed by the
+provider you configure.
+
+- Audio is recorded only while the configured hotkey starts capture.
+- Recorded audio is sent directly to the selected transcription provider.
+- API keys are stored in the macOS Keychain.
+- Transcription history and usage counters are stored locally.
+- WhisperKey does not run an owner-controlled backend service.
+- Auto-paste is skipped for secure text fields and can be disabled.
+
+Review your selected provider's terms and data policy before sending sensitive
+audio.
+
+## Development
+
+Build the Swift package targets:
 
 ```sh
-WHISPERKEY_SKIP_APPLICATIONS_INSTALL=1 xcodebuild -project WhisperKey.xcodeproj -scheme WhisperKey build
+swift build
 ```
+
+Run package tests:
+
+```sh
+swift test
+```
+
+Build the macOS app with signing disabled:
+
+```sh
+xcodebuild \
+  -project WhisperKey.xcodeproj \
+  -scheme WhisperKey \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath build/debug-dd \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+Local Xcode builds install the app into `/Applications/WhisperKey.app` by
+default. To skip that install step:
+
+```sh
+WHISPERKEY_SKIP_APPLICATIONS_INSTALL=1 xcodebuild \
+  -project WhisperKey.xcodeproj \
+  -scheme WhisperKey \
+  build
+```
+
+## Releases
+
+Developer ID signing, notarization, DMG packaging, and GitHub Release publishing
+are documented in [RELEASING.md](RELEASING.md).
+
+The public release feed is available at
+[GitHub Releases](https://github.com/yung-sun-xxi/WhisperKey/releases).
+
+## Contributing
+
+WhisperKey is currently an owner-driven project. Forks are welcome, but upstream
+changes are accepted at the owner's discretion.
+
+Public pull requests do not run on the owner's self-hosted Mac runner.
 
 ## License
 
-TBD.
+WhisperKey is released under the [MIT License](LICENSE).

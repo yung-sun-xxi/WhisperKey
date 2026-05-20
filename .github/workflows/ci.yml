@@ -1,13 +1,12 @@
 name: CI
 
 on:
-  pull_request:
   push:
     branches: [master]
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -41,19 +40,3 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/whisperkey_derived" \
             CODE_SIGNING_ALLOWED=NO \
             build
-
-  auto-merge:
-    needs: test
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.draft == false
-      && !contains(github.event.pull_request.labels.*.name, 'do-not-merge')
-      && !contains(github.event.pull_request.labels.*.name, 'wip')
-    runs-on: [self-hosted, macOS, whisperkey]
-    steps:
-      - name: Squash-merge and delete branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh pr merge "$PR_NUMBER" --squash --delete-branch

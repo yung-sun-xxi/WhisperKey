@@ -3,8 +3,8 @@
 #
 # Prerequisites (one-time, see RELEASING.md):
 #   - Developer ID Application certificate installed in the login keychain
-#   - notarytool keychain profile named "WhisperKey-Notary" already stored
-#     (xcrun notarytool store-credentials WhisperKey-Notary ...)
+#   - WHISPERKEY_TEAM_ID set in the environment or release.local.env
+#   - notarytool keychain profile stored; defaults to "WhisperKey-Notary"
 #   - VERSION must be passed as the first argument (e.g. ./scripts/release.sh 1.0.0)
 #
 # Output:
@@ -20,21 +20,43 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
-TEAM_ID="UGLRY9ACZ6"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+CONFIG_PATH="${WHISPERKEY_RELEASE_CONFIG:-release.local.env}"
+if [[ "$CONFIG_PATH" != /* ]]; then
+    CONFIG_PATH="$REPO_ROOT/$CONFIG_PATH"
+fi
+if [[ -f "$CONFIG_PATH" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONFIG_PATH"
+fi
+
+TEAM_ID="${WHISPERKEY_TEAM_ID:-}"
+if [[ -z "$TEAM_ID" ]]; then
+    echo "ERROR: WHISPERKEY_TEAM_ID is required." >&2
+    echo "Set it in the environment or create release.local.env from RELEASING.md." >&2
+    exit 1
+fi
+
 SCHEME="WhisperKey"
 PROJECT="WhisperKey.xcodeproj"
 BUILD_DIR="build"
 ARCHIVE_PATH="$BUILD_DIR/WhisperKey.xcarchive"
 EXPORT_PATH="$BUILD_DIR/export"
+EXPORT_OPTIONS_PLIST="$BUILD_DIR/ExportOptions.plist"
 APP_PATH="$EXPORT_PATH/WhisperKey.app"
 DMG_PATH="$BUILD_DIR/WhisperKey-$VERSION.dmg"
 ZIP_PATH="$BUILD_DIR/WhisperKey-$VERSION.zip"
-NOTARY_PROFILE="WhisperKey-Notary"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NOTARY_PROFILE="${WHISPERKEY_NOTARY_PROFILE:-WhisperKey-Notary}"
+SIGN_IDENTITY="${WHISPERKEY_SIGN_IDENTITY:-}"
 
 # Resolve the Developer ID Application identity (requires exactly one match).
-SIGN_IDENTITY=$(security find-identity -v -p codesigning login.keychain-db \
-    | awk -F'"' '/Developer ID Application/ {print $2; exit}')
+if [[ -z "$SIGN_IDENTITY" ]]; then
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning login.keychain-db \
+        | awk -F'"' '/Developer ID Application/ {print $2; exit}')
+fi
 if [[ -z "${SIGN_IDENTITY:-}" ]]; then
     echo "ERROR: No 'Developer ID Application' identity found in the login keychain." >&2
     echo "Open Xcode → Settings → Accounts → Manage Certificates → + Developer ID Application." >&2
@@ -52,6 +74,23 @@ fi
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
+
+cat > "$EXPORT_OPTIONS_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>destination</key>
+    <string>export</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>teamID</key>
+    <string>$TEAM_ID</string>
+</dict>
+</plist>
+PLIST
 
 echo "==> Archiving (Release, hardened runtime, manual signing)..."
 XCODEBUILD_ARGS=(
@@ -78,7 +117,7 @@ xcodebuild \
     -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportPath "$EXPORT_PATH" \
-    -exportOptionsPlist ExportOptions.plist
+    -exportOptionsPlist "$EXPORT_OPTIONS_PLIST"
 
 echo "==> Verifying app signature..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
