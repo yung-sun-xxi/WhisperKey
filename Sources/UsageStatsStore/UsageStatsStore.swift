@@ -56,6 +56,15 @@ public enum UsageStatsRange: String, CaseIterable, Codable, Sendable {
         case .allTime: return "All Time"
         }
     }
+
+    public var compactLabel: String {
+        switch self {
+        case .today: return "Today"
+        case .last7Days: return "7d"
+        case .last30Days: return "30d"
+        case .allTime: return "All"
+        }
+    }
 }
 
 public struct UsageSummary: Equatable, Sendable {
