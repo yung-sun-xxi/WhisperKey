@@ -2,33 +2,69 @@ import AppKit
 import AVFoundation
 import SwiftUI
 
+private enum OnboardingWindowLayout {
+    static let width: CGFloat = 520
+}
+
 final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private let coordinator: AppCoordinator
     private var window: NSWindow?
+    private var zOrderState: PermissionWindowZOrderState = .aboveOrdinaryApps
+    private var userExplicitlyClosed = false
+    private var closingForGrantedPermissions = false
+
+    var relatedWindow: NSWindow? {
+        window
+    }
 
     init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
     }
 
-    func sync(with permissions: PermissionState, forceShow: Bool) {
+    func sync(
+        with permissions: PermissionState,
+        forceShow: Bool,
+        zOrderState: PermissionWindowZOrderState
+    ) {
         if permissions.allGranted {
-            window?.close()
-            window = nil
+            closeForGrantedPermissions()
             return
         }
 
         if window != nil {
-            if forceShow { show() }
+            applyZOrder(zOrderState, bringToFront: forceShow)
             return
         }
 
-        guard forceShow else { return }
-        show()
+        self.zOrderState = zOrderState
+        guard forceShow, !userExplicitlyClosed else { return }
+        show(zOrderState: zOrderState)
     }
 
-    private func show() {
-        if let window {
-            window.orderFrontRegardless()
+    func applyZOrder(_ state: PermissionWindowZOrderState, bringToFront: Bool) {
+        let previousState = zOrderState
+        zOrderState = state
+        guard let window else { return }
+
+        switch state {
+        case .aboveOrdinaryApps, .yieldingToMicrophonePrompt:
+            window.level = .floating
+            if bringToFront {
+                window.makeKeyAndOrderFront(nil)
+                window.orderFrontRegardless()
+            }
+        case .yieldingToAccessibilityPrompt, .yieldingToSystemSettings:
+            window.level = .normal
+            if previousState != state {
+                window.orderBack(nil)
+            }
+        }
+    }
+
+    private func show(zOrderState: PermissionWindowZOrderState) {
+        if window != nil {
+            applyZOrder(zOrderState, bringToFront: zOrderState == .aboveOrdinaryApps)
+            NSApp.activate(ignoringOtherApps: true)
             return
         }
 
@@ -36,20 +72,31 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             .environmentObject(coordinator)
         let hostingView = NSHostingView(rootView: content)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 430),
+            contentRect: NSRect(x: 0, y: 0, width: OnboardingWindowLayout.width, height: 1),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "WhisperKey Permissions"
         window.contentView = hostingView
+        window.setContentSize(hostingView.fittingSize)
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         center(window)
         self.window = window
-        window.makeKeyAndOrderFront(nil)
+        applyZOrder(zOrderState, bringToFront: zOrderState == .aboveOrdinaryApps)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func closeForGrantedPermissions() {
+        userExplicitlyClosed = false
+        guard let window else { return }
+
+        closingForGrantedPermissions = true
+        window.close()
+        closingForGrantedPermissions = false
+        self.window = nil
     }
 
     private func center(_ window: NSWindow) {
@@ -63,6 +110,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         guard notification.object as AnyObject? === window else { return }
+        if !closingForGrantedPermissions {
+            userExplicitlyClosed = true
+        }
         window = nil
     }
 }
@@ -96,11 +146,10 @@ private struct OnboardingView: View {
                 buttonTitle: "Open System Settings",
                 action: coordinator.openAccessibilitySettings
             )
-
-            Spacer(minLength: 0)
         }
         .padding(24)
-        .frame(width: 520, height: 430)
+        .frame(width: OnboardingWindowLayout.width)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var microphoneButtonTitle: String {
