@@ -45,6 +45,7 @@ enum SettingsWindowController {
 
         // Close instead of ordering out so SwiftUI-owned transient state is rebuilt next time.
         window = nil
+        UsageResetWindowController.hide()
         dismissModalUI(attachedTo: closingWindow)
         closingWindow.close()
     }
@@ -352,22 +353,24 @@ private struct CommandCenterHeader: View {
                     .truncationMode(.middle)
                     .help("\(settings.provider.displayName) · \(currentModelID)")
                 Spacer(minLength: 0)
-                Picker("", selection: $settings.usageStatsRange) {
-                    ForEach(UsageStatsRange.allCases, id: \.self) { range in
-                        Text(range.displayName).tag(range)
-                    }
-                }
-                .labelsHidden()
-                .controlSize(.mini)
-                .pickerStyle(.menu)
-                .fixedSize()
-                .help("Choose the usage stats range")
             }
 
             Text(UsageLineFormatter.line(from: summary))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
+
+            Picker("", selection: $settings.usageStatsRange) {
+                ForEach(UsageStatsRange.allCases, id: \.self) { range in
+                    Text(range.compactLabel)
+                        .tag(range)
+                        .help(range.displayName)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .controlSize(.mini)
+            .help("Choose the usage stats range")
 
             HStack(spacing: 10) {
                 Toggle("Clipboard", isOn: $settings.saveTranscriptionToClipboard)
@@ -463,7 +466,6 @@ private struct SettingsForm: View {
     @State private var apiKeyValidationState = APIKeyValidationState.idle
     @State private var apiKeyValidationTask: Task<Void, Never>?
     @State private var apiKeyValidationNotice: APIKeyValidationNotice?
-    @State private var isResetCountersPresented = false
     @FocusState private var apiKeyFieldFocused: Bool
 
     @ViewBuilder private var modelPicker: some View {
@@ -640,11 +642,20 @@ private struct SettingsForm: View {
                 }
                 .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
             }
-            SettingsRow("Usage counters") {
+            SettingsRow("Usage stats") {
                 HStack {
                     Spacer(minLength: 0)
-                    Button("Reset Counters\u{2026}") {
-                        isResetCountersPresented = true
+                    Button("Reset usage") {
+                        UsageResetWindowController.show(
+                            currentKey: ProviderModelKey(
+                                providerID: settings.provider.rawValue,
+                                modelID: coordinator.currentTranscriptionModelID
+                            ),
+                            parent: ownerWindow,
+                            onReset: { keys in
+                                coordinator.usageStats.resetCounters(for: keys)
+                            }
+                        )
                     }
                     .controlSize(.small)
                 }
@@ -661,19 +672,6 @@ private struct SettingsForm: View {
                 title: Text(notice.title),
                 message: Text(notice.message),
                 dismissButton: .default(Text("OK"))
-            )
-        }
-        .sheet(isPresented: $isResetCountersPresented) {
-            ResetCountersSheet(
-                currentKey: ProviderModelKey(
-                    providerID: settings.provider.rawValue,
-                    modelID: coordinator.currentTranscriptionModelID
-                ),
-                onReset: { keys in
-                    coordinator.usageStats.resetCounters(for: keys)
-                    isResetCountersPresented = false
-                },
-                onCancel: { isResetCountersPresented = false }
             )
         }
         .onAppear {
@@ -1002,49 +1000,187 @@ private extension View {
     }
 }
 
-private struct ResetCountersSheet: View {
+private let allUsageResetKeys: [ProviderModelKey] = {
+    let openai = OpenAIProvider.Model.allCases.map {
+        ProviderModelKey(providerID: TranscriptionProviderID.openai.rawValue, modelID: $0.rawValue)
+    }
+    let groq = GroqProvider.Model.allCases.map {
+        ProviderModelKey(providerID: TranscriptionProviderID.groq.rawValue, modelID: $0.rawValue)
+    }
+    return openai + groq
+}()
+
+@MainActor
+private enum UsageResetWindowController {
+    private static var window: NSWindow?
+    private static var parentWindow: NSWindow?
+    private static var delegate: WindowDelegate?
+
+    static func show(
+        currentKey: ProviderModelKey,
+        parent: NSWindow?,
+        onReset: @escaping (Set<ProviderModelKey>) -> Void
+    ) {
+        let resolvedParent = resolvedParentWindow(from: parent)
+
+        if let existing = window {
+            attach(existing, to: resolvedParent)
+            position(existing, over: resolvedParent)
+            present(existing)
+            return
+        }
+
+        let content = UsageResetView(
+            currentKey: currentKey,
+            onReset: { keys in
+                onReset(keys)
+                hide()
+            },
+            onCancel: { hide() }
+        )
+
+        let hostingView = NSHostingView(rootView: content)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 1),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Reset usage"
+        window.contentView = hostingView
+        window.setContentSize(hostingView.fittingSize)
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.backgroundColor = SettingsWindowLayout.backgroundColor
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
+        window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
+
+        let delegate = WindowDelegate(onClose: { closedWindow in
+            windowDidClose(closedWindow)
+        })
+        window.delegate = delegate
+        Self.delegate = delegate
+        Self.window = window
+
+        attach(window, to: resolvedParent)
+        position(window, over: resolvedParent)
+        present(window)
+    }
+
+    static func hide() {
+        guard let closingWindow = window else {
+            delegate = nil
+            parentWindow = nil
+            return
+        }
+
+        parentWindow?.removeChildWindow(closingWindow)
+        closingWindow.delegate = nil
+        window = nil
+        parentWindow = nil
+        delegate = nil
+        closingWindow.close()
+    }
+
+    private static func present(_ window: NSWindow) {
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private static func resolvedParentWindow(from parent: NSWindow?) -> NSWindow? {
+        if let parent, !parent.styleMask.contains(.borderless) {
+            return parent
+        }
+
+        return SettingsWindowController.relatedWindow
+    }
+
+    private static func attach(_ childWindow: NSWindow, to newParent: NSWindow?) {
+        if parentWindow !== newParent {
+            parentWindow?.removeChildWindow(childWindow)
+            parentWindow = newParent
+        }
+
+        guard let newParent,
+              newParent.childWindows?.contains(where: { $0 === childWindow }) != true
+        else { return }
+
+        newParent.addChildWindow(childWindow, ordered: .above)
+    }
+
+    private static func position(_ window: NSWindow, over parent: NSWindow?) {
+        guard let parent else {
+            window.center()
+            return
+        }
+
+        let frame = parent.frame
+        let size = window.frame.size
+        let origin = NSPoint(
+            x: frame.midX - size.width / 2,
+            y: frame.midY - size.height / 2
+        )
+        window.setFrameOrigin(origin)
+    }
+
+    private static func windowDidClose(_ closedWindow: NSWindow) {
+        guard window === closedWindow else { return }
+
+        parentWindow?.removeChildWindow(closedWindow)
+        window = nil
+        parentWindow = nil
+        delegate = nil
+    }
+
+    private final class WindowDelegate: NSObject, NSWindowDelegate {
+        let onClose: (NSWindow) -> Void
+        init(onClose: @escaping (NSWindow) -> Void) { self.onClose = onClose }
+        func windowWillClose(_ notification: Notification) {
+            guard let window = notification.object as? NSWindow else { return }
+
+            Task { @MainActor in self.onClose(window) }
+        }
+    }
+}
+
+private struct UsageResetView: View {
     let currentKey: ProviderModelKey
     let onReset: (Set<ProviderModelKey>) -> Void
     let onCancel: () -> Void
     @State private var selection: Set<ProviderModelKey> = []
 
-    private static let allKeys: [ProviderModelKey] = {
-        let openai = OpenAIProvider.Model.allCases.map {
-            ProviderModelKey(providerID: TranscriptionProviderID.openai.rawValue, modelID: $0.rawValue)
-        }
-        let groq = GroqProvider.Model.allCases.map {
-            ProviderModelKey(providerID: TranscriptionProviderID.groq.rawValue, modelID: $0.rawValue)
-        }
-        return openai + groq
-    }()
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Reset Usage Counters")
+            Text("Reset usage")
                 .font(.title3.weight(.semibold))
-            Text("Select the provider/model combinations to clear. This deletes usage data only — transcription history text is not affected.")
+            Text("Select models to clear. This will only delete usage data - transcription history is not affected.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            HStack {
+                Button(allKeysSelected ? "Deselect all" : "Select all") {
+                    if allKeysSelected {
+                        selection.removeAll()
+                    } else {
+                        selection = Set(allUsageResetKeys)
+                    }
+                }
+                .controlSize(.small)
+                Spacer()
+            }
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Self.allKeys, id: \.self) { key in
+                    ForEach(allUsageResetKeys, id: \.self) { key in
                         Toggle(isOn: binding(for: key)) {
-                            HStack(spacing: 6) {
+                            HStack(alignment: .center, spacing: 6) {
                                 Text(displayName(for: key))
                                 if key == currentKey {
-                                    Text("Current")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 5)
-                                        .padding(.vertical, 1)
-                                        .background(
-                                            Color.secondary.opacity(0.15),
-                                            in: Capsule()
-                                        )
+                                    CurrentModelBadge()
                                 }
                             }
+                            .frame(minHeight: 18, alignment: .center)
                         }
                         .toggleStyle(.checkbox)
                     }
@@ -1054,26 +1190,24 @@ private struct ResetCountersSheet: View {
             .frame(maxHeight: 160)
 
             HStack(spacing: 8) {
-                Button("Select Current") {
-                    selection = [currentKey]
-                }
-                Button("Select All") {
-                    selection = Set(Self.allKeys)
-                }
-                Spacer()
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .keyboardShortcut(.cancelAction)
                 Button(role: .destructive) {
                     onReset(selection)
                 } label: {
-                    Text("Reset Selected")
+                    Text("Reset selected")
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(selection.isEmpty)
+                Spacer()
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
             }
         }
         .padding(20)
         .frame(width: 420)
+    }
+
+    private var allKeysSelected: Bool {
+        !allUsageResetKeys.isEmpty && selection.count == allUsageResetKeys.count
     }
 
     private func binding(for key: ProviderModelKey) -> Binding<Bool> {
@@ -1092,5 +1226,19 @@ private struct ResetCountersSheet: View {
     private func displayName(for key: ProviderModelKey) -> String {
         let provider = TranscriptionProviderID(rawValue: key.providerID)?.displayName ?? key.providerID
         return "\(provider) · \(key.modelID)"
+    }
+}
+
+private struct CurrentModelBadge: View {
+    var body: some View {
+        Text("Current")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .frame(height: 16, alignment: .center)
+            .background(
+                Color.secondary.opacity(0.15),
+                in: Capsule()
+            )
     }
 }
