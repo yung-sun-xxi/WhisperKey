@@ -290,6 +290,7 @@ final class MenuBarController: NSObject {
             panel,
             SettingsWindowController.relatedWindow,
             HistoryFullWindowController.relatedWindow,
+            coordinator.onboardingWindowController?.relatedWindow,
             NSApp.modalWindow,
         ].compactMap(\.self)
     }
