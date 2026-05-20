@@ -3,6 +3,7 @@ import Combine
 import HotkeyEngine
 import KeychainStore
 import TranscriptionProvider
+import UsageStatsStore
 
 public enum TranscriptionLanguage: String, CaseIterable, Codable, Sendable {
     case auto
@@ -57,6 +58,8 @@ public final class SettingsStore: ObservableObject {
         static let escapeToCancelRecording = "WhisperKey.settings.escapeToCancelRecording"
         static let pendingInstallWelcomeID = "WhisperKey.settings.pendingInstallWelcomeID"
         static let presentedInstallWelcomeID = "WhisperKey.settings.presentedInstallWelcomeID"
+        static let usageStatsRange = "WhisperKey.settings.usageStatsRange"
+        static let consumedInstallUsageResetID = "WhisperKey.settings.consumedInstallUsageResetID"
     }
 
     public static let defaultHistoryMaxEntries = 30
@@ -119,6 +122,14 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published public var usageStatsRange: UsageStatsRange {
+        didSet {
+            if !loading {
+                defaults.set(usageStatsRange.rawValue, forKey: DefaultsKey.usageStatsRange)
+            }
+        }
+    }
+
     @Published public var historyMaxEntries: Int {
         didSet {
             let clamped = Self.clampHistoryMax(historyMaxEntries)
@@ -161,6 +172,7 @@ public final class SettingsStore: ObservableObject {
         self.escapeToCancelRecording = (defaults.object(forKey: DefaultsKey.escapeToCancelRecording) as? Bool) ?? true
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
+        self.usageStatsRange = (defaults.string(forKey: DefaultsKey.usageStatsRange).flatMap(UsageStatsRange.init(rawValue:))) ?? .today
         self.openAIAPIKey = Self.loadAPIKey(for: .openai, keychain: keychain)
         self.groqAPIKey = Self.loadAPIKey(for: .groq, keychain: keychain)
 
@@ -192,6 +204,22 @@ public final class SettingsStore: ObservableObject {
         else { return false }
 
         return installMarkerString(forKey: DefaultsKey.presentedInstallWelcomeID) != pendingID
+    }
+
+    /// Returns true once per fresh install marker. The caller is expected to clear usage counters
+    /// when this returns true. Subsequent calls for the same install marker return false.
+    public func consumePendingInstallUsageReset() -> Bool {
+        guard let pendingID = installMarkerString(forKey: DefaultsKey.pendingInstallWelcomeID),
+              !pendingID.isEmpty
+        else { return false }
+
+        let consumed = defaults.string(forKey: DefaultsKey.consumedInstallUsageResetID)
+            ?? installMarkerDefaults?.string(forKey: DefaultsKey.consumedInstallUsageResetID)
+        guard consumed != pendingID else { return false }
+
+        defaults.set(pendingID, forKey: DefaultsKey.consumedInstallUsageResetID)
+        installMarkerDefaults?.set(pendingID, forKey: DefaultsKey.consumedInstallUsageResetID)
+        return true
     }
 
     public func markInstallWelcomePresented() {

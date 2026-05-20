@@ -5,6 +5,7 @@ import HotkeyEngine
 import SettingsStore
 import TranscriptionProvider
 import HistoryStore
+import UsageStatsStore
 
 private enum SettingsWindowLayout {
     static let contentWidth: CGFloat = 460
@@ -272,7 +273,8 @@ struct PopoverContent: View {
                 }
                 CommandCenterHeader(
                     settings: coordinator.settings,
-                    history: coordinator.history,
+                    usageStats: coordinator.usageStats,
+                    currentProviderID: coordinator.settings.provider.rawValue,
                     currentModelID: coordinator.currentTranscriptionModelID
                 )
                 Divider()
@@ -335,7 +337,8 @@ private struct PermissionBanner: View {
 
 private struct CommandCenterHeader: View {
     @ObservedObject var settings: SettingsStore
-    @ObservedObject var history: HistoryStore
+    @ObservedObject var usageStats: UsageStatsStore
+    let currentProviderID: String
     let currentModelID: String
 
     var body: some View {
@@ -349,9 +352,19 @@ private struct CommandCenterHeader: View {
                     .truncationMode(.middle)
                     .help("\(settings.provider.displayName) · \(currentModelID)")
                 Spacer(minLength: 0)
+                Picker("", selection: $settings.usageStatsRange) {
+                    ForEach(UsageStatsRange.allCases, id: \.self) { range in
+                        Text(range.displayName).tag(range)
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.mini)
+                .pickerStyle(.menu)
+                .fixedSize()
+                .help("Choose the usage stats range")
             }
 
-            Text(usageLine)
+            Text(UsageLineFormatter.line(from: summary))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -372,26 +385,52 @@ private struct CommandCenterHeader: View {
         .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private var summary: HistoryUsageSummary {
-        history.usageSummaryForToday()
+    private var summary: UsageSummary {
+        usageStats.summary(
+            providerID: currentProviderID,
+            modelID: currentModelID,
+            range: settings.usageStatsRange
+        )
     }
+}
 
-    private var usageLine: String {
-        if let estimatedCost = summary.estimatedCost, let currency = summary.currency {
-            return "\(wordsLabel(summary.wordCount)) words today (~\(costLabel(estimatedCost, currency: currency)))"
+enum UsageLineFormatter {
+    static func line(from summary: UsageSummary) -> String {
+        let words = wordsLabel(summary.wordCount)
+        let time = audioDurationLabel(summary.audioDurationSeconds)
+        var parts: [String] = ["\(words) words", time]
+        if let cost = summary.estimatedCost, let currency = summary.currency {
+            parts.append("~\(costLabel(cost, currency: currency))")
         }
-        return "\(wordsLabel(summary.wordCount)) words today"
+        return parts.joined(separator: " · ")
     }
 
-    private func wordsLabel(_ count: Int) -> String {
+    static func wordsLabel(_ count: Int) -> String {
         guard count >= 1_000 else { return "\(count)" }
         let value = Double(count) / 1_000
         return String(format: value >= 10 ? "%.0fk" : "%.1fk", value)
     }
 
-    private func costLabel(_ amount: Double, currency: String) -> String {
+    static func audioDurationLabel(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        if total < 60 {
+            return "\(total)s"
+        }
+        let hours = total / 3_600
+        let minutes = (total % 3_600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        let remainingSeconds = total % 60
+        return remainingSeconds == 0 ? "\(minutes)m" : "\(minutes)m \(remainingSeconds)s"
+    }
+
+    static func costLabel(_ amount: Double, currency: String) -> String {
         switch currency.uppercased() {
         case "USD":
+            if amount < 0.01 && amount > 0 {
+                return "<$0.01"
+            }
             return String(format: "$%.2f", amount)
         default:
             return String(format: "%.2f %@", amount, currency.uppercased())
@@ -417,12 +456,14 @@ private struct SettingsWindowContent: View {
 
 private struct SettingsForm: View {
     @ObservedObject var settings: SettingsStore
+    @EnvironmentObject private var coordinator: AppCoordinator
     let isRecording: Bool
     @State private var ownerWindow: NSWindow?
     @State private var apiKeyDraft = ""
     @State private var apiKeyValidationState = APIKeyValidationState.idle
     @State private var apiKeyValidationTask: Task<Void, Never>?
     @State private var apiKeyValidationNotice: APIKeyValidationNotice?
+    @State private var isResetCountersPresented = false
     @FocusState private var apiKeyFieldFocused: Bool
 
     @ViewBuilder private var modelPicker: some View {
@@ -599,6 +640,16 @@ private struct SettingsForm: View {
                 }
                 .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
             }
+            SettingsRow("Usage counters") {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button("Reset Counters\u{2026}") {
+                        isResetCountersPresented = true
+                    }
+                    .controlSize(.small)
+                }
+                .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+            }
         }
         .background {
             WindowAccessor { window in
@@ -610,6 +661,19 @@ private struct SettingsForm: View {
                 title: Text(notice.title),
                 message: Text(notice.message),
                 dismissButton: .default(Text("OK"))
+            )
+        }
+        .sheet(isPresented: $isResetCountersPresented) {
+            ResetCountersSheet(
+                currentKey: ProviderModelKey(
+                    providerID: settings.provider.rawValue,
+                    modelID: coordinator.currentTranscriptionModelID
+                ),
+                onReset: { keys in
+                    coordinator.usageStats.resetCounters(for: keys)
+                    isResetCountersPresented = false
+                },
+                onCancel: { isResetCountersPresented = false }
             )
         }
         .onAppear {
@@ -935,5 +999,98 @@ private extension View {
     func settingsControlFrame() -> some View {
         controlSize(.small)
             .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+    }
+}
+
+private struct ResetCountersSheet: View {
+    let currentKey: ProviderModelKey
+    let onReset: (Set<ProviderModelKey>) -> Void
+    let onCancel: () -> Void
+    @State private var selection: Set<ProviderModelKey> = []
+
+    private static let allKeys: [ProviderModelKey] = {
+        let openai = OpenAIProvider.Model.allCases.map {
+            ProviderModelKey(providerID: TranscriptionProviderID.openai.rawValue, modelID: $0.rawValue)
+        }
+        let groq = GroqProvider.Model.allCases.map {
+            ProviderModelKey(providerID: TranscriptionProviderID.groq.rawValue, modelID: $0.rawValue)
+        }
+        return openai + groq
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Reset Usage Counters")
+                .font(.title3.weight(.semibold))
+            Text("Select the provider/model combinations to clear. This deletes usage data only — transcription history text is not affected.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Self.allKeys, id: \.self) { key in
+                        Toggle(isOn: binding(for: key)) {
+                            HStack(spacing: 6) {
+                                Text(displayName(for: key))
+                                if key == currentKey {
+                                    Text("Current")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(
+                                            Color.secondary.opacity(0.15),
+                                            in: Capsule()
+                                        )
+                                }
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 160)
+
+            HStack(spacing: 8) {
+                Button("Select Current") {
+                    selection = [currentKey]
+                }
+                Button("Select All") {
+                    selection = Set(Self.allKeys)
+                }
+                Spacer()
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button(role: .destructive) {
+                    onReset(selection)
+                } label: {
+                    Text("Reset Selected")
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selection.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+
+    private func binding(for key: ProviderModelKey) -> Binding<Bool> {
+        Binding(
+            get: { selection.contains(key) },
+            set: { include in
+                if include {
+                    selection.insert(key)
+                } else {
+                    selection.remove(key)
+                }
+            }
+        )
+    }
+
+    private func displayName(for key: ProviderModelKey) -> String {
+        let provider = TranscriptionProviderID(rawValue: key.providerID)?.displayName ?? key.providerID
+        return "\(provider) · \(key.modelID)"
     }
 }
