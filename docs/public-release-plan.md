@@ -154,6 +154,15 @@ Do not run self-hosted CI on:
 
 Also remove automatic PR merge automation for public mode unless it is restricted to trusted owner branches.
 
+### Implemented CI Shape
+
+The public workflow is configured to run only on:
+
+- `push` to `master`
+- `workflow_dispatch` manual runs
+
+The workflow does not run on `pull_request` or `pull_request_target`. External users can fork the repository and open pull requests for discussion, but their pull request code does not run on the owner's self-hosted Mac runner.
+
 ## Repository Permissions
 
 Configure GitHub repository permissions so that:
@@ -170,6 +179,21 @@ WhisperKey is currently an owner-driven project. Forks are welcome, but upstream
 ```
 
 This avoids pretending the project has a broad maintainer process when it does not.
+
+### Implemented Branch Protection
+
+The `master` branch is protected.
+
+Current protection policy:
+
+- Required status check: `test`
+- Require branch to be up to date before merge: enabled
+- Force pushes: disabled
+- Branch deletion: disabled
+- Required pull request reviews: disabled
+- Admin enforcement: disabled
+
+Reason for leaving admin enforcement disabled: the owner can keep the simple direct-push workflow. A trusted owner push to `master` still triggers CI after the push. Public users do not have upstream write access, so they cannot push to `master` in the first place.
 
 ## Release Configuration
 
