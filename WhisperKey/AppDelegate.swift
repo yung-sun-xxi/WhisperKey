@@ -5,7 +5,7 @@ import SingleInstance
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let log = Logger(subsystem: "WhisperKey", category: "AppDelegate")
-    private var menuBarController: MenuBarController?
+    let coordinator = AppCoordinator()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let runningApplications = NSWorkspace.shared.runningApplications
@@ -47,6 +47,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.log.info("didFinishLaunching pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public)")
-        menuBarController = MenuBarController()
+        coordinator.openMenuBarPopoverHandler = { [weak self] in
+            self?.activateForMenuBarExtraRequest()
+        }
+        coordinator.closeMenuBarPopoverHandler = {
+            Self.log.info("closeMenuBarPopover requested; MenuBarExtra window presentation is system-managed")
+        }
+
+        prewarmSettingsWindow()
+        coordinator.scheduleWelcomePresentationAfterLaunch()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        coordinator.presentWelcomeIfNeeded()
+    }
+
+    private func prewarmSettingsWindow() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+
+            SettingsWindowController.prepare(coordinator: self.coordinator)
+        }
+    }
+
+    private func activateForMenuBarExtraRequest() {
+        Self.log.info("openMenuBarPopover requested; activating app because MenuBarExtra has no public imperative show API")
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

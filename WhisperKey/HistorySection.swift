@@ -15,14 +15,15 @@ struct HistorySection: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("History")
-                    .font(.headline)
+                    .font(PopoverTypography.strongSectionTitle)
+                    .foregroundColor(PopoverTypography.primaryColor)
                 Spacer()
             }
 
             if history.entries.isEmpty {
                 Text("No transcriptions yet")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(PopoverTypography.base)
+                    .foregroundColor(PopoverTypography.secondaryColor)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 4)
             } else {
@@ -47,16 +48,24 @@ struct HistorySection: View {
             }
 
             HStack(spacing: 8) {
-                Button("Full history") {
+                Button {
                     HistoryFullWindowController.show(history: history)
+                } label: {
+                    Text("Full history")
+                        .font(PopoverTypography.button)
                 }
                 .controlSize(.small)
                 .disabled(history.entries.isEmpty)
                 Spacer()
-                Button("Clear history") {
+                Button {
                     ClearHistoryConfirmation.present(from: ownerWindow) {
                         history.clear()
                     }
+                } label: {
+                    Text("Clear history")
+                        .font(PopoverTypography.button)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .controlSize(.small)
                 .disabled(history.entries.isEmpty)
@@ -151,8 +160,8 @@ private struct HistoryInlineRow: View {
         Button(action: handlePrimaryClick) {
             HStack(spacing: 6) {
                 Text(entry.preview(maxLength: 240))
-                    .font(.system(.callout))
-                    .foregroundStyle(.primary)
+                    .font(PopoverTypography.base)
+                    .foregroundColor(PopoverTypography.primaryColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -164,7 +173,6 @@ private struct HistoryInlineRow: View {
             }
             .contentShape(Rectangle())
             .padding(.vertical, 4)
-            .padding(.horizontal, 2)
         }
         .buttonStyle(.plain)
         .contextMenu {
