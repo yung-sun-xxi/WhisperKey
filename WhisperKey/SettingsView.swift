@@ -265,6 +265,7 @@ private final class FirstResponderParkingView: NSView {
 
 struct PopoverContent: View {
     @EnvironmentObject private var coordinator: AppCoordinator
+    private static let contentInsets = EdgeInsets(top: 14, leading: 16, bottom: 16, trailing: 16)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -278,22 +279,32 @@ struct PopoverContent: View {
                     currentProviderID: coordinator.settings.provider.rawValue,
                     currentModelID: coordinator.currentTranscriptionModelID
                 )
-                Divider()
                 HistorySection(history: coordinator.history)
                 Divider()
+                    .opacity(0.55)
                 HStack {
-                    Button("Settings") {
+                    Button {
                         coordinator.openSettingsWindow()
+                    } label: {
+                        Text("Settings")
+                            .font(.system(size: 12, weight: .regular))
                     }
                     .keyboardShortcut(",", modifiers: [.command])
                     Spacer()
-                    Button("Quit") { NSApplication.shared.terminate(nil) }
+                    Button {
+                        NSApplication.shared.terminate(nil)
+                    } label: {
+                        Text("Quit")
+                            .font(.system(size: 12, weight: .regular))
+                    }
                         .keyboardShortcut("q")
                 }
             }
-            .padding(14)
+            .padding(Self.contentInsets)
         }
         .frame(width: MenuBarLayout.popoverWidth)
+        .font(PopoverTypography.base)
+        .foregroundColor(PopoverTypography.primaryColor)
     }
 }
 
@@ -325,8 +336,12 @@ private struct PermissionBanner: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
-            Text(message).font(.callout).foregroundStyle(.secondary)
+            Text(title)
+                .font(PopoverTypography.sectionTitle)
+                .foregroundColor(PopoverTypography.primaryColor)
+            Text(message)
+                .font(PopoverTypography.base)
+                .foregroundColor(PopoverTypography.secondaryColor)
             Button(buttonTitle, action: action)
                 .controlSize(.small)
         }
@@ -346,9 +361,10 @@ private struct CommandCenterHeader: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "waveform")
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(PopoverTypography.secondaryColor)
                 Text("\(settings.provider.displayName) · \(currentModelID)")
-                    .font(.callout.weight(.semibold))
+                    .font(PopoverTypography.caption)
+                    .foregroundColor(PopoverTypography.primaryColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help("\(settings.provider.displayName) · \(currentModelID)")
@@ -356,20 +372,21 @@ private struct CommandCenterHeader: View {
             }
 
             Text(UsageLineFormatter.line(from: summary))
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.primary)
+                .font(PopoverTypography.summary)
+                .foregroundColor(PopoverTypography.primaryColor)
                 .lineLimit(1)
 
             Picker("", selection: $settings.usageStatsRange) {
                 ForEach(UsageStatsRange.allCases, id: \.self) { range in
                     Text(range.compactLabel)
+                        .font(PopoverTypography.button)
                         .tag(range)
                         .help(range.displayName)
                 }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            .controlSize(.mini)
+            .controlSize(.small)
             .help("Choose the usage stats range")
 
             HStack(spacing: 10) {
@@ -380,8 +397,8 @@ private struct CommandCenterHeader: View {
                     .toggleStyle(.switch)
                     .controlSize(.mini)
             }
-            .font(.system(.callout))
-            .foregroundStyle(.secondary)
+            .font(PopoverTypography.base)
+            .foregroundColor(PopoverTypography.primaryColor)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

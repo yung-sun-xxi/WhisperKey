@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		CF0C8A892FAE5AA20057B58F /* WhisperKeyKit in Frameworks */ = {isa = PBXBuildFile; productRef = CF0C8A882FAE5AA20057B58F /* WhisperKeyKit */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXAggregateTarget section */
 		CF1A10012FB0000000000001 /* Install WhisperKey */ = {
 			isa = PBXAggregateTarget;
@@ -24,6 +20,10 @@
 			productName = "Install WhisperKey";
 		};
 /* End PBXAggregateTarget section */
+
+/* Begin PBXBuildFile section */
+		CF0C8A892FAE5AA20057B58F /* WhisperKeyKit in Frameworks */ = {isa = PBXBuildFile; productRef = CF0C8A882FAE5AA20057B58F /* WhisperKeyKit */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		CF1A10032FB0000000000003 /* PBXContainerItemProxy */ = {

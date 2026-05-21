@@ -5,6 +5,11 @@ import SwiftUI
 
 enum MenuBarLayout {
     static let popoverWidth: CGFloat = 306
+    static let popoverChromeInsets = NSEdgeInsets(top: 4, left: 10, bottom: 12, right: 10)
+
+    static var popoverPanelWidth: CGFloat {
+        popoverWidth + popoverChromeInsets.left + popoverChromeInsets.right
+    }
 }
 
 @MainActor
@@ -134,34 +139,19 @@ final class MenuBarController: NSObject {
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
-        let backdrop = NSVisualEffectView()
-        backdrop.material = .sidebar
-        backdrop.blendingMode = .behindWindow
-        backdrop.state = .active
-        backdrop.wantsLayer = true
-        backdrop.layer?.cornerRadius = MenuBarPanel.cornerRadius
-        backdrop.layer?.masksToBounds = true
-        backdrop.layer?.borderWidth = 0.5
-        backdrop.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
-        backdrop.translatesAutoresizingMaskIntoConstraints = false
-        backdrop.addSubview(hostingView)
-
-        NSLayoutConstraint.activate([
-            hostingView.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
-            hostingView.topAnchor.constraint(equalTo: backdrop.topAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
-        ])
-
-        panel.contentView = backdrop
+        panel.contentView = PopoverChromeView(contentView: hostingView)
     }
 
     private func updatePanelSize() {
-        panel.contentView?.frame.size.width = MenuBarLayout.popoverWidth
-        panel.contentView?.layoutSubtreeIfNeeded()
+        let insets = MenuBarLayout.popoverChromeInsets
         let fittingSize = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: MenuBarLayout.popoverWidth, height: fittingSize.height))
-        Self.log.info("updatePanelSize fittingSize=\(String(describing: fittingSize), privacy: .public) contentSize=\(String(describing: self.panel.frame.size), privacy: .public)")
+        let panelSize = NSSize(
+            width: MenuBarLayout.popoverPanelWidth,
+            height: fittingSize.height + insets.top + insets.bottom
+        )
+        panel.setContentSize(panelSize)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        Self.log.info("updatePanelSize fittingSize=\(String(describing: fittingSize), privacy: .public) panelSize=\(String(describing: panelSize), privacy: .public)")
     }
 
     private func positionPanel() {
@@ -175,13 +165,15 @@ final class MenuBarController: NSObject {
         let buttonFrameInScreen = buttonWindow.convertToScreen(buttonFrameInWindow)
         let visibleFrame = buttonWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
         let panelSize = panel.frame.size
+        let insets = MenuBarLayout.popoverChromeInsets
+        let visualHeight = max(panelSize.height - insets.top - insets.bottom, 0)
 
         let padding: CGFloat = 6
         let x = min(
             max(buttonFrameInScreen.midX - panelSize.width / 2, visibleFrame.minX + padding),
             visibleFrame.maxX - panelSize.width - padding
         )
-        let y = buttonFrameInScreen.minY - panelSize.height - padding
+        let y = buttonFrameInScreen.minY - visualHeight - padding - insets.bottom
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
         Self.log.info("positionPanel buttonFrame=\(String(describing: buttonFrameInScreen), privacy: .public) visibleFrame=\(String(describing: visibleFrame), privacy: .public) panelSize=\(String(describing: panelSize), privacy: .public) origin=\(String(describing: NSPoint(x: x, y: y)), privacy: .public)")
@@ -394,26 +386,156 @@ private final class MenuBarPanel: NSPanel {
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: MenuBarLayout.popoverWidth, height: 1),
+            contentRect: NSRect(x: 0, y: 0, width: MenuBarLayout.popoverPanelWidth, height: 1),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
 
         backgroundColor = .clear
-        hasShadow = true
+        hasShadow = false
         isOpaque = false
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         level = .floating
         collectionBehavior = [.transient, .fullScreenAuxiliary]
-        contentView?.wantsLayer = true
-        contentView?.layer?.cornerRadius = Self.cornerRadius
-        contentView?.layer?.masksToBounds = true
     }
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+private final class PopoverChromeView: NSView {
+    private let shadowView = NSView()
+    private let backdrop = RoundedPopoverBackgroundView(cornerRadius: MenuBarPanel.cornerRadius)
+
+    init(contentView: NSView) {
+        super.init(frame: .zero)
+
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.masksToBounds = false
+
+        configureShadowView()
+        configureBackdrop()
+
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.addSubview(contentView)
+        addSubview(shadowView)
+        addSubview(backdrop)
+
+        let insets = MenuBarLayout.popoverChromeInsets
+        NSLayoutConstraint.activate([
+            shadowView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: insets.left),
+            shadowView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -insets.right),
+            shadowView.topAnchor.constraint(equalTo: topAnchor, constant: insets.top),
+            shadowView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -insets.bottom),
+
+            backdrop.leadingAnchor.constraint(equalTo: shadowView.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: shadowView.trailingAnchor),
+            backdrop.topAnchor.constraint(equalTo: shadowView.topAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: shadowView.bottomAnchor),
+
+            contentView.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: backdrop.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
+        ])
+    }
+
+    @MainActor required dynamic init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func layout() {
+        super.layout()
+        updateShadowPath()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        backdrop.updateAppearance()
+    }
+
+    private func configureShadowView() {
+        shadowView.translatesAutoresizingMaskIntoConstraints = false
+        shadowView.wantsLayer = true
+        shadowView.layer?.backgroundColor = NSColor.clear.cgColor
+        shadowView.layer?.masksToBounds = false
+        shadowView.layer?.shadowColor = NSColor.black.cgColor
+        shadowView.layer?.shadowOpacity = 0.18
+        shadowView.layer?.shadowRadius = 18
+        shadowView.layer?.shadowOffset = CGSize(width: 0, height: -4)
+    }
+
+    private func configureBackdrop() {
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    private func updateShadowPath() {
+        shadowView.layer?.shadowPath = CGPath(
+            roundedRect: shadowView.bounds,
+            cornerWidth: MenuBarPanel.cornerRadius,
+            cornerHeight: MenuBarPanel.cornerRadius,
+            transform: nil
+        )
+    }
+}
+
+private final class RoundedPopoverBackgroundView: NSView {
+    private let cornerRadius: CGFloat
+
+    init(cornerRadius: CGFloat) {
+        self.cornerRadius = cornerRadius
+        super.init(frame: .zero)
+        wantsLayer = true
+        updateAppearance()
+    }
+
+    @MainActor required dynamic init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    func updateAppearance() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.cornerRadius = cornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = true
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let strokeWidth = pixelLineWidth
+        let path = NSBezierPath(
+            roundedRect: bounds.insetBy(dx: strokeWidth / 2, dy: strokeWidth / 2),
+            xRadius: cornerRadius,
+            yRadius: cornerRadius
+        )
+
+        NSColor.windowBackgroundColor.setFill()
+        path.fill()
+
+        NSColor.separatorColor.withAlphaComponent(0.38).setStroke()
+        path.lineWidth = strokeWidth
+        path.stroke()
+    }
+
+    private var pixelLineWidth: CGFloat {
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        return 1 / scale
+    }
 }
 
 private final class TransparentHostingView: NSHostingView<AnyView> {
