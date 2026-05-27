@@ -51,10 +51,11 @@ DMG_PATH="$BUILD_DIR/WhisperKey-$VERSION.dmg"
 ZIP_PATH="$BUILD_DIR/WhisperKey-$VERSION.zip"
 NOTARY_PROFILE="${WHISPERKEY_NOTARY_PROFILE:-WhisperKey-Notary}"
 SIGN_IDENTITY="${WHISPERKEY_SIGN_IDENTITY:-}"
+KEYCHAIN="${WHISPERKEY_KEYCHAIN:-login.keychain-db}"
 
 # Resolve the Developer ID Application identity (requires exactly one match).
 if [[ -z "$SIGN_IDENTITY" ]]; then
-    SIGN_IDENTITY=$(security find-identity -v -p codesigning login.keychain-db \
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
         | awk -F'"' '/Developer ID Application/ {print $2; exit}')
 fi
 if [[ -z "${SIGN_IDENTITY:-}" ]]; then
@@ -65,7 +66,7 @@ fi
 echo "Using signing identity: $SIGN_IDENTITY"
 
 # Verify the saved notarytool credential profile exists.
-if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --keychain "$KEYCHAIN" >/dev/null 2>&1; then
     echo "ERROR: notarytool profile '$NOTARY_PROFILE' is not stored." >&2
     echo "Run: xcrun notarytool store-credentials $NOTARY_PROFILE \\" >&2
     echo "         --apple-id <APPLE_ID> --team-id $TEAM_ID --password <APP_SPECIFIC_PASSWORD>" >&2
@@ -129,18 +130,25 @@ ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 echo "==> Submitting app to notarytool (this can take several minutes)..."
 xcrun notarytool submit "$ZIP_PATH" \
     --keychain-profile "$NOTARY_PROFILE" \
+    --keychain "$KEYCHAIN" \
     --wait
 
 echo "==> Stapling app..."
 xcrun stapler staple "$APP_PATH"
 
 echo "==> Creating DMG..."
+DMG_STAGING="$BUILD_DIR/dmg-staging"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
+ditto "$APP_PATH" "$DMG_STAGING/WhisperKey.app"
+ln -s /Applications "$DMG_STAGING/Applications"
 hdiutil create \
     -volname WhisperKey \
-    -srcfolder "$APP_PATH" \
+    -srcfolder "$DMG_STAGING" \
     -ov \
     -format UDZO \
     "$DMG_PATH"
+rm -rf "$DMG_STAGING"
 
 echo "==> Signing DMG..."
 codesign --sign "$SIGN_IDENTITY" --timestamp "$DMG_PATH"
@@ -148,6 +156,7 @@ codesign --sign "$SIGN_IDENTITY" --timestamp "$DMG_PATH"
 echo "==> Submitting DMG to notarytool..."
 xcrun notarytool submit "$DMG_PATH" \
     --keychain-profile "$NOTARY_PROFILE" \
+    --keychain "$KEYCHAIN" \
     --wait
 
 echo "==> Stapling DMG..."
@@ -157,13 +166,19 @@ echo "==> Final verification..."
 spctl --assess --verbose=4 --type install "$DMG_PATH"
 spctl --assess --verbose=4 --type execute "$APP_PATH"
 
-echo "==> Installing app to /Applications..."
-"$SCRIPT_DIR/install-app.sh" "$APP_PATH"
+if [[ "${WHISPERKEY_SKIP_INSTALL:-0}" == "1" ]]; then
+    echo "==> Skipping install to /Applications (WHISPERKEY_SKIP_INSTALL=1)."
+else
+    echo "==> Installing app to /Applications..."
+    "$SCRIPT_DIR/install-app.sh" "$APP_PATH"
+fi
 
 echo
 echo "Done. Artifacts:"
 echo "  $APP_PATH"
 echo "  $DMG_PATH"
-echo "  /Applications/WhisperKey.app"
+if [[ "${WHISPERKEY_SKIP_INSTALL:-0}" != "1" ]]; then
+    echo "  /Applications/WhisperKey.app"
+fi
 echo
 echo "Next: gh release create v$VERSION $DMG_PATH --title \"WhisperKey v$VERSION\" --notes-file <changelog>"

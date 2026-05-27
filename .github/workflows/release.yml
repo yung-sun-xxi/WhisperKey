@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build and release (e.g. 1.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: [self-hosted, macOS, whisperkey]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "Could not resolve version" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building WhisperKey $VERSION"
+
+      - name: Unlock signing keychain
+        env:
+          SIGNING_KEYCHAIN_PASSWORD: ${{ secrets.SIGNING_KEYCHAIN_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_KEYCHAIN_PASSWORD" ]; then
+            echo "::error::SIGNING_KEYCHAIN_PASSWORD secret is not set." \
+                 "Create the dedicated signing keychain on the runner (see RELEASING.md) and add the secret."
+            exit 1
+          fi
+          KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
+          if [ ! -f "$KEYCHAIN" ]; then
+            echo "::error::Signing keychain not found at $KEYCHAIN." \
+                 "Run the one-time setup from RELEASING.md on this runner."
+            exit 1
+          fi
+          security unlock-keychain -p "$SIGNING_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings "$KEYCHAIN"
+          # Allow codesign/notarytool to use items in this keychain without a UI prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$SIGNING_KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          # Make it searchable for this session, alongside the existing keychains.
+          EXISTING=$(security list-keychains -d user | sed 's/[[:space:]]*"//;s/"[[:space:]]*$//')
+          security list-keychains -d user -s "$KEYCHAIN" $EXISTING
+          echo "Signing keychain unlocked and added to the search list."
+
+      - name: Build, sign, notarize, package
+        env:
+          WHISPERKEY_TEAM_ID: ${{ vars.WHISPERKEY_TEAM_ID }}
+          WHISPERKEY_NOTARY_PROFILE: WhisperKey-Notary
+          WHISPERKEY_SKIP_INSTALL: '1'
+        run: |
+          export WHISPERKEY_KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
+          ./scripts/release.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          TAG="v$VERSION"
+          DMG="build/WhisperKey-$VERSION.dmg"
+          if [ ! -f "$DMG" ]; then
+            echo "Expected artifact not found: $DMG" >&2
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; replacing the DMG asset."
+            gh release upload "$TAG" "$DMG" --clobber
+          else
+            echo "Creating release $TAG."
+            gh release create "$TAG" "$DMG" \
+              --title "WhisperKey v$VERSION" \
+              --generate-notes
+          fi
