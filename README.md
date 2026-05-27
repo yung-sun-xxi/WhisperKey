@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.png" alt="WhisperKey" width="640">
+</p>
+
 # WhisperKey
 
 WhisperKey is a native macOS menu bar app for push-to-talk dictation. Press a
