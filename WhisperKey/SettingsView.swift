@@ -92,16 +92,24 @@ enum SettingsWindowController {
     }
 
     private static func present(_ window: NSWindow) {
-        activateAppIfNeeded()
-        window.makeKeyAndOrderFront(nil)
+        activateApp()
+        focus(window)
         focusParkingView(in: window)
         startDismissMonitoring()
 
         DispatchQueue.main.async { [weak window] in
             guard let window else { return }
 
+            activateApp()
+            focus(window)
             focusParkingView(in: window)
         }
+    }
+
+    private static func focus(_ window: NSWindow) {
+        window.makeKeyAndOrderFront(nil)
+        window.makeMain()
+        window.orderFrontRegardless()
     }
 
     private static func startDismissMonitoring() {
@@ -175,9 +183,12 @@ enum SettingsWindowController {
         window.makeFirstResponder(initialFirstResponder)
     }
 
-    private static func activateAppIfNeeded() {
-        guard !NSApp.isActive else { return }
+    private static func activateApp() {
+        if NSApp.activationPolicy() == .prohibited {
+            NSApp.setActivationPolicy(.accessory)
+        }
 
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
         NSApp.activate(ignoringOtherApps: true)
     }
 }
@@ -250,6 +261,9 @@ private final class SettingsContentViewController: NSViewController {
 }
 
 private final class SettingsWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+
     override func performZoom(_ sender: Any?) {
         // Disable title-bar double-click zoom for this utility window.
     }
