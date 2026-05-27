@@ -163,13 +163,19 @@ echo "==> Final verification..."
 spctl --assess --verbose=4 --type install "$DMG_PATH"
 spctl --assess --verbose=4 --type execute "$APP_PATH"
 
-echo "==> Installing app to /Applications..."
-"$SCRIPT_DIR/install-app.sh" "$APP_PATH"
+if [[ "${WHISPERKEY_SKIP_INSTALL:-0}" == "1" ]]; then
+    echo "==> Skipping install to /Applications (WHISPERKEY_SKIP_INSTALL=1)."
+else
+    echo "==> Installing app to /Applications..."
+    "$SCRIPT_DIR/install-app.sh" "$APP_PATH"
+fi
 
 echo
 echo "Done. Artifacts:"
 echo "  $APP_PATH"
 echo "  $DMG_PATH"
-echo "  /Applications/WhisperKey.app"
+if [[ "${WHISPERKEY_SKIP_INSTALL:-0}" != "1" ]]; then
+    echo "  /Applications/WhisperKey.app"
+fi
 echo
 echo "Next: gh release create v$VERSION $DMG_PATH --title \"WhisperKey v$VERSION\" --notes-file <changelog>"
