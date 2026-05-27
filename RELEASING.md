@@ -100,6 +100,73 @@ gh release create v1.0.0 build/WhisperKey-1.0.0.dmg \
     --notes-file <changelog-file>
 ```
 
+## Automated Releases (GitHub Actions)
+
+`.github/workflows/release.yml` runs the same `scripts/release.sh` on the
+self-hosted macOS runner when a `v*` tag is pushed (or via manual
+`workflow_dispatch` with a version input), then publishes/updates the GitHub
+Release with the DMG.
+
+The runner runs as a headless service, so the login keychain is locked and
+unavailable for signing. To sign without depending on a GUI login session, the
+release job uses a dedicated, isolated signing keychain whose password is the
+only stored secret. That secret unlocks just this keychain (one certificate plus
+the notary profile) rather than the whole login keychain.
+
+### One-time runner setup
+
+Run once on the runner machine, in a logged-in session (where the login keychain
+is unlocked). Pick a strong password for the dedicated keychain and keep it.
+
+```sh
+CIPASS='<choose-a-strong-password>'
+KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
+
+# 1. Create the dedicated keychain (no auto-lock timeout).
+security create-keychain -p "$CIPASS" "$KEYCHAIN"
+security set-keychain-settings "$KEYCHAIN"
+
+# 2. Import the Developer ID Application identity (cert + private key).
+#    Export it first from Keychain Access: right-click the
+#    "Developer ID Application: ..." identity -> Export -> .p12 (set P12PASS).
+security import /path/to/DeveloperID.p12 -k "$KEYCHAIN" -P '<P12PASS>' \
+    -T /usr/bin/codesign -T /usr/bin/productsign
+
+# 3. Allow codesign to use the key non-interactively.
+security set-key-partition-list -S apple-tool:,apple:,codesign: \
+    -s -k "$CIPASS" "$KEYCHAIN"
+
+# 4. Store the notarytool profile INTO this keychain.
+xcrun notarytool store-credentials WhisperKey-Notary \
+    --apple-id "<your-apple-id>" \
+    --team-id "$WHISPERKEY_TEAM_ID" \
+    --password "<app-specific-password>" \
+    --keychain "$KEYCHAIN"
+```
+
+Then add the keychain password as a repository secret:
+
+```sh
+gh secret set SIGNING_KEYCHAIN_PASSWORD --body "$CIPASS"
+```
+
+`WHISPERKEY_TEAM_ID` is provided as a repository variable (already set); the
+workflow reads it from `vars`.
+
+### Cutting an automated release
+
+Push a tag, or dispatch manually:
+
+```sh
+git tag v1.2.0 && git push origin v1.2.0
+# or
+gh workflow run release.yml -f version=1.2.0
+```
+
+The job unlocks the dedicated keychain, builds/signs/notarizes via
+`release.sh` (with `WHISPERKEY_SKIP_INSTALL=1`, so it does not touch
+`/Applications`), and attaches the DMG to the release.
+
 ## If Notarization Fails
 
 Pull the human-readable log:

@@ -36,25 +36,39 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building WhisperKey $VERSION"
 
-      - name: Unlock keychain (if password provided)
+      - name: Unlock signing keychain
         env:
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          SIGNING_KEYCHAIN_PASSWORD: ${{ secrets.SIGNING_KEYCHAIN_PASSWORD }}
         run: |
-          if [ -n "$KEYCHAIN_PASSWORD" ]; then
-            KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
-            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-            security set-keychain-settings -t 3600 "$KEYCHAIN"
-            echo "login keychain unlocked"
-          else
-            echo "No KEYCHAIN_PASSWORD secret set; assuming the login keychain is already unlocked."
+          if [ -z "$SIGNING_KEYCHAIN_PASSWORD" ]; then
+            echo "::error::SIGNING_KEYCHAIN_PASSWORD secret is not set." \
+                 "Create the dedicated signing keychain on the runner (see RELEASING.md) and add the secret."
+            exit 1
           fi
+          KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
+          if [ ! -f "$KEYCHAIN" ]; then
+            echo "::error::Signing keychain not found at $KEYCHAIN." \
+                 "Run the one-time setup from RELEASING.md on this runner."
+            exit 1
+          fi
+          security unlock-keychain -p "$SIGNING_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings "$KEYCHAIN"
+          # Allow codesign/notarytool to use items in this keychain without a UI prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$SIGNING_KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          # Make it searchable for this session, alongside the existing keychains.
+          EXISTING=$(security list-keychains -d user | sed 's/[[:space:]]*"//;s/"[[:space:]]*$//')
+          security list-keychains -d user -s "$KEYCHAIN" $EXISTING
+          echo "Signing keychain unlocked and added to the search list."
 
       - name: Build, sign, notarize, package
         env:
           WHISPERKEY_TEAM_ID: ${{ vars.WHISPERKEY_TEAM_ID }}
           WHISPERKEY_NOTARY_PROFILE: WhisperKey-Notary
           WHISPERKEY_SKIP_INSTALL: '1'
-        run: ./scripts/release.sh "${{ steps.ver.outputs.version }}"
+        run: |
+          export WHISPERKEY_KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
+          ./scripts/release.sh "${{ steps.ver.outputs.version }}"
 
       - name: Publish GitHub Release
         env:
