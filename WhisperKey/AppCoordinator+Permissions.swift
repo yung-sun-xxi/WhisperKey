@@ -179,7 +179,7 @@ extension AppCoordinator {
 
     private func requestAccessibilityRegistration() {
         let options = [
-            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
+            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false
         ] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         Self.permissionLog.info("AXIsProcessTrustedWithOptions returned \(trusted, privacy: .public)")
