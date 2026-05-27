@@ -135,12 +135,18 @@ echo "==> Stapling app..."
 xcrun stapler staple "$APP_PATH"
 
 echo "==> Creating DMG..."
+DMG_STAGING="$BUILD_DIR/dmg-staging"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
+ditto "$APP_PATH" "$DMG_STAGING/WhisperKey.app"
+ln -s /Applications "$DMG_STAGING/Applications"
 hdiutil create \
     -volname WhisperKey \
-    -srcfolder "$APP_PATH" \
+    -srcfolder "$DMG_STAGING" \
     -ov \
     -format UDZO \
     "$DMG_PATH"
+rm -rf "$DMG_STAGING"
 
 echo "==> Signing DMG..."
 codesign --sign "$SIGN_IDENTITY" --timestamp "$DMG_PATH"
