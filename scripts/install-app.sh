@@ -5,8 +5,7 @@ set -euo pipefail
 
 APP_PATH="${1:-}"
 DESTINATION_DIR="${2:-/Applications}"
-EXPECTED_BUNDLE_ID="yung-sun-xxi.WhisperKey"
-USER_PREFS_DOMAIN="$HOME/Library/Preferences/$EXPECTED_BUNDLE_ID"
+EXPECTED_BUNDLE_ID_PREFIX="yung-sun-xxi.WhisperKey"
 
 if [[ -z "$APP_PATH" ]]; then
     echo "Usage: $0 <path-to-WhisperKey.app> [destination-dir]" >&2
@@ -30,10 +29,22 @@ if ! BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$INFO_P
     exit 1
 fi
 
-if [[ "$BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]]; then
-    echo "ERROR: '$APP_PATH' has bundle id '$BUNDLE_ID', expected '$EXPECTED_BUNDLE_ID'." >&2
+# Accept the release id (yung-sun-xxi.WhisperKey) and per-configuration variants
+# such as the Debug build's yung-sun-xxi.WhisperKey.dev.
+case "$BUNDLE_ID" in
+    "$EXPECTED_BUNDLE_ID_PREFIX" | "$EXPECTED_BUNDLE_ID_PREFIX".*) ;;
+    *)
+        echo "ERROR: '$APP_PATH' has unexpected bundle id '$BUNDLE_ID'." >&2
+        exit 1
+        ;;
+esac
+
+if ! PROCESS_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$INFO_PLIST" 2>/dev/null); then
+    echo "ERROR: '$APP_PATH' does not declare CFBundleExecutable." >&2
     exit 1
 fi
+
+USER_PREFS_DOMAIN="$HOME/Library/Preferences/$BUNDLE_ID"
 
 mkdir -p "$DESTINATION_DIR"
 
@@ -46,9 +57,9 @@ show_welcome_on_next_launch() {
     install_id="$(date -u +"%Y%m%dT%H%M%SZ")-$$"
 
     defaults write "$USER_PREFS_DOMAIN" WhisperKey.settings.pendingInstallWelcomeID -string "$install_id"
-    defaults write "$EXPECTED_BUNDLE_ID" WhisperKey.settings.pendingInstallWelcomeID -string "$install_id"
+    defaults write "$BUNDLE_ID" WhisperKey.settings.pendingInstallWelcomeID -string "$install_id"
     defaults synchronize "$USER_PREFS_DOMAIN" >/dev/null 2>&1 || true
-    defaults synchronize "$EXPECTED_BUNDLE_ID" >/dev/null 2>&1 || true
+    defaults synchronize "$BUNDLE_ID" >/dev/null 2>&1 || true
 }
 
 terminate_debugservers_for_running_app() {
@@ -66,34 +77,34 @@ terminate_debugservers_for_running_app() {
         if [[ "$parent_name" == "debugserver" ]]; then
             kill -TERM "$ppid" >/dev/null 2>&1 || true
         fi
-    done < <(pgrep -x WhisperKey || true)
+    done < <(pgrep -x "$PROCESS_NAME" || true)
 }
 
 terminate_running_app() {
     terminate_debugservers_for_running_app
-    pkill -TERM -x WhisperKey >/dev/null 2>&1 || true
+    pkill -TERM -x "$PROCESS_NAME" >/dev/null 2>&1 || true
 
     for _ in {1..30}; do
-        if ! pgrep -x WhisperKey >/dev/null 2>&1; then
+        if ! pgrep -x "$PROCESS_NAME" >/dev/null 2>&1; then
             break
         fi
         sleep 0.1
     done
 
-    if pgrep -x WhisperKey >/dev/null 2>&1; then
+    if pgrep -x "$PROCESS_NAME" >/dev/null 2>&1; then
         terminate_debugservers_for_running_app
-        pkill -KILL -x WhisperKey >/dev/null 2>&1 || true
+        pkill -KILL -x "$PROCESS_NAME" >/dev/null 2>&1 || true
 
         for _ in {1..20}; do
-            if ! pgrep -x WhisperKey >/dev/null 2>&1; then
+            if ! pgrep -x "$PROCESS_NAME" >/dev/null 2>&1; then
                 break
             fi
             sleep 0.1
         done
     fi
 
-    if pgrep -x WhisperKey >/dev/null 2>&1; then
-        echo "ERROR: Could not stop the existing WhisperKey process." >&2
+    if pgrep -x "$PROCESS_NAME" >/dev/null 2>&1; then
+        echo "ERROR: Could not stop the existing $PROCESS_NAME process." >&2
         exit 1
     fi
 }
