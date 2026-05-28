@@ -50,7 +50,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		CFBE7F842FAE5606006A3BF0 /* WhisperKey.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhisperKey.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CFBE7F842FAE5606006A3BF0 /* WhisperKey.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = WhisperKey.app; path = "WhisperKey Dev.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CFBE7F912FAE5608006A3BF0 /* WhisperKeyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhisperKeyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CFBE7F9B2FAE5608006A3BF0 /* WhisperKeyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhisperKeyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -481,6 +481,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "WhisperKey Dev";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhisperKey records audio when you press the dictation hotkey and converts it to text";
@@ -491,7 +492,6 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				MARKETING_VERSION = 1.0;
-				INFOPLIST_KEY_CFBundleDisplayName = "WhisperKey Dev";
 				PRODUCT_BUNDLE_IDENTIFIER = "yung-sun-xxi.WhisperKey.dev";
 				PRODUCT_NAME = "WhisperKey Dev";
 				REGISTER_APP_GROUPS = YES;

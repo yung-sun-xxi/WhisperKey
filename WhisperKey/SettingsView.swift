@@ -24,8 +24,6 @@ private enum SettingsWindowLayout {
 enum SettingsWindowController {
     private static var window: NSWindow?
     private static let delegate = SettingsWindowDelegate()
-    private static var localMouseMonitor: Any?
-    private static var globalMouseMonitor: Any?
 
     static var relatedWindow: NSWindow? {
         window
@@ -39,7 +37,7 @@ enum SettingsWindowController {
     }
 
     static func hide() {
-        stopDismissMonitoring()
+        TransientWindowStack.shared.unregister(id: "settings")
 
         guard let closingWindow = window else { return }
 
@@ -62,8 +60,8 @@ enum SettingsWindowController {
     }
 
     static func windowDidClose(_ closedWindow: NSWindow) {
-        stopDismissMonitoring()
         if window === closedWindow {
+            TransientWindowStack.shared.unregister(id: "settings")
             window = nil
         }
     }
@@ -95,7 +93,13 @@ enum SettingsWindowController {
         activateApp()
         focus(window)
         focusParkingView(in: window)
-        startDismissMonitoring()
+        TransientWindowStack.shared.register(
+            id: "settings",
+            layer: .secondary,
+            window: window
+        ) {
+            SettingsWindowController.hide()
+        }
 
         DispatchQueue.main.async { [weak window] in
             guard let window else { return }
@@ -110,54 +114,6 @@ enum SettingsWindowController {
         window.makeKeyAndOrderFront(nil)
         window.makeMain()
         window.orderFrontRegardless()
-    }
-
-    private static func startDismissMonitoring() {
-        stopDismissMonitoring()
-
-        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
-            guard !eventIsInsideSettingsWindow(event) else { return event }
-
-            SettingsWindowController.hide()
-            return event
-        }
-
-        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { _ in
-            Task { @MainActor in
-                SettingsWindowController.hide()
-            }
-        }
-    }
-
-    private static func stopDismissMonitoring() {
-        if let localMouseMonitor {
-            NSEvent.removeMonitor(localMouseMonitor)
-            self.localMouseMonitor = nil
-        }
-
-        if let globalMouseMonitor {
-            NSEvent.removeMonitor(globalMouseMonitor)
-            self.globalMouseMonitor = nil
-        }
-    }
-
-    private static func eventIsInsideSettingsWindow(_ event: NSEvent) -> Bool {
-        guard let settingsWindow = window,
-              let eventWindow = event.window
-        else { return false }
-
-        return eventWindowIsPartOfSettingsUI(eventWindow, settingsWindow: settingsWindow)
-    }
-
-    private static func eventWindowIsPartOfSettingsUI(_ eventWindow: NSWindow, settingsWindow: NSWindow) -> Bool {
-        // Local monitors can see sheet/modal button clicks before the alert action runs.
-        // Treat those windows as Settings-owned so Cancel only dismisses the confirmation.
-        return eventWindow === settingsWindow
-            || eventWindow.parent === settingsWindow
-            || eventWindow.sheetParent === settingsWindow
-            || settingsWindow.childWindows?.contains(where: { $0 === eventWindow }) == true
-            || settingsWindow.attachedSheet === eventWindow
-            || eventWindow === NSApp.modalWindow
     }
 
     private static func dismissModalUI(attachedTo settingsWindow: NSWindow) {
@@ -1058,6 +1014,7 @@ private enum UsageResetWindowController {
             attach(existing, to: resolvedParent)
             position(existing, over: resolvedParent)
             present(existing)
+            register(existing)
             return
         }
 
@@ -1096,15 +1053,18 @@ private enum UsageResetWindowController {
         attach(window, to: resolvedParent)
         position(window, over: resolvedParent)
         present(window)
+        register(window)
     }
 
     static func hide() {
         guard let closingWindow = window else {
+            TransientWindowStack.shared.unregister(id: "usageReset")
             delegate = nil
             parentWindow = nil
             return
         }
 
+        TransientWindowStack.shared.unregister(id: "usageReset")
         parentWindow?.removeChildWindow(closingWindow)
         closingWindow.delegate = nil
         window = nil
@@ -1157,10 +1117,21 @@ private enum UsageResetWindowController {
     private static func windowDidClose(_ closedWindow: NSWindow) {
         guard window === closedWindow else { return }
 
+        TransientWindowStack.shared.unregister(id: "usageReset")
         parentWindow?.removeChildWindow(closedWindow)
         window = nil
         parentWindow = nil
         delegate = nil
+    }
+
+    private static func register(_ window: NSWindow) {
+        TransientWindowStack.shared.register(
+            id: "usageReset",
+            layer: .nested,
+            window: window
+        ) {
+            UsageResetWindowController.hide()
+        }
     }
 
     private final class WindowDelegate: NSObject, NSWindowDelegate {
