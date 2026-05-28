@@ -102,13 +102,26 @@ xcodebuild \
   build
 ```
 
-Local Xcode builds install the app into `/Applications/WhisperKey.app` by
-default. To skip that install step:
+The shared Xcode schemes intentionally separate normal debugging from
+TCC-sensitive installed-app debugging:
+
+- `WhisperKey` runs the Debug build from Xcode's DerivedData products. Use it
+  for ordinary UI and app-logic work.
+- `WhisperKey Dev Installed` builds Debug, installs
+  `/Applications/WhisperKey Dev.app`, and runs that installed app. Use it when
+  testing Microphone, Accessibility, global hotkeys, auto-paste, launch
+  behavior, or any other macOS TCC/LaunchServices behavior.
+
+The installed dev app uses bundle id `yung-sun-xxi.WhisperKey.dev`; the release
+app uses `yung-sun-xxi.WhisperKey`. macOS permissions are separate for those two
+identities.
+
+To skip the `/Applications` install step in scripts or CI:
 
 ```sh
 WHISPERKEY_SKIP_APPLICATIONS_INSTALL=1 xcodebuild \
   -project WhisperKey.xcodeproj \
-  -scheme WhisperKey \
+  -scheme "WhisperKey Dev Installed" \
   build
 ```
 

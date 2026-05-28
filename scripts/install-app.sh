@@ -6,6 +6,7 @@ set -euo pipefail
 APP_PATH="${1:-}"
 DESTINATION_DIR="${2:-/Applications}"
 EXPECTED_BUNDLE_ID_PREFIX="yung-sun-xxi.WhisperKey"
+RESTART_AFTER_INSTALL="${WHISPERKEY_INSTALL_RESTART:-1}"
 
 if [[ -z "$APP_PATH" ]]; then
     echo "Usage: $0 <path-to-WhisperKey.app> [destination-dir]" >&2
@@ -109,15 +110,17 @@ terminate_running_app() {
     fi
 }
 
-restart_installed_app() {
-    terminate_running_app
+open_installed_app() {
     open -n "$DESTINATION_APP"
 }
 
 if [[ -e "$DESTINATION_APP" && "$APP_PATH" -ef "$DESTINATION_APP" ]]; then
     echo "WhisperKey is already installed at $DESTINATION_APP"
     show_welcome_on_next_launch
-    restart_installed_app
+    terminate_running_app
+    if [[ "$RESTART_AFTER_INSTALL" == "1" ]]; then
+        open_installed_app
+    fi
     exit 0
 fi
 
@@ -126,6 +129,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+terminate_running_app
 rm -rf "$TEMP_APP"
 ditto --rsrc --extattr "$APP_PATH" "$TEMP_APP"
 rm -rf "$DESTINATION_APP"
@@ -142,6 +146,8 @@ if command -v mdimport >/dev/null 2>&1; then
 fi
 
 show_welcome_on_next_launch
-restart_installed_app
+if [[ "$RESTART_AFTER_INSTALL" == "1" ]]; then
+    open_installed_app
+fi
 
 echo "Installed WhisperKey to $DESTINATION_APP"

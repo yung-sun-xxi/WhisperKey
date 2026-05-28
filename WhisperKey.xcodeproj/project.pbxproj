@@ -274,19 +274,15 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/scripts/install-app.sh",
-				"$(BUILT_PRODUCTS_DIR)/WhisperKey.app",
-				"$(BUILT_PRODUCTS_DIR)/WhisperKey.app/Contents/Info.plist",
-				"$(BUILT_PRODUCTS_DIR)/WhisperKey.app/Contents/MacOS/WhisperKey",
 			);
 			name = "Install to /Applications";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				/Applications/WhisperKey.app,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\n\nif [[ \"${CI:-}\" == \"true\" || \"${WHISPERKEY_SKIP_APPLICATIONS_INSTALL:-}\" == \"1\" ]]; then\n    exit 0\nfi\n\nAPP_BUNDLE=\"$(/usr/bin/find \"$BUILT_PRODUCTS_DIR\" -maxdepth 1 -name 'WhisperKey*.app' -print -quit)\"\n\"$SRCROOT/scripts/install-app.sh\" \"$APP_BUNDLE\"\n";
+			shellScript = "set -euo pipefail\n\nif [[ \"${CI:-}\" == \"true\" || \"${WHISPERKEY_SKIP_APPLICATIONS_INSTALL:-}\" == \"1\" ]]; then\n    exit 0\nfi\n\nAPP_BUNDLE=\"$(/usr/bin/find \"$BUILT_PRODUCTS_DIR\" -maxdepth 1 -name 'WhisperKey*.app' -print -quit)\"\nWHISPERKEY_INSTALL_RESTART=0 \"$SRCROOT/scripts/install-app.sh\" \"$APP_BUNDLE\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
