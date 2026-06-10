@@ -214,15 +214,20 @@ final class MenuBarController: NSObject {
 
         let buttonFrameInWindow = button.convert(button.bounds, to: nil)
         let buttonFrameInScreen = buttonWindow.convertToScreen(buttonFrameInWindow)
+        let iconFrameInWindow = statusIconView.convert(statusIconView.bounds, to: nil)
+        let iconFrameInScreen = buttonWindow.convertToScreen(iconFrameInWindow)
         let visibleFrame = buttonWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
         let panelSize = panel.frame.size
 
         let padding: CGFloat = 6
-        let x = min(
-            max(buttonFrameInScreen.midX - panelSize.width / 2, visibleFrame.minX + padding),
-            visibleFrame.maxX - panelSize.width - padding
-        )
-        let y = buttonFrameInScreen.minY - panelSize.height - padding
+        let rightAnchoredX = iconFrameInScreen.maxX - panelSize.width
+        let preferredX = iconFrameInScreen.minX
+        let x = if preferredX + panelSize.width <= visibleFrame.maxX - padding {
+            max(preferredX, visibleFrame.minX + padding)
+        } else {
+            max(rightAnchoredX, visibleFrame.minX + padding)
+        }
+        let y = buttonFrameInScreen.minY - panelSize.height
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
         Self.log.info("positionPanel buttonFrame=\(String(describing: buttonFrameInScreen), privacy: .public) visibleFrame=\(String(describing: visibleFrame), privacy: .public) panelSize=\(String(describing: panelSize), privacy: .public) origin=\(String(describing: NSPoint(x: x, y: y)), privacy: .public)")

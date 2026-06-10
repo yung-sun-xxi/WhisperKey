@@ -329,50 +329,53 @@ private struct CommandCenterHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            headerRow
+
+            UsageSummaryRow(summary: summary)
+
+            HeaderPeriodPicker(selection: $settings.usageStatsRange)
+
+            HStack(spacing: 12) {
+                HeaderOutputToggle(
+                    title: "Clipboard",
+                    isOn: $settings.saveTranscriptionToClipboard,
+                    alignment: .leading
+                )
+                HeaderVerticalDivider()
+                HeaderOutputToggle(
+                    title: "Auto-paste",
+                    isOn: $settings.autoPasteTranscription,
+                    alignment: .trailing
+                )
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "waveform")
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(PopoverTypography.secondaryColor)
+                    .frame(width: 14, height: 14, alignment: .center)
                 Text("\(settings.provider.displayName) · \(currentModelID)")
                     .font(PopoverTypography.caption)
                     .foregroundColor(PopoverTypography.primaryColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help("\(settings.provider.displayName) · \(currentModelID)")
-                Spacer(minLength: 0)
             }
+            .help("\(settings.provider.displayName) · \(currentModelID)")
 
-            Text(UsageLineFormatter.line(from: summary))
-                .font(PopoverTypography.summary)
-                .foregroundColor(PopoverTypography.primaryColor)
-                .lineLimit(1)
+            Spacer(minLength: 8)
 
-            Picker("", selection: $settings.usageStatsRange) {
-                ForEach(UsageStatsRange.allCases, id: \.self) { range in
-                    Text(range.compactLabel)
-                        .font(PopoverTypography.button)
-                        .tag(range)
-                        .help(range.displayName)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .help("Choose the usage stats range")
-
-            HStack(spacing: 10) {
-                Toggle("Clipboard", isOn: $settings.saveTranscriptionToClipboard)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                Toggle("Auto-paste", isOn: $settings.autoPasteTranscription)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-            }
-            .font(PopoverTypography.base)
-            .foregroundColor(PopoverTypography.primaryColor)
+            Circle()
+                .fill(Color.green)
+                .frame(width: 7, height: 7)
+                .accessibilityLabel("Active")
         }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var summary: UsageSummary {
@@ -382,6 +385,121 @@ private struct CommandCenterHeader: View {
             range: settings.usageStatsRange
         )
     }
+}
+
+private struct UsageSummaryRow: View {
+    let summary: UsageSummary
+
+    var body: some View {
+        HStack(spacing: 0) {
+            UsageMetricColumn(value: UsageLineFormatter.wordsLabel(summary.wordCount), label: "words")
+            HeaderVerticalDivider()
+            UsageMetricColumn(value: UsageLineFormatter.compactAudioDurationLabel(summary.audioDurationSeconds), label: "audio")
+            HeaderVerticalDivider()
+            UsageMetricColumn(value: costText ?? "-", label: nil)
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 7))
+        .help(UsageLineFormatter.line(from: summary))
+    }
+
+    private var costText: String? {
+        guard let cost = summary.estimatedCost, let currency = summary.currency else {
+            return nil
+        }
+        return "~\(UsageLineFormatter.compactCostLabel(cost, currency: currency))"
+    }
+}
+
+private struct UsageMetricColumn: View {
+    let value: String
+    let label: String?
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(value)
+                .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                .foregroundColor(PopoverTypography.primaryColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            if let label {
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(PopoverTypography.primaryColor.opacity(0.62))
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 31, alignment: .center)
+    }
+}
+
+private struct HeaderPeriodPicker: View {
+    @Binding var selection: UsageStatsRange
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(UsageStatsRange.allCases, id: \.self) { range in
+                Button {
+                    selection = range
+                } label: {
+                    Text(range.compactLabel)
+                        .font(PopoverTypography.button)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, minHeight: 21)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(selection == range ? Color.white : PopoverTypography.primaryColor)
+                .background {
+                    if selection == range {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color.accentColor)
+                    }
+                }
+                .help(range.displayName)
+            }
+        }
+        .padding(1.5)
+        .frame(maxWidth: .infinity)
+        .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 7))
+        .help("Choose the usage stats range")
+    }
+}
+
+private struct HeaderOutputToggle: View {
+    let title: String
+    @Binding var isOn: Bool
+    let alignment: Alignment
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(PopoverTypography.base)
+                .foregroundColor(PopoverTypography.primaryColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+        }
+        .frame(maxWidth: .infinity, alignment: alignment)
+    }
+}
+
+private struct HeaderVerticalDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(HeaderSurfaceColor.divider)
+            .frame(width: 1, height: 24)
+    }
+}
+
+private enum HeaderSurfaceColor {
+    static let bar = Color.primary.opacity(0.075)
+    static let divider = Color.primary.opacity(0.14)
 }
 
 enum UsageLineFormatter {
@@ -415,6 +533,21 @@ enum UsageLineFormatter {
         return remainingSeconds == 0 ? "\(minutes)m" : "\(minutes)m \(remainingSeconds)s"
     }
 
+    static func compactAudioDurationLabel(_ seconds: TimeInterval) -> String {
+        guard seconds > 0 else { return "0m" }
+
+        let roundedMinutes = max(Int((seconds / 60).rounded()), 1)
+        if roundedMinutes < 60 {
+            return "\(roundedMinutes)m"
+        }
+
+        let hours = roundedMinutes / 60
+        let minutes = roundedMinutes % 60
+        return minutes == 0
+            ? "\(hours)h"
+            : "\(hours)h \(minutes)m"
+    }
+
     static func costLabel(_ amount: Double, currency: String) -> String {
         switch currency.uppercased() {
         case "USD":
@@ -424,6 +557,18 @@ enum UsageLineFormatter {
             return String(format: "$%.2f", amount)
         default:
             return String(format: "%.2f %@", amount, currency.uppercased())
+        }
+    }
+
+    static func compactCostLabel(_ amount: Double, currency: String) -> String {
+        switch currency.uppercased() {
+        case "USD":
+            if amount < 0.01 && amount > 0 {
+                return "<$0.01"
+            }
+            return String(format: "$%.1f", amount)
+        default:
+            return String(format: "%.1f %@", amount, currency.uppercased())
         }
     }
 }
