@@ -18,6 +18,10 @@ final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
     private let panel: MenuBarPanel
     private let hostingView: TransparentHostingView
+    private let statusContentView = MouseTransparentView()
+    private let statusTimerLabel = NSTextField(labelWithString: "")
+    private let statusIconView = NSImageView()
+    private let processingIndicator = NSProgressIndicator(frame: .zero)
     private var cancellables = Set<AnyCancellable>()
     private var blinkTimer: Timer?
     private var blinkOn = true
@@ -54,6 +58,7 @@ final class MenuBarController: NSObject {
             TransientWindowStack.shared.unregister(id: "menuBarPopover")
         }
         blinkTimer?.invalidate()
+        processingIndicator.stopAnimation(nil)
     }
 
     func togglePopover() {
@@ -119,15 +124,64 @@ final class MenuBarController: NSObject {
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
 
-        let image = NSImage(named: "MenuBarIcon")
-        image?.isTemplate = true
-        button.image = image
-        button.imagePosition = .imageLeading
+        button.image = nil
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
         button.target = self
         button.action = #selector(handleStatusItemClick)
         button.toolTip = "WhisperKey"
+        configureStatusContentView(in: button)
 
         updateStatusItem()
+    }
+
+    private func configureStatusContentView(in button: NSStatusBarButton) {
+        statusContentView.translatesAutoresizingMaskIntoConstraints = false
+        statusContentView.userInterfaceLayoutDirection = .leftToRight
+
+        statusTimerLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        statusTimerLabel.textColor = .labelColor
+        statusTimerLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusTimerLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        statusTimerLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        processingIndicator.style = .spinning
+        processingIndicator.controlSize = .small
+        processingIndicator.isIndeterminate = true
+        processingIndicator.isDisplayedWhenStopped = false
+        processingIndicator.translatesAutoresizingMaskIntoConstraints = false
+
+        statusIconView.image = Self.makeMenuBarImage()
+        statusIconView.imageScaling = .scaleProportionallyDown
+        statusIconView.translatesAutoresizingMaskIntoConstraints = false
+
+        statusContentView.addSubview(statusTimerLabel)
+        statusContentView.addSubview(processingIndicator)
+        statusContentView.addSubview(statusIconView)
+        button.addSubview(statusContentView)
+
+        NSLayoutConstraint.activate([
+            statusContentView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+            statusContentView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+            statusContentView.topAnchor.constraint(equalTo: button.topAnchor),
+            statusContentView.bottomAnchor.constraint(equalTo: button.bottomAnchor),
+
+            statusIconView.trailingAnchor.constraint(equalTo: statusContentView.trailingAnchor, constant: -5),
+            statusIconView.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
+
+            statusTimerLabel.trailingAnchor.constraint(equalTo: statusIconView.leadingAnchor, constant: -5),
+            statusTimerLabel.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
+            statusTimerLabel.leadingAnchor.constraint(greaterThanOrEqualTo: statusContentView.leadingAnchor, constant: 4),
+
+            processingIndicator.trailingAnchor.constraint(equalTo: statusIconView.leadingAnchor, constant: -5),
+            processingIndicator.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
+            processingIndicator.leadingAnchor.constraint(greaterThanOrEqualTo: statusContentView.leadingAnchor, constant: 4),
+
+            processingIndicator.widthAnchor.constraint(equalToConstant: 14),
+            processingIndicator.heightAnchor.constraint(equalToConstant: 14),
+            statusIconView.widthAnchor.constraint(equalToConstant: 18),
+            statusIconView.heightAnchor.constraint(equalToConstant: 18),
+        ])
     }
 
     private func configurePanel() {
@@ -210,18 +264,64 @@ final class MenuBarController: NSObject {
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
 
-        if case .recording = coordinator.state {
-            button.title = " \(coordinator.recordingTimerText)"
-            button.attributedTitle = NSAttributedString(
-                string: " \(coordinator.recordingTimerText)",
-                attributes: [.foregroundColor: timerColor]
-            )
+        button.image = nil
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
+        statusIconView.image = Self.makeMenuBarImage()
+
+        switch coordinator.state {
+        case .recording:
+            hideProcessingIndicator()
+            statusTimerLabel.stringValue = coordinator.recordingTimerText
+            statusTimerLabel.textColor = timerColor
+            statusTimerLabel.isHidden = false
+            button.toolTip = "Recording \(coordinator.recordingTimerText)"
             updateBlinkTimer()
-        } else {
-            button.title = ""
-            button.attributedTitle = NSAttributedString(string: "")
-            stopBlinkTimer()
+        case .transcribing:
+            stopBlinkTimer(resetBlink: true)
+            statusTimerLabel.isHidden = true
+            button.toolTip = "Transcribing..."
+            showProcessingIndicator()
+        case .idle, .error, .microphoneDenied, .accessibilityDenied:
+            hideProcessingIndicator()
+            statusTimerLabel.isHidden = true
+            button.toolTip = "WhisperKey"
+            stopBlinkTimer(resetBlink: true)
         }
+
+        updateStatusItemLength()
+    }
+
+    private static func makeMenuBarImage() -> NSImage? {
+        let image = NSImage(named: "MenuBarIcon")
+        image?.isTemplate = true
+        return image
+    }
+
+    private func showProcessingIndicator() {
+        processingIndicator.isHidden = false
+        processingIndicator.startAnimation(nil)
+    }
+
+    private func hideProcessingIndicator() {
+        processingIndicator.stopAnimation(nil)
+        processingIndicator.isHidden = true
+    }
+
+    private func updateStatusItemLength() {
+        let iconWidth: CGFloat = 18
+        let processingWidth: CGFloat = 14
+        let horizontalPadding: CGFloat = 10
+        let gap: CGFloat = 5
+
+        var length = iconWidth + horizontalPadding
+        if !statusTimerLabel.isHidden {
+            length += gap + ceil(statusTimerLabel.intrinsicContentSize.width)
+        } else if !processingIndicator.isHidden {
+            length += gap + processingWidth
+        }
+
+        statusItem.length = max(28, length)
     }
 
     private var timerColor: NSColor {
@@ -299,6 +399,12 @@ private final class MenuBarPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+private final class MouseTransparentView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
 }
 
 private final class PopoverChromeView: NSView {
