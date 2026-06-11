@@ -12,6 +12,11 @@ final class MenuBarController: NSObject {
     private static let log = Logger(subsystem: "WhisperKey", category: "MenuBarController")
     private static let yellowThreshold: TimeInterval = 9 * 60 + 30
     private static let redThreshold: TimeInterval = 9 * 60 + 55
+    private static let statusIconWidth: CGFloat = 18
+    private static let processingIndicatorWidth: CGFloat = 14
+    private static let statusItemIconTrailingInset: CGFloat = max((NSStatusItem.squareLength - statusIconWidth) / 2, 0)
+    private static let statusItemLeadingInset: CGFloat = 5
+    private static let statusItemContentGap: CGFloat = 5
 
     let coordinator: AppCoordinator
 
@@ -22,6 +27,8 @@ final class MenuBarController: NSObject {
     private let statusTimerLabel = NSTextField(labelWithString: "")
     private let statusIconView = NSImageView()
     private let processingIndicator = NSProgressIndicator(frame: .zero)
+    private var statusTimerHorizontalConstraints: [NSLayoutConstraint] = []
+    private var processingIndicatorHorizontalConstraints: [NSLayoutConstraint] = []
     private var cancellables = Set<AnyCancellable>()
     private var blinkTimer: Timer?
     private var blinkOn = true
@@ -160,27 +167,35 @@ final class MenuBarController: NSObject {
         statusContentView.addSubview(statusIconView)
         button.addSubview(statusContentView)
 
+        let statusTimerHorizontalConstraints = [
+            statusTimerLabel.trailingAnchor.constraint(equalTo: statusIconView.leadingAnchor, constant: -Self.statusItemContentGap),
+            statusTimerLabel.leadingAnchor.constraint(greaterThanOrEqualTo: statusContentView.leadingAnchor, constant: Self.statusItemLeadingInset),
+        ]
+        let processingIndicatorHorizontalConstraints = [
+            processingIndicator.trailingAnchor.constraint(equalTo: statusIconView.leadingAnchor, constant: -Self.statusItemContentGap),
+            processingIndicator.leadingAnchor.constraint(greaterThanOrEqualTo: statusContentView.leadingAnchor, constant: Self.statusItemLeadingInset),
+        ]
+
+        self.statusTimerHorizontalConstraints = statusTimerHorizontalConstraints
+        self.processingIndicatorHorizontalConstraints = processingIndicatorHorizontalConstraints
+
         NSLayoutConstraint.activate([
             statusContentView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
             statusContentView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
             statusContentView.topAnchor.constraint(equalTo: button.topAnchor),
             statusContentView.bottomAnchor.constraint(equalTo: button.bottomAnchor),
 
-            statusIconView.trailingAnchor.constraint(equalTo: statusContentView.trailingAnchor, constant: -5),
+            statusIconView.trailingAnchor.constraint(equalTo: statusContentView.trailingAnchor, constant: -Self.statusItemIconTrailingInset),
             statusIconView.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
 
-            statusTimerLabel.trailingAnchor.constraint(equalTo: statusIconView.leadingAnchor, constant: -5),
             statusTimerLabel.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
-            statusTimerLabel.leadingAnchor.constraint(greaterThanOrEqualTo: statusContentView.leadingAnchor, constant: 4),
 
-            processingIndicator.trailingAnchor.constraint(equalTo: statusIconView.leadingAnchor, constant: -5),
             processingIndicator.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
-            processingIndicator.leadingAnchor.constraint(greaterThanOrEqualTo: statusContentView.leadingAnchor, constant: 4),
 
-            processingIndicator.widthAnchor.constraint(equalToConstant: 14),
-            processingIndicator.heightAnchor.constraint(equalToConstant: 14),
-            statusIconView.widthAnchor.constraint(equalToConstant: 18),
-            statusIconView.heightAnchor.constraint(equalToConstant: 18),
+            processingIndicator.widthAnchor.constraint(equalToConstant: Self.processingIndicatorWidth),
+            processingIndicator.heightAnchor.constraint(equalToConstant: Self.processingIndicatorWidth),
+            statusIconView.widthAnchor.constraint(equalToConstant: Self.statusIconWidth),
+            statusIconView.heightAnchor.constraint(equalToConstant: Self.statusIconWidth),
         ])
     }
 
@@ -314,19 +329,27 @@ final class MenuBarController: NSObject {
     }
 
     private func updateStatusItemLength() {
-        let iconWidth: CGFloat = 18
-        let processingWidth: CGFloat = 14
-        let horizontalPadding: CGFloat = 10
-        let gap: CGFloat = 5
+        let showsTimer = !statusTimerLabel.isHidden
+        let showsProcessingIndicator = !processingIndicator.isHidden
 
-        var length = iconWidth + horizontalPadding
-        if !statusTimerLabel.isHidden {
-            length += gap + ceil(statusTimerLabel.intrinsicContentSize.width)
-        } else if !processingIndicator.isHidden {
-            length += gap + processingWidth
+        statusTimerHorizontalConstraints.forEach { $0.isActive = showsTimer }
+        processingIndicatorHorizontalConstraints.forEach { $0.isActive = showsProcessingIndicator }
+
+        guard showsTimer || showsProcessingIndicator else {
+            statusItem.length = NSStatusItem.squareLength
+            statusItem.button?.layoutSubtreeIfNeeded()
+            return
         }
 
-        statusItem.length = max(28, length)
+        var length = Self.statusItemLeadingInset + Self.statusIconWidth + Self.statusItemIconTrailingInset
+        if showsTimer {
+            length += Self.statusItemContentGap + ceil(statusTimerLabel.intrinsicContentSize.width)
+        } else if showsProcessingIndicator {
+            length += Self.statusItemContentGap + Self.processingIndicatorWidth
+        }
+
+        statusItem.length = max(NSStatusItem.squareLength, length)
+        statusItem.button?.layoutSubtreeIfNeeded()
     }
 
     private var timerColor: NSColor {
