@@ -15,6 +15,7 @@ final class StubURLProtocol: URLProtocol {
     enum Outcome {
         case http(Response)
         case failure(Error)
+        case stall
     }
 
     nonisolated(unsafe) static var nextOutcome: Outcome?
@@ -43,6 +44,8 @@ final class StubURLProtocol: URLProtocol {
         switch outcome {
         case .failure(let error):
             client?.urlProtocol(self, didFailWithError: error)
+        case .stall:
+            break
         case .http(let response):
             let httpResponse = HTTPURLResponse(
                 url: request.url!,
@@ -103,6 +106,15 @@ final class OpenAIProviderTests: XCTestCase {
             model: model,
             urlSession: makeSession(),
             boundaryProvider: { boundary }
+        )
+    }
+
+    private func makeProvider(requestTimeout: TimeInterval) -> OpenAIProvider {
+        OpenAIProvider(
+            apiKey: "sk-test-key",
+            urlSession: makeSession(),
+            requestTimeout: requestTimeout,
+            boundaryProvider: { "BOUNDARY-FIXED" }
         )
     }
 
@@ -247,6 +259,12 @@ final class OpenAIProviderTests: XCTestCase {
         StubURLProtocol.nextOutcome = .failure(URLError(.notConnectedToInternet))
         let provider = makeProvider()
         await assertThrows(provider, expected: .network)
+    }
+
+    func testStalledRequestMapsToTimeout() async {
+        StubURLProtocol.nextOutcome = .stall
+        let provider = makeProvider(requestTimeout: 0.01)
+        await assertThrows(provider, expected: .timedOut)
     }
 
     // MARK: API key validation

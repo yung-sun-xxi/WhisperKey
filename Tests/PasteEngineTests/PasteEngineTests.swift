@@ -239,6 +239,34 @@ final class TranscriptionOutputRouterTests: XCTestCase {
         ))
     }
 
+    func testCancelledDeliveryDoesNotTouchClipboardOrPaste() async {
+        let pasteboard = SpyPasteboard(currentString: "previous")
+        let keyboard = SpyKeyboard()
+        let router = makeRouter(pasteboard: pasteboard, keyboard: keyboard)
+
+        let task = Task {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+            return await router.deliver(
+                text: "hello",
+                settings: TranscriptionOutputSettings(saveToClipboard: true, autoPaste: true)
+            )
+        }
+        task.cancel()
+
+        let result = await task.value
+
+        XCTAssertEqual(pasteboard.currentString, "previous")
+        XCTAssertEqual(pasteboard.replaceCallCount, 0)
+        XCTAssertEqual(pasteboard.snapshotCallCount, 0)
+        XCTAssertEqual(pasteboard.restoreCallCount, 0)
+        XCTAssertEqual(keyboard.callCount, 0)
+        XCTAssertEqual(result, TranscriptionOutputResult(
+            wroteClipboard: false,
+            pasteDecision: nil,
+            restoredClipboard: false
+        ))
+    }
+
     func testAutoPasteOnlyRestoresClipboardWhenPasteIsBlocked() async {
         let pasteboard = SpyPasteboard(currentString: "previous")
         let keyboard = SpyKeyboard()
