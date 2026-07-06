@@ -153,6 +153,24 @@ gh secret set SIGNING_KEYCHAIN_PASSWORD --body "$CIPASS"
 `WHISPERKEY_TEAM_ID` is provided as a repository variable (already set); the
 workflow reads it from `vars`.
 
+### Owner-local secret storage
+
+On the maintainer machine, release-only local secrets live outside the
+repository in:
+
+```text
+/Users/a.stepanenkov/PersonalProjects/WhisperKey.local-secrets/
+```
+
+`whisperkey-ci-password.txt` must contain the same keychain password as the
+GitHub repository secret `SIGNING_KEYCHAIN_PASSWORD`. Keep this file outside
+git and update the GitHub secret whenever the dedicated CI keychain password is
+rotated.
+
+The Apple app-specific password is stored by `notarytool` in the
+`WhisperKey-Notary` profile inside the dedicated signing keychain. Do not store
+it in plaintext files, commit it, or paste it into issue/PR/release notes.
+
 ### Cutting an automated release
 
 Push a tag, or dispatch manually:
