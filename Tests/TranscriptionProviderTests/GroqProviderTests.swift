@@ -12,12 +12,14 @@ final class GroqProviderTests: XCTestCase {
 
     private func makeProvider(
         model: GroqProvider.Model = .whisperLargeV3Turbo,
-        boundary: String = "BOUNDARY-G"
+        boundary: String = "BOUNDARY-G",
+        requestTimeout: TimeInterval = GroqProvider.defaultRequestTimeout
     ) -> GroqProvider {
         GroqProvider(
             apiKey: "gsk-test",
             model: model,
             urlSession: makeSession(),
+            requestTimeout: requestTimeout,
             boundaryProvider: { boundary }
         )
     }
@@ -130,6 +132,11 @@ final class GroqProviderTests: XCTestCase {
     func testNetworkFailureMaps() async {
         StubURLProtocol.nextOutcome = .failure(URLError(.cannotConnectToHost))
         await assertThrows(makeProvider(), expected: .network)
+    }
+
+    func testStalledRequestMapsToTimeout() async {
+        StubURLProtocol.nextOutcome = .stall
+        await assertThrows(makeProvider(requestTimeout: 0.01), expected: .timedOut)
     }
 
     // MARK: - API key validation

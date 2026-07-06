@@ -3,6 +3,7 @@ import AudioEncoder
 
 public enum TranscriptionError: Error, Equatable {
     case network
+    case timedOut
     case rateLimit(message: String?)
     case quotaExceeded(message: String?)
     case unauthorized(message: String?)
@@ -14,6 +15,7 @@ public enum TranscriptionError: Error, Equatable {
 public extension TranscriptionError {
     enum Category: Sendable, Equatable {
         case network
+        case timedOut
         case rateLimit
         case quotaExceeded
         case unauthorized
@@ -25,6 +27,7 @@ public extension TranscriptionError {
     var category: Category {
         switch self {
         case .network: return .network
+        case .timedOut: return .timedOut
         case .rateLimit: return .rateLimit
         case .quotaExceeded: return .quotaExceeded
         case .unauthorized: return .unauthorized
@@ -40,6 +43,8 @@ extension TranscriptionError: LocalizedError {
         switch self {
         case .network:
             return "Network error — check your internet connection."
+        case .timedOut:
+            return "Transcription timed out — try again."
         case .rateLimit(let message):
             return message ?? "Rate limit reached — please try again in a moment."
         case .quotaExceeded(let message):

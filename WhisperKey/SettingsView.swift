@@ -247,7 +247,9 @@ struct PopoverContent: View {
                     settings: coordinator.settings,
                     usageStats: coordinator.usageStats,
                     currentProviderID: coordinator.settings.provider.rawValue,
-                    currentModelID: coordinator.currentTranscriptionModelID
+                    currentModelID: coordinator.currentTranscriptionModelID,
+                    appState: coordinator.state,
+                    cancelAction: coordinator.cancelActiveOperation
                 )
                 HistorySection(history: coordinator.history)
                 Divider()
@@ -326,6 +328,8 @@ private struct CommandCenterHeader: View {
     @ObservedObject var usageStats: UsageStatsStore
     let currentProviderID: String
     let currentModelID: String
+    let appState: AppCoordinator.AppState
+    let cancelAction: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -370,12 +374,25 @@ private struct CommandCenterHeader: View {
 
             Spacer(minLength: 8)
 
-            Circle()
-                .fill(Color.green)
-                .frame(width: 7, height: 7)
-                .accessibilityLabel("Active")
+            statusControl
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var statusControl: some View {
+        switch appState {
+        case .recording, .transcribing:
+            cancelStatusButton
+        case .idle, .error, .microphoneDenied, .accessibilityDenied:
+            ZStack {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 7, height: 7)
+            }
+            .frame(width: 18, height: 18)
+            .accessibilityLabel("Active")
+        }
     }
 
     private var summary: UsageSummary {
@@ -384,6 +401,50 @@ private struct CommandCenterHeader: View {
             modelID: currentModelID,
             range: settings.usageStatsRange
         )
+    }
+
+    private var cancelStatusButton: some View {
+        Button(action: cancelAction) {
+            CancelStatusIcon()
+                .frame(width: 18, height: 18)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(cancelHelpText)
+        .accessibilityLabel(cancelHelpText)
+    }
+
+    private var cancelHelpText: String {
+        appState == .recording ? "Cancel recording" : "Cancel processing"
+    }
+}
+
+/// Red circle with a white stop square, both drawn from the same center
+/// point, so they can never drift apart the way an SF Symbol overlay can
+/// (symbol glyphs are not centered within their image bounds).
+private struct CancelStatusIcon: View {
+    var body: some View {
+        Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = min(size.width, size.height) / 2 * 0.84
+
+            let circle = Path(ellipseIn: CGRect(
+                x: center.x - radius,
+                y: center.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            ))
+            context.fill(circle, with: .color(.red.opacity(0.84)))
+
+            let halfSide = radius * 0.4
+            let square = Path(roundedRect: CGRect(
+                x: center.x - halfSide,
+                y: center.y - halfSide,
+                width: halfSide * 2,
+                height: halfSide * 2
+            ), cornerRadius: halfSide * 0.35)
+            context.fill(square, with: .color(.white))
+        }
     }
 }
 

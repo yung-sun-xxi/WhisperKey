@@ -108,9 +108,16 @@ public struct TranscriptionOutputRouter {
 
     @discardableResult
     public func deliver(text: String, settings: TranscriptionOutputSettings) async -> TranscriptionOutputResult {
+        guard !Task.isCancelled else {
+            return TranscriptionOutputResult(wroteClipboard: false, pasteDecision: nil, restoredClipboard: false)
+        }
+
         switch (settings.saveToClipboard, settings.autoPaste) {
         case (true, true):
             let wroteClipboard = pasteboard.replaceWithString(text)
+            guard !Task.isCancelled else {
+                return TranscriptionOutputResult(wroteClipboard: wroteClipboard, pasteDecision: nil, restoredClipboard: false)
+            }
             let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard)
             return TranscriptionOutputResult(
                 wroteClipboard: wroteClipboard,
@@ -128,7 +135,14 @@ public struct TranscriptionOutputRouter {
 
         case (false, true):
             let snapshot = pasteboard.snapshot()
+            guard !Task.isCancelled else {
+                return TranscriptionOutputResult(wroteClipboard: false, pasteDecision: nil, restoredClipboard: false)
+            }
             let wroteClipboard = pasteboard.replaceWithString(text)
+            guard !Task.isCancelled else {
+                let restored = pasteboard.restore(snapshot)
+                return TranscriptionOutputResult(wroteClipboard: wroteClipboard, pasteDecision: nil, restoredClipboard: restored)
+            }
             let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard)
             if wroteClipboard && restoreDelayNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: restoreDelayNanoseconds)

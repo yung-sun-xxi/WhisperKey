@@ -8,6 +8,7 @@ final class ErrorToastTests: XCTestCase {
 
     func testCategoryMapsAllErrorCases() {
         XCTAssertEqual(TranscriptionError.network.category, .network)
+        XCTAssertEqual(TranscriptionError.timedOut.category, .timedOut)
         XCTAssertEqual(TranscriptionError.rateLimit(message: nil).category, .rateLimit)
         XCTAssertEqual(TranscriptionError.quotaExceeded(message: nil).category, .quotaExceeded)
         XCTAssertEqual(TranscriptionError.unauthorized(message: nil).category, .unauthorized)
@@ -20,6 +21,10 @@ final class ErrorToastTests: XCTestCase {
 
     func testNetworkErrorWithCachedAudioOffersRetry() {
         XCTAssertEqual(ToastDecision.action(for: .transcription(.network), hasCachedAudio: true), .retry)
+    }
+
+    func testTimeoutWithCachedAudioOffersRetry() {
+        XCTAssertEqual(ToastDecision.action(for: .transcription(.timedOut), hasCachedAudio: true), .retry)
     }
 
     func testRateLimitWithCachedAudioOffersRetry() {

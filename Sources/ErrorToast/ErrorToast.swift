@@ -30,7 +30,7 @@ public enum ToastDecision {
         switch reason {
         case .transcription(let category):
             switch category {
-            case .network, .rateLimit, .serverError:
+            case .network, .timedOut, .rateLimit, .serverError:
                 return hasCachedAudio ? .retry : .openSettings
             case .unauthorized, .quotaExceeded:
                 return .openSettings
