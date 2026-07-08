@@ -102,19 +102,28 @@ xcodebuild \
   build
 ```
 
-The shared Xcode schemes intentionally separate normal debugging from
-TCC-sensitive installed-app debugging:
+The shared Xcode schemes run the installed Debug app when TCC-sensitive
+behavior is involved:
 
-- `WhisperKey` runs the Debug build from Xcode's DerivedData products. Use it
-  for ordinary UI and app-logic work.
+- `WhisperKey` builds Debug, installs `/Applications/WhisperKey Dev.app`, and
+  runs that installed app. Use it for normal Xcode development.
 - `WhisperKey Dev Installed` builds Debug, installs
-  `/Applications/WhisperKey Dev.app`, and runs that installed app. Use it when
-  testing Microphone, Accessibility, global hotkeys, auto-paste, launch
-  behavior, or any other macOS TCC/LaunchServices behavior.
+  `/Applications/WhisperKey Dev.app`, and runs that installed app. It is kept
+  as an explicit installed-app scheme for Microphone, Accessibility, global
+  hotkeys, auto-paste, launch behavior, or any other macOS
+  TCC/LaunchServices behavior.
 
 The installed dev app uses bundle id `yung-sun-xxi.WhisperKey.dev`; the release
 app uses `yung-sun-xxi.WhisperKey`. macOS permissions are separate for those two
 identities.
+
+Debug builds use a stable local signing identity named
+`WhisperKey Local Development` so macOS TCC permissions survive rebuilds. Create
+it once before using the Debug Xcode schemes:
+
+```sh
+scripts/ensure-local-signing-cert.sh
+```
 
 To skip the `/Applications` install step in scripts or CI:
 
