@@ -1,8 +1,9 @@
 # Releasing WhisperKey
 
-This document describes the owner release path for cutting a Developer
-ID-signed, notarized DMG. Releases are manual; WhisperKey does not include an
-in-app auto-update mechanism.
+This document describes the normal Developer ID-signed, notarized release path
+and the temporary ad-hoc fallback for when the Developer ID certificate is
+unavailable. Releases are manual; WhisperKey does not include an in-app
+auto-update mechanism.
 
 ## Signing Inputs
 
@@ -85,6 +86,24 @@ The script:
 - Submits the DMG to Apple notarization and staples the result.
 - Runs final Gatekeeper checks with `spctl`.
 - Installs the notarized app into `/Applications/WhisperKey.app`.
+
+## Temporary ad-hoc releases
+
+Use this only when the Developer ID certificate is unavailable or revoked.
+The script builds without the unavailable Developer ID certificate, then applies
+an ad-hoc signature so the app bundle is internally consistent. It does not
+submit anything to Apple notarization.
+
+```sh
+WHISPERKEY_RELEASE_MODE=ad-hoc WHISPERKEY_SKIP_INSTALL=1 \
+  ./scripts/release.sh 1.1.7
+```
+
+The generated DMG includes an `INSTALL.txt`. On the first launch, each user
+must open System Settings → Privacy & Security and choose **Open Anyway** for
+WhisperKey. After that one-time approval, the app opens normally. Do not remove
+the existing signature from a Developer ID build: a revoked signature can make
+Gatekeeper treat the app as compromised and move it to the Trash.
 
 Outputs:
 
@@ -200,13 +219,14 @@ number if needed, and re-run `./scripts/release.sh`.
 
 ## Entitlements
 
-`WhisperKey/WhisperKey.entitlements` deliberately contains only
-`com.apple.security.device.audio-input`.
+`WhisperKey/WhisperKey.entitlements` contains microphone access and Apple
+Events automation. The latter is required to pause and resume Apple Music
+during recording.
 
 App Sandbox is off because WhisperKey needs Accessibility, CGEventTap, and a
 system-wide hotkey. Microphone and Accessibility are runtime TCC permissions,
 not entitlements.
 
-Do not add JIT, library-validation disable, AppleEvents, or dyld-env
-entitlements unless there is a specific reviewed need. They widen the attack
-surface and notarization may require a justification.
+Do not add JIT, library-validation disable, or dyld-env entitlements unless
+there is a specific reviewed need. They widen the attack surface and
+notarization may require a justification.

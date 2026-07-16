@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Build, sign, notarize, and package WhisperKey for distribution.
+# Build and package WhisperKey for distribution.
 #
 # Prerequisites (one-time, see RELEASING.md):
-#   - Developer ID Application certificate installed in the login keychain
-#   - WHISPERKEY_TEAM_ID set in the environment or release.local.env
-#   - notarytool keychain profile stored; defaults to "WhisperKey-Notary"
+#   - Default (Developer ID) mode: Developer ID Application certificate,
+#     WHISPERKEY_TEAM_ID, and a notarytool keychain profile.
+#   - Temporary ad-hoc mode: WHISPERKEY_RELEASE_MODE=ad-hoc.
 #   - VERSION must be passed as the first argument (e.g. ./scripts/release.sh 1.0.0)
 #
 # Output:
-#   build/export/WhisperKey.app   (signed, notarized, stapled)
-#   build/WhisperKey-<VERSION>.dmg (signed, notarized, stapled)
+#   build/export/WhisperKey.app
+#   build/WhisperKey-<VERSION>.dmg
 
 set -euo pipefail
 
@@ -33,12 +33,14 @@ if [[ -f "$CONFIG_PATH" ]]; then
     source "$CONFIG_PATH"
 fi
 
-TEAM_ID="${WHISPERKEY_TEAM_ID:-}"
-if [[ -z "$TEAM_ID" ]]; then
-    echo "ERROR: WHISPERKEY_TEAM_ID is required." >&2
-    echo "Set it in the environment or create release.local.env from RELEASING.md." >&2
-    exit 1
-fi
+RELEASE_MODE="${WHISPERKEY_RELEASE_MODE:-developer-id}"
+case "$RELEASE_MODE" in
+    developer-id | ad-hoc) ;;
+    *)
+        echo "ERROR: WHISPERKEY_RELEASE_MODE must be 'developer-id' or 'ad-hoc'." >&2
+        exit 1
+        ;;
+esac
 
 SCHEME="WhisperKey"
 PROJECT="WhisperKey.xcodeproj"
@@ -53,29 +55,41 @@ NOTARY_PROFILE="${WHISPERKEY_NOTARY_PROFILE:-WhisperKey-Notary}"
 SIGN_IDENTITY="${WHISPERKEY_SIGN_IDENTITY:-}"
 KEYCHAIN="${WHISPERKEY_KEYCHAIN:-login.keychain-db}"
 
-# Resolve the Developer ID Application identity (requires exactly one match).
-if [[ -z "$SIGN_IDENTITY" ]]; then
-    SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
-        | awk -F'"' '/Developer ID Application/ {print $2; exit}')
-fi
-if [[ -z "${SIGN_IDENTITY:-}" ]]; then
-    echo "ERROR: No 'Developer ID Application' identity found in the login keychain." >&2
-    echo "Open Xcode → Settings → Accounts → Manage Certificates → + Developer ID Application." >&2
-    exit 1
-fi
-echo "Using signing identity: $SIGN_IDENTITY"
+if [[ "$RELEASE_MODE" == "developer-id" ]]; then
+    TEAM_ID="${WHISPERKEY_TEAM_ID:-}"
+    if [[ -z "$TEAM_ID" ]]; then
+        echo "ERROR: WHISPERKEY_TEAM_ID is required." >&2
+        echo "Set it in the environment or create release.local.env from RELEASING.md." >&2
+        exit 1
+    fi
 
-# Verify the saved notarytool credential profile exists.
-if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --keychain "$KEYCHAIN" >/dev/null 2>&1; then
-    echo "ERROR: notarytool profile '$NOTARY_PROFILE' is not stored." >&2
-    echo "Run: xcrun notarytool store-credentials $NOTARY_PROFILE \\" >&2
-    echo "         --apple-id <APPLE_ID> --team-id $TEAM_ID --password <APP_SPECIFIC_PASSWORD>" >&2
-    exit 1
+    # Resolve the Developer ID Application identity (requires exactly one match).
+    if [[ -z "$SIGN_IDENTITY" ]]; then
+        SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
+            | awk -F'"' '/Developer ID Application/ {print $2; exit}')
+    fi
+    if [[ -z "${SIGN_IDENTITY:-}" ]]; then
+        echo "ERROR: No 'Developer ID Application' identity found in the login keychain." >&2
+        echo "Open Xcode → Settings → Accounts → Manage Certificates → + Developer ID Application." >&2
+        exit 1
+    fi
+    echo "Using signing identity: $SIGN_IDENTITY"
+
+    # Verify the saved notarytool credential profile exists.
+    if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --keychain "$KEYCHAIN" >/dev/null 2>&1; then
+        echo "ERROR: notarytool profile '$NOTARY_PROFILE' is not stored." >&2
+        echo "Run: xcrun notarytool store-credentials $NOTARY_PROFILE \\" >&2
+        echo "         --apple-id <APPLE_ID> --team-id $TEAM_ID --password <APP_SPECIFIC_PASSWORD>" >&2
+        exit 1
+    fi
+else
+    echo "Using temporary ad-hoc release mode; Apple notarization will be skipped."
 fi
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
+if [[ "$RELEASE_MODE" == "developer-id" ]]; then
 cat > "$EXPORT_OPTIONS_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -92,8 +106,9 @@ cat > "$EXPORT_OPTIONS_PLIST" <<PLIST
 </dict>
 </plist>
 PLIST
+fi
 
-echo "==> Archiving (Release, hardened runtime, manual signing)..."
+echo "==> Archiving Release build..."
 XCODEBUILD_ARGS=(
     -project "$PROJECT"
     -scheme "$SCHEME"
@@ -101,11 +116,20 @@ XCODEBUILD_ARGS=(
     -derivedDataPath "$BUILD_DIR/dd"
     -archivePath "$ARCHIVE_PATH"
     clean archive
-    CODE_SIGN_STYLE=Manual
-    CODE_SIGN_IDENTITY="$SIGN_IDENTITY"
-    DEVELOPMENT_TEAM="$TEAM_ID"
     MARKETING_VERSION="$VERSION"
 )
+if [[ "$RELEASE_MODE" == "developer-id" ]]; then
+    XCODEBUILD_ARGS+=(
+        CODE_SIGN_STYLE=Manual
+        CODE_SIGN_IDENTITY="$SIGN_IDENTITY"
+        DEVELOPMENT_TEAM="$TEAM_ID"
+    )
+else
+    XCODEBUILD_ARGS+=(
+        CODE_SIGNING_ALLOWED=NO
+        CODE_SIGNING_REQUIRED=NO
+    )
+fi
 if command -v xcbeautify >/dev/null 2>&1; then
     set -o pipefail
     xcodebuild "${XCODEBUILD_ARGS[@]}" | xcbeautify
@@ -113,28 +137,37 @@ else
     xcodebuild "${XCODEBUILD_ARGS[@]}"
 fi
 
-echo "==> Exporting archive with Developer ID method..."
-xcodebuild \
-    -exportArchive \
-    -archivePath "$ARCHIVE_PATH" \
-    -exportPath "$EXPORT_PATH" \
-    -exportOptionsPlist "$EXPORT_OPTIONS_PLIST"
+if [[ "$RELEASE_MODE" == "developer-id" ]]; then
+    echo "==> Exporting archive with Developer ID method..."
+    xcodebuild \
+        -exportArchive \
+        -archivePath "$ARCHIVE_PATH" \
+        -exportPath "$EXPORT_PATH" \
+        -exportOptionsPlist "$EXPORT_OPTIONS_PLIST"
+else
+    echo "==> Applying an ad-hoc signature..."
+    mkdir -p "$EXPORT_PATH"
+    ditto "$ARCHIVE_PATH/Products/Applications/WhisperKey.app" "$APP_PATH"
+    codesign --force --deep --sign - "$APP_PATH"
+fi
 
 echo "==> Verifying app signature..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 codesign --display --verbose=2 "$APP_PATH" 2>&1 | head -10
 
-echo "==> Zipping app for notarization..."
-ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+if [[ "$RELEASE_MODE" == "developer-id" ]]; then
+    echo "==> Zipping app for notarization..."
+    ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 
-echo "==> Submitting app to notarytool (this can take several minutes)..."
-xcrun notarytool submit "$ZIP_PATH" \
-    --keychain-profile "$NOTARY_PROFILE" \
-    --keychain "$KEYCHAIN" \
-    --wait
+    echo "==> Submitting app to notarytool (this can take several minutes)..."
+    xcrun notarytool submit "$ZIP_PATH" \
+        --keychain-profile "$NOTARY_PROFILE" \
+        --keychain "$KEYCHAIN" \
+        --wait
 
-echo "==> Stapling app..."
-xcrun stapler staple "$APP_PATH"
+    echo "==> Stapling app..."
+    xcrun stapler staple "$APP_PATH"
+fi
 
 echo "==> Creating DMG..."
 DMG_STAGING="$BUILD_DIR/dmg-staging"
@@ -142,6 +175,20 @@ rm -rf "$DMG_STAGING"
 mkdir -p "$DMG_STAGING"
 ditto "$APP_PATH" "$DMG_STAGING/WhisperKey.app"
 ln -s /Applications "$DMG_STAGING/Applications"
+if [[ "$RELEASE_MODE" == "ad-hoc" ]]; then
+    cat > "$DMG_STAGING/INSTALL.txt" <<'EOF'
+WhisperKey temporary release
+
+This build is not notarized by Apple. To open it once:
+
+1. Drag WhisperKey.app to Applications.
+2. Try to open WhisperKey.app.
+3. Open System Settings > Privacy & Security and click Open Anyway.
+4. Confirm Open.
+
+After that one-time approval, WhisperKey opens normally.
+EOF
+fi
 hdiutil create \
     -volname WhisperKey \
     -srcfolder "$DMG_STAGING" \
@@ -150,21 +197,25 @@ hdiutil create \
     "$DMG_PATH"
 rm -rf "$DMG_STAGING"
 
-echo "==> Signing DMG..."
-codesign --sign "$SIGN_IDENTITY" --timestamp "$DMG_PATH"
+if [[ "$RELEASE_MODE" == "developer-id" ]]; then
+    echo "==> Signing DMG..."
+    codesign --sign "$SIGN_IDENTITY" --timestamp "$DMG_PATH"
 
-echo "==> Submitting DMG to notarytool..."
-xcrun notarytool submit "$DMG_PATH" \
-    --keychain-profile "$NOTARY_PROFILE" \
-    --keychain "$KEYCHAIN" \
-    --wait
+    echo "==> Submitting DMG to notarytool..."
+    xcrun notarytool submit "$DMG_PATH" \
+        --keychain-profile "$NOTARY_PROFILE" \
+        --keychain "$KEYCHAIN" \
+        --wait
 
-echo "==> Stapling DMG..."
-xcrun stapler staple "$DMG_PATH"
+    echo "==> Stapling DMG..."
+    xcrun stapler staple "$DMG_PATH"
 
-echo "==> Final verification..."
-spctl --assess --verbose=4 --type install "$DMG_PATH"
-spctl --assess --verbose=4 --type execute "$APP_PATH"
+    echo "==> Final Gatekeeper verification..."
+    spctl --assess --verbose=4 --type install "$DMG_PATH"
+    spctl --assess --verbose=4 --type execute "$APP_PATH"
+else
+    echo "==> Ad-hoc build verified. Gatekeeper approval is required on each user's Mac."
+fi
 
 if [[ "${WHISPERKEY_SKIP_INSTALL:-0}" == "1" ]]; then
     echo "==> Skipping install to /Applications (WHISPERKEY_SKIP_INSTALL=1)."

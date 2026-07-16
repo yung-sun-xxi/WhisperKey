@@ -480,6 +480,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "WhisperKey Dev";
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "WhisperKey pauses and resumes Apple Music while you record a dictation.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhisperKey records audio when you press the dictation hotkey and converts it to text";
 				INSTALL_PATH = /Applications;
@@ -517,6 +518,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "WhisperKey pauses and resumes Apple Music while you record a dictation.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhisperKey records audio when you press the dictation hotkey and converts it to text";
 				INSTALL_PATH = /Applications;

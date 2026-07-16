@@ -10,6 +10,14 @@ on:
         description: 'Version to build and release (e.g. 1.1.0)'
         required: true
         type: string
+      release_mode:
+        description: 'Distribution mode'
+        required: true
+        default: 'developer-id'
+        type: choice
+        options:
+          - developer-id
+          - ad-hoc
 
 permissions:
   contents: write
@@ -36,7 +44,19 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building WhisperKey $VERSION"
 
+      - name: Resolve release mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODE="${{ github.event.inputs.release_mode }}"
+          else
+            MODE="developer-id"
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "Using $MODE distribution mode"
+
       - name: Unlock signing keychain
+        if: steps.mode.outputs.mode == 'developer-id'
         env:
           SIGNING_KEYCHAIN_PASSWORD: ${{ secrets.SIGNING_KEYCHAIN_PASSWORD }}
         run: |
@@ -66,8 +86,11 @@ jobs:
           WHISPERKEY_TEAM_ID: ${{ vars.WHISPERKEY_TEAM_ID }}
           WHISPERKEY_NOTARY_PROFILE: WhisperKey-Notary
           WHISPERKEY_SKIP_INSTALL: '1'
+          WHISPERKEY_RELEASE_MODE: ${{ steps.mode.outputs.mode }}
         run: |
-          export WHISPERKEY_KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
+          if [ "$WHISPERKEY_RELEASE_MODE" = "developer-id" ]; then
+            export WHISPERKEY_KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
+          fi
           ./scripts/release.sh "${{ steps.ver.outputs.version }}"
 
       - name: Publish GitHub Release
@@ -86,7 +109,14 @@ jobs:
             gh release upload "$TAG" "$DMG" --clobber
           else
             echo "Creating release $TAG."
-            gh release create "$TAG" "$DMG" \
-              --title "WhisperKey v$VERSION" \
-              --generate-notes
+            if [ "${{ steps.mode.outputs.mode }}" = "ad-hoc" ]; then
+              gh release create "$TAG" "$DMG" \
+                --title "WhisperKey v$VERSION (temporary ad-hoc build)" \
+                --notes $'⚠️ This temporary build is not notarized by Apple.\n\nAfter installing WhisperKey, open System Settings → Privacy & Security and choose **Open Anyway** once. Future launches work normally.' \
+                --generate-notes
+            else
+              gh release create "$TAG" "$DMG" \
+                --title "WhisperKey v$VERSION" \
+                --generate-notes
+            fi
           fi

@@ -73,6 +73,7 @@ final class AppCoordinator: ObservableObject {
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
     private let sounds = SoundPlayer()
+    private let appleMusic = AppleMusicRecordingController()
     private let outputRouter = TranscriptionOutputRouter()
     private let toastPresenter = ToastPresenter()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
@@ -169,6 +170,7 @@ final class AppCoordinator: ObservableObject {
         recordingCancellationRequested = false
         state = .recording
         hotkey.setAppState(.recording)
+        appleMusic.recordingDidStart(enabled: settings.pauseAppleMusicWhileRecording)
         startRecordingTimer()
         toastPresenter.dismiss(animated: false)
 
@@ -206,6 +208,7 @@ final class AppCoordinator: ObservableObject {
                 }
                 log.error("microphone permission denied")
                 await MainActor.run {
+                    self.appleMusic.recordingDidEnd()
                     stopRecordingTimer()
                     activeRecordingID = nil
                     recordingCancellationRequested = false
@@ -221,6 +224,7 @@ final class AppCoordinator: ObservableObject {
                 }
                 log.error("recorder.start failed: \(String(describing: error), privacy: .public)")
                 await MainActor.run {
+                    self.appleMusic.recordingDidEnd()
                     stopRecordingTimer()
                     activeRecordingID = nil
                     recordingCancellationRequested = false
@@ -249,6 +253,7 @@ final class AppCoordinator: ObservableObject {
         processingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let buffer = await recorder.stop()
+            self.appleMusic.recordingDidEnd()
 
             guard self.activeRecordingID == recordingID, self.isCurrentProcessing(operationID) else {
                 self.log.info("recording stop finished after cancellation; ignoring operationID=\(operationID.uuidString, privacy: .public)")
@@ -281,6 +286,7 @@ final class AppCoordinator: ObservableObject {
 
         Task {
             _ = await recorder.stop()
+            appleMusic.recordingDidEnd()
             finishCanceledRecording(recordingID: recordingID)
         }
     }
@@ -329,6 +335,7 @@ final class AppCoordinator: ObservableObject {
 
         Task {
             _ = await recorder.stop()
+            appleMusic.recordingDidEnd()
         }
     }
 
@@ -674,6 +681,7 @@ final class AppCoordinator: ObservableObject {
     private func handleProcessingTimeout(operationID: UUID) {
         guard isCurrentProcessing(operationID) else { return }
         let metrics = activeProcessingMetrics
+        let phase = activeProcessingPhase
         log.error("processing timeout operationID=\(operationID.uuidString, privacy: .public) phase=\(self.activeProcessingPhase?.rawValue ?? "none", privacy: .public) provider=\(metrics?.providerID ?? self.settings.provider.rawValue, privacy: .public) model=\(metrics?.modelID ?? self.currentTranscriptionModelID, privacy: .public) audioDuration=\(metrics?.audioDuration ?? -1, privacy: .public) bytes=\(metrics?.byteSize ?? -1, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public)")
         log.error("provider timeout operationID=\(operationID.uuidString, privacy: .public) provider=\(metrics?.providerID ?? self.settings.provider.rawValue, privacy: .public) model=\(metrics?.modelID ?? self.currentTranscriptionModelID, privacy: .public) audioDuration=\(metrics?.audioDuration ?? -1, privacy: .public) bytes=\(metrics?.byteSize ?? -1, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public)")
         processingTask?.cancel()
@@ -687,11 +695,31 @@ final class AppCoordinator: ObservableObject {
         activeRecordingID = nil
         handleTranscriptionFailure(
             reason: .transcription(.timedOut),
-            message: "Transcription took too long. Try again."
+            message: Self.processingTimeoutMessage(
+                phase: phase,
+                providerID: metrics?.providerID ?? settings.provider.rawValue
+            )
         )
 
         Task {
             _ = await recorder.stop()
+            appleMusic.recordingDidEnd()
+        }
+    }
+
+    private static func processingTimeoutMessage(phase: ProcessingPhase?, providerID: String) -> String {
+        switch phase {
+        case .recordingStop:
+            return "WhisperKey spent 30 seconds finishing the recording on this Mac. This is a local audio-processing issue, not a provider error."
+        case .encode:
+            return "WhisperKey spent 30 seconds preparing the audio on this Mac. This is a local processing issue, not a provider error."
+        case .transcription:
+            let provider = TranscriptionProviderID(rawValue: providerID)?.displayName ?? providerID
+            return "No response from \(provider) within 30 seconds. It may be your network or \(provider); no response arrived, so WhisperKey cannot tell which."
+        case .outputDelivery:
+            return "The transcription finished, but WhisperKey spent 30 seconds delivering the text on this Mac. This is a local output issue, not a provider error."
+        case nil:
+            return "WhisperKey stopped processing after 30 seconds before it could identify the stage. Try again."
         }
     }
 

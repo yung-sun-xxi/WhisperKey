@@ -813,6 +813,13 @@ private struct SettingsForm: View {
                     .toggleStyle(.switch)
                     .settingsControlFrame()
             }
+            SettingsRow("Pause Apple Music while recording") {
+                Toggle("", isOn: $settings.pauseAppleMusicWhileRecording)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .settingsControlFrame()
+                    .help("Pauses Apple Music at the start of a recording and resumes it when the microphone stops.")
+            }
             SettingsRow("Launch at login") {
                 LaunchAtLoginToggle()
             }
