@@ -2,13 +2,12 @@ import Foundation
 
 public enum APIKeyValidationResult: Sendable, Equatable {
     case accepted
-    case acceptedWithWarning(message: String)
     case rejected(message: String)
     case unavailable(message: String)
 
     public var isAccepted: Bool {
         switch self {
-        case .accepted, .acceptedWithWarning:
+        case .accepted:
             return true
         case .rejected, .unavailable:
             return false
@@ -19,7 +18,7 @@ public enum APIKeyValidationResult: Sendable, Equatable {
         switch self {
         case .accepted:
             return "API key accepted."
-        case .acceptedWithWarning(let message), .rejected(let message), .unavailable(let message):
+        case .rejected(let message), .unavailable(let message):
             return message
         }
     }
@@ -63,8 +62,8 @@ enum APIKeyValidator {
         case 403:
             return .rejected(message: serverMessage ?? "API key is valid, but it does not have access to \(providerDisplayName).")
         case 429:
-            return .acceptedWithWarning(
-                message: serverMessage ?? "API key accepted, but \(providerDisplayName) is rate limiting validation."
+            return .unavailable(
+                message: serverMessage ?? "\(providerDisplayName) is rate limiting validation. The API key was not changed."
             )
         case 500..<600:
             return .unavailable(message: serverMessage ?? "\(providerDisplayName) is unavailable. Try again later.")

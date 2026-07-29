@@ -60,7 +60,6 @@ public final class SettingsStore: ObservableObject {
         static let pendingInstallWelcomeID = "WhisperKey.settings.pendingInstallWelcomeID"
         static let presentedInstallWelcomeID = "WhisperKey.settings.presentedInstallWelcomeID"
         static let usageStatsRange = "WhisperKey.settings.usageStatsRange"
-        static let consumedInstallUsageResetID = "WhisperKey.settings.consumedInstallUsageResetID"
     }
 
     public static let defaultHistoryMaxEntries = 30
@@ -214,22 +213,6 @@ public final class SettingsStore: ObservableObject {
         else { return false }
 
         return installMarkerString(forKey: DefaultsKey.presentedInstallWelcomeID) != pendingID
-    }
-
-    /// Returns true once per fresh install marker. The caller is expected to clear usage counters
-    /// when this returns true. Subsequent calls for the same install marker return false.
-    public func consumePendingInstallUsageReset() -> Bool {
-        guard let pendingID = installMarkerString(forKey: DefaultsKey.pendingInstallWelcomeID),
-              !pendingID.isEmpty
-        else { return false }
-
-        let consumed = defaults.string(forKey: DefaultsKey.consumedInstallUsageResetID)
-            ?? installMarkerDefaults?.string(forKey: DefaultsKey.consumedInstallUsageResetID)
-        guard consumed != pendingID else { return false }
-
-        defaults.set(pendingID, forKey: DefaultsKey.consumedInstallUsageResetID)
-        installMarkerDefaults?.set(pendingID, forKey: DefaultsKey.consumedInstallUsageResetID)
-        return true
     }
 
     public func markInstallWelcomePresented() {

@@ -4,6 +4,7 @@ import HistoryStore
 
 struct HistorySection: View {
     @ObservedObject var history: HistoryStore
+    let coordinator: AppCoordinator
 
     private static let visibleRowCount = 7
     private static let inlineRowHeight: CGFloat = 26
@@ -34,7 +35,8 @@ struct HistorySection: View {
                                 entry: entry,
                                 copied: copiedID == entry.id,
                                 onCopy: { copy(entry: entry) },
-                                onOpenReadWindow: { openReadWindow(entry: entry) }
+                                onOpenReadWindow: { openReadWindow(entry: entry) },
+                                onRetry: { coordinator.retryHistoryEntry(entry) }
                             )
                             .frame(height: Self.inlineRowHeight)
                             if entry.id != history.entries.last?.id {
@@ -49,7 +51,7 @@ struct HistorySection: View {
 
             HStack(spacing: 8) {
                 Button {
-                    HistoryFullWindowController.show(history: history)
+                    HistoryFullWindowController.show(history: history, coordinator: coordinator)
                 } label: {
                     Text("Full history")
                         .font(PopoverTypography.button)
@@ -79,6 +81,7 @@ struct HistorySection: View {
     }
 
     private func copy(entry: HistoryEntry) {
+        guard entry.status == .recognized else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(entry.text, forType: .string)
         copiedID = entry.id
@@ -91,7 +94,9 @@ struct HistorySection: View {
     }
 
     private func openReadWindow(entry: HistoryEntry) {
-        HistoryReadWindowController.show(entry: entry)
+        HistoryReadWindowController.show(entry: entry) {
+            coordinator.retryHistoryEntry(entry)
+        }
     }
 
     private var inlineListHeight: CGFloat {
@@ -155,13 +160,14 @@ private struct HistoryInlineRow: View {
     let copied: Bool
     let onCopy: () -> Void
     let onOpenReadWindow: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
-        Button(action: handlePrimaryClick) {
+        HStack(spacing: 6) {
             HStack(spacing: 6) {
-                Text(entry.preview(maxLength: 240))
+                Text(displayText)
                     .font(PopoverTypography.base)
-                    .foregroundColor(PopoverTypography.primaryColor)
+                    .foregroundColor(entry.status == .recognized ? PopoverTypography.primaryColor : PopoverTypography.secondaryColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -173,20 +179,41 @@ private struct HistoryInlineRow: View {
             }
             .contentShape(Rectangle())
             .padding(.vertical, 4)
+            .onTapGesture(perform: handlePrimaryClick)
+            .contextMenu {
+                if entry.canRetryRecognition {
+                    Button("Retry", action: onRetry)
+                }
+                Button("Open in Window", action: onOpenReadWindow)
+                if entry.status == .recognized {
+                    Button("Copy to Clipboard", action: onCopy)
+                }
+            }
+            .help(displayText)
+
+            if entry.canRetryRecognition {
+                Button("Retry", action: onRetry)
+                    .controlSize(.mini)
+            }
         }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button("Open in Window", action: onOpenReadWindow)
-            Button("Copy to Clipboard", action: onCopy)
-        }
-        .help(entry.preview(maxLength: 240))
     }
 
     private func handlePrimaryClick() {
-        if NSEvent.modifierFlags.contains(.shift) {
+        if entry.status != .recognized || NSEvent.modifierFlags.contains(.shift) {
             onOpenReadWindow()
         } else {
             onCopy()
+        }
+    }
+
+    private var displayText: String {
+        switch entry.status {
+        case .recognized:
+            entry.preview(maxLength: 240)
+        case .pendingRecognition:
+            "File to recognize"
+        case .noSpeechDetected:
+            "No speech detected"
         }
     }
 }

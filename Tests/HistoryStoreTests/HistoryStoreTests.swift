@@ -53,6 +53,91 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertTrue(store.entries.isEmpty)
     }
 
+    func testPendingRecognitionPersistsAudioAndCanBeMarkedRecognized() throws {
+        let url = makeURL()
+        let store = HistoryStore(url: url, maxEntries: 5)
+        let audio = Data([0x52, 0x49, 0x46, 0x46])
+        let entry = try XCTUnwrap(store.appendPendingRecognition(
+            audioData: audio,
+            fileExtension: "wav",
+            providerID: "openai",
+            language: "en",
+            audioDurationSeconds: 2.5,
+            model: "whisper-1",
+            now: Date(timeIntervalSince1970: 100)
+        ))
+
+        XCTAssertEqual(entry.status, .pendingRecognition)
+        XCTAssertTrue(entry.canRetryRecognition)
+        XCTAssertEqual(try store.audioData(for: entry), audio)
+
+        let recognized = try XCTUnwrap(store.markRecognized(
+            id: entry.id,
+            text: "recognized text",
+            providerID: "openai",
+            language: "en",
+            model: "whisper-1",
+            estimatedPriceAtTime: 0.01,
+            currency: "USD",
+            destinationUsed: "clipboard",
+            copiedToClipboard: true,
+            autoPasted: false
+        ))
+        XCTAssertEqual(recognized.status, .recognized)
+        XCTAssertNil(recognized.audioFileName)
+        XCTAssertFalse(store.hasAudio(for: entry))
+
+        let reloaded = HistoryStore(url: url, maxEntries: 5)
+        XCTAssertEqual(reloaded.entries, [recognized])
+    }
+
+    func testRemovingPendingRecognitionEntryAlsoRemovesAudio() throws {
+        let store = HistoryStore(url: makeURL(), maxEntries: 1)
+        let pending = try XCTUnwrap(store.appendPendingRecognition(
+            audioData: Data([1, 2, 3]),
+            fileExtension: "wav",
+            providerID: "openai",
+            language: nil,
+            audioDurationSeconds: 1,
+            model: "whisper-1"
+        ))
+        XCTAssertTrue(store.hasAudio(for: pending))
+
+        _ = store.append(text: "newer", providerID: "openai", language: nil)
+        XCTAssertFalse(store.hasAudio(for: pending))
+
+        let secondPending = try XCTUnwrap(store.appendPendingRecognition(
+            audioData: Data([4, 5, 6]),
+            fileExtension: "wav",
+            providerID: "openai",
+            language: nil,
+            audioDurationSeconds: 1,
+            model: "whisper-1"
+        ))
+        XCTAssertTrue(store.hasAudio(for: secondPending))
+        store.clear()
+        XCTAssertFalse(store.hasAudio(for: secondPending))
+    }
+
+    func testNoSpeechDetectedKeepsAudioForRetry() throws {
+        let store = HistoryStore(url: makeURL(), maxEntries: 5)
+        let pending = try XCTUnwrap(store.appendPendingRecognition(
+            audioData: Data([1, 2, 3]),
+            fileExtension: "wav",
+            providerID: "openai",
+            language: nil,
+            audioDurationSeconds: 1,
+            model: "whisper-1"
+        ))
+
+        let noSpeech = try XCTUnwrap(store.markNoSpeechDetected(id: pending.id))
+        XCTAssertEqual(noSpeech.status, .noSpeechDetected)
+        XCTAssertTrue(noSpeech.canRetryRecognition)
+        XCTAssertTrue(store.hasAudio(for: noSpeech))
+        XCTAssertEqual(try store.audioData(for: noSpeech), Data([1, 2, 3]))
+        XCTAssertFalse(noSpeech.hasUsageMetadata)
+    }
+
     // MARK: - Persistence round-trip
 
     func testEntriesSurviveReload() throws {
@@ -236,6 +321,7 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(decoded.first?.providerID, "openai")
         XCTAssertEqual(decoded.first?.provider, "openai")
         XCTAssertEqual(decoded.first?.wordCount, 2)
+        XCTAssertEqual(decoded.first?.status, .recognized)
     }
 
     func testTodayUsageSummaryUsesLocalCalendarDay() {

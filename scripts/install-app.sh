@@ -7,6 +7,7 @@ APP_PATH="${1:-}"
 DESTINATION_DIR="${2:-/Applications}"
 EXPECTED_BUNDLE_ID_PREFIX="yung-sun-xxi.WhisperKey"
 RESTART_AFTER_INSTALL="${WHISPERKEY_INSTALL_RESTART:-1}"
+STOP_RUNNING_APP="${WHISPERKEY_INSTALL_STOP_RUNNING_APP:-0}"
 
 if [[ -z "$APP_PATH" ]]; then
     echo "Usage: $0 <path-to-WhisperKey.app> [destination-dir]" >&2
@@ -40,6 +41,42 @@ case "$BUNDLE_ID" in
         ;;
 esac
 
+verify_signature() {
+    local signing_info
+    local designated_requirement
+    local authority
+
+    if ! /usr/bin/codesign --verify --strict "$APP_PATH" >/dev/null 2>&1; then
+        echo "ERROR: '$APP_PATH' does not have a valid code signature." >&2
+        exit 1
+    fi
+
+    signing_info=$(/usr/bin/codesign -dvv "$APP_PATH" 2>&1)
+    if grep -q '^Signature=adhoc$' <<<"$signing_info"; then
+        echo "ERROR: Refusing to install an ad-hoc signed app; it breaks Keychain access." >&2
+        exit 1
+    fi
+
+    authority=$(awk -F= '/^Authority=/{print $2; exit}' <<<"$signing_info")
+    if [[ -z "$authority" ]]; then
+        echo "ERROR: Refusing to install an app without a signing authority; it breaks Keychain access." >&2
+        exit 1
+    fi
+
+    designated_requirement=$(/usr/bin/codesign -d -r- "$APP_PATH" 2>&1)
+    if ! grep -Fq "identifier \"$BUNDLE_ID\"" <<<"$designated_requirement"; then
+        echo "ERROR: The app signature does not match bundle id '$BUNDLE_ID'." >&2
+        exit 1
+    fi
+
+    if [[ "$BUNDLE_ID" == "$EXPECTED_BUNDLE_ID_PREFIX.dev" && "$authority" != "WhisperKey Local Development" ]]; then
+        echo "ERROR: WhisperKey Dev must be signed by 'WhisperKey Local Development' to preserve Keychain access." >&2
+        exit 1
+    fi
+}
+
+verify_signature
+
 if ! PROCESS_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$INFO_PLIST" 2>/dev/null); then
     echo "ERROR: '$APP_PATH' does not declare CFBundleExecutable." >&2
     exit 1
@@ -52,6 +89,11 @@ mkdir -p "$DESTINATION_DIR"
 APP_NAME="$(basename "$APP_PATH")"
 DESTINATION_APP="$DESTINATION_DIR/$APP_NAME"
 TEMP_APP="$DESTINATION_DIR/.$APP_NAME.installing.$$"
+IS_FRESH_INSTALL=0
+
+if [[ ! -e "$DESTINATION_APP" ]]; then
+    IS_FRESH_INSTALL=1
+fi
 
 show_welcome_on_next_launch() {
     local install_id
@@ -110,14 +152,27 @@ terminate_running_app() {
     fi
 }
 
+require_running_app_to_be_stopped() {
+    if ! pgrep -x "$PROCESS_NAME" >/dev/null 2>&1; then
+        return
+    fi
+
+    if [[ "$STOP_RUNNING_APP" == "1" ]]; then
+        terminate_running_app
+        return
+    fi
+
+    echo "ERROR: $PROCESS_NAME is running. Quit it yourself before installing so its in-memory state is not lost. Set WHISPERKEY_INSTALL_STOP_RUNNING_APP=1 only when an explicit forced stop is intended." >&2
+    exit 1
+}
+
 open_installed_app() {
     open -n "$DESTINATION_APP"
 }
 
 if [[ -e "$DESTINATION_APP" && "$APP_PATH" -ef "$DESTINATION_APP" ]]; then
     echo "WhisperKey is already installed at $DESTINATION_APP"
-    show_welcome_on_next_launch
-    terminate_running_app
+    require_running_app_to_be_stopped
     if [[ "$RESTART_AFTER_INSTALL" == "1" ]]; then
         open_installed_app
     fi
@@ -129,7 +184,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-terminate_running_app
+require_running_app_to_be_stopped
 rm -rf "$TEMP_APP"
 ditto --rsrc --extattr "$APP_PATH" "$TEMP_APP"
 rm -rf "$DESTINATION_APP"
@@ -145,7 +200,9 @@ if command -v mdimport >/dev/null 2>&1; then
     mdimport "$DESTINATION_APP" >/dev/null 2>&1 || true
 fi
 
-show_welcome_on_next_launch
+if [[ "$IS_FRESH_INSTALL" == "1" ]]; then
+    show_welcome_on_next_launch
+fi
 if [[ "$RESTART_AFTER_INSTALL" == "1" ]]; then
     open_installed_app
 fi

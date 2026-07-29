@@ -31,6 +31,7 @@ final class SoundPlayer {
         do {
             let player = try AVAudioPlayer(contentsOf: url)
             player.delegate = delegateProxy
+            player.volume = event == .error ? 0.1 : 1
             player.prepareToPlay()
             active[ObjectIdentifier(player)] = player
             player.play()

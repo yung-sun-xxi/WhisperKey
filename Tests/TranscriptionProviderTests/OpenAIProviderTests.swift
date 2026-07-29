@@ -299,13 +299,13 @@ final class OpenAIProviderTests: XCTestCase {
         XCTAssertEqual(result, .rejected(message: "Incorrect API key provided."))
     }
 
-    func testValidateAPIKeyTreatsRateLimitAsAcceptedWithWarning() async {
+    func testValidateAPIKeyDoesNotAcceptRateLimitedResponse() async {
         StubURLProtocol.nextOutcome = .http(.init(statusCode: 429, body: Data(), headers: [:]))
 
         let result = await OpenAIProvider.validateAPIKey("sk-rate-limited", urlSession: makeSession())
 
-        XCTAssertTrue(result.isAccepted)
-        XCTAssertEqual(result, .acceptedWithWarning(message: "API key accepted, but OpenAI is rate limiting validation."))
+        XCTAssertFalse(result.isAccepted)
+        XCTAssertEqual(result, .unavailable(message: "OpenAI is rate limiting validation. The API key was not changed."))
     }
 
     func testValidateAPIKeyReportsNetworkAsUnavailable() async {

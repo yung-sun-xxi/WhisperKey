@@ -11,7 +11,7 @@ enum HistoryFullWindowController {
         window
     }
 
-    static func show(history: HistoryStore) {
+    static func show(history: HistoryStore, coordinator: AppCoordinator) {
         if let existing = window {
             existing.makeKeyAndOrderFront(nil)
             existing.orderFrontRegardless()
@@ -20,7 +20,7 @@ enum HistoryFullWindowController {
             return
         }
 
-        let host = NSHostingController(rootView: HistoryFullView(history: history))
+        let host = NSHostingController(rootView: HistoryFullView(history: history, coordinator: coordinator))
         let window = NSWindow(contentViewController: host)
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         window.title = "WhisperKey History"
@@ -73,6 +73,7 @@ private final class WindowDelegate: NSObject, NSWindowDelegate {
 
 private struct HistoryFullView: View {
     @ObservedObject var history: HistoryStore
+    let coordinator: AppCoordinator
 
     @State private var copiedID: UUID?
     @State private var ownerWindow: NSWindow?
@@ -103,7 +104,12 @@ private struct HistoryFullView: View {
                                 entry: entry,
                                 copied: copiedID == entry.id,
                                 onCopy: { copy(entry: entry) },
-                                onOpen: { HistoryReadWindowController.show(entry: entry) }
+                                onOpen: {
+                                    HistoryReadWindowController.show(entry: entry) {
+                                        coordinator.retryHistoryEntry(entry)
+                                    }
+                                },
+                                onRetry: { coordinator.retryHistoryEntry(entry) }
                             )
                             if entry.id != history.entries.last?.id {
                                 Divider()
@@ -143,6 +149,7 @@ private struct HistoryFullView: View {
     }
 
     private func copy(entry: HistoryEntry) {
+        guard entry.status == .recognized else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(entry.text, forType: .string)
         copiedID = entry.id
@@ -160,14 +167,15 @@ private struct HistoryFullRow: View {
     let copied: Bool
     let onCopy: () -> Void
     let onOpen: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
-        Button(action: handlePrimaryClick) {
+        HStack(alignment: .top, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.preview(maxLength: 320))
+                    Text(displayText)
                         .font(.system(.callout))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(entry.status == .recognized ? .primary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -191,20 +199,42 @@ private struct HistoryFullRow: View {
             .contentShape(Rectangle())
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
+            .onTapGesture(perform: handlePrimaryClick)
+            .contextMenu {
+                if entry.canRetryRecognition {
+                    Button("Retry", action: onRetry)
+                }
+                Button("Open in Window", action: onOpen)
+                if entry.status == .recognized {
+                    Button("Copy to Clipboard", action: onCopy)
+                }
+            }
+            .help(displayText)
+
+            if entry.canRetryRecognition {
+                Button("Retry", action: onRetry)
+                    .controlSize(.small)
+                    .padding(.trailing, 8)
+            }
         }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button("Open in Window", action: onOpen)
-            Button("Copy to Clipboard", action: onCopy)
-        }
-        .help(entry.preview(maxLength: 320))
     }
 
     private func handlePrimaryClick() {
-        if NSEvent.modifierFlags.contains(.shift) {
+        if entry.status != .recognized || NSEvent.modifierFlags.contains(.shift) {
             onOpen()
         } else {
             onCopy()
+        }
+    }
+
+    private var displayText: String {
+        switch entry.status {
+        case .recognized:
+            entry.preview(maxLength: 320)
+        case .pendingRecognition:
+            "File to recognize"
+        case .noSpeechDetected:
+            "No speech detected"
         }
     }
 }

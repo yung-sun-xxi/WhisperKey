@@ -6,7 +6,7 @@ import HistoryStore
 enum HistoryReadWindowController {
     private static var openWindows: [UUID: NSWindow] = [:]
 
-    static func show(entry: HistoryEntry) {
+    static func show(entry: HistoryEntry, onRetry: (() -> Void)? = nil) {
         if let existing = openWindows[entry.id] {
             existing.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -17,6 +17,7 @@ enum HistoryReadWindowController {
         let contentView = HistoryReadView(
             entry: entry,
             formattedDate: formattedDate,
+            onRetry: onRetry,
             onClose: { close(id: entry.id) }
         )
         let host = NSHostingController(rootView: contentView)
@@ -63,6 +64,7 @@ private final class WindowCloseDelegate: NSObject, NSWindowDelegate {
 private struct HistoryReadView: View {
     let entry: HistoryEntry
     let formattedDate: String
+    let onRetry: (() -> Void)?
     let onClose: () -> Void
 
     @State private var didCopy = false
@@ -84,8 +86,9 @@ private struct HistoryReadView: View {
             }
 
             ScrollView {
-                Text(entry.text)
+                Text(displayText)
                     .font(.system(.body, design: .default))
+                    .foregroundStyle(entry.status == .recognized ? .primary : .secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                     .padding(8)
@@ -93,21 +96,40 @@ private struct HistoryReadView: View {
             .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
 
             HStack {
-                Button(didCopy ? "Copied" : "Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(entry.text, forType: .string)
-                    didCopy = true
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 1_400_000_000)
-                        didCopy = false
+                if entry.status == .recognized {
+                    Button(didCopy ? "Copied" : "Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(entry.text, forType: .string)
+                        didCopy = true
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 1_400_000_000)
+                            didCopy = false
+                        }
+                    }
+                    .keyboardShortcut("c", modifiers: [.command])
+                }
+                if entry.canRetryRecognition, let onRetry {
+                    Button("Retry") {
+                        onRetry()
+                        onClose()
                     }
                 }
-                .keyboardShortcut("c", modifiers: [.command])
                 Spacer()
                 Button("Close", action: onClose)
                     .keyboardShortcut(.cancelAction)
             }
         }
         .padding(14)
+    }
+
+    private var displayText: String {
+        switch entry.status {
+        case .recognized:
+            entry.text
+        case .pendingRecognition:
+            "File to recognize"
+        case .noSpeechDetected:
+            "No speech detected"
+        }
     }
 }

@@ -251,41 +251,6 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.usageStatsRange, .last30Days)
     }
 
-    func testConsumePendingInstallUsageResetReturnsTrueOnceForFreshMarker() {
-        defaults.set("install-7", forKey: "WhisperKey.settings.pendingInstallWelcomeID")
-        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
-
-        XCTAssertTrue(store.consumePendingInstallUsageReset())
-        XCTAssertFalse(store.consumePendingInstallUsageReset())
-    }
-
-    func testConsumePendingInstallUsageResetReturnsFalseWhenNoMarker() {
-        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
-        XCTAssertFalse(store.consumePendingInstallUsageReset())
-    }
-
-    func testConsumePendingInstallUsageResetReturnsTrueAgainForNewMarker() {
-        defaults.set("install-A", forKey: "WhisperKey.settings.pendingInstallWelcomeID")
-        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
-        XCTAssertTrue(store.consumePendingInstallUsageReset())
-
-        defaults.set("install-B", forKey: "WhisperKey.settings.pendingInstallWelcomeID")
-        XCTAssertTrue(store.consumePendingInstallUsageReset())
-        XCTAssertFalse(store.consumePendingInstallUsageReset())
-    }
-
-    func testConsumePendingInstallUsageResetIsIndependentOfWelcomeMarker() {
-        defaults.set("install-99", forKey: "WhisperKey.settings.pendingInstallWelcomeID")
-        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
-
-        store.markInstallWelcomePresented()
-        XCTAssertFalse(store.hasPendingInstallWelcome)
-        // Even after welcome is marked presented, the counter-reset hook reads from the marker too.
-        // We expect it to be consumable as long as we have not previously consumed it.
-        // markInstallWelcomePresented removes the pending key, so subsequent calls return false.
-        XCTAssertFalse(store.consumePendingInstallUsageReset())
-    }
-
     func testMakeProviderReturnsOpenAIWhenKeyPresent() {
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
         store.openAIAPIKey = "sk-x"

@@ -251,7 +251,7 @@ struct PopoverContent: View {
                     appState: coordinator.state,
                     cancelAction: coordinator.cancelActiveOperation
                 )
-                HistorySection(history: coordinator.history)
+                HistorySection(history: coordinator.history, coordinator: coordinator)
                 Divider()
                     .opacity(0.55)
                 HStack {
@@ -415,7 +415,7 @@ private struct CommandCenterHeader: View {
     }
 
     private var cancelHelpText: String {
-        appState == .recording ? "Cancel recording" : "Cancel processing"
+        appState == .recording ? "Stop and save recording" : "Cancel processing"
     }
 }
 
@@ -709,8 +709,8 @@ private struct SettingsForm: View {
                 .onSubmit {
                     scheduleAPIKeyValidation(presentNotice: true, debounceNanoseconds: 0)
                 }
-                .onChange(of: apiKeyDraft) { oldValue, newValue in
-                    handleAPIKeyDraftChange(oldValue: oldValue, newValue: newValue)
+                .onChange(of: apiKeyDraft) { _, _ in
+                    handleAPIKeyDraftChange()
                 }
 
             if !currentAPIKey.isEmpty {
@@ -743,11 +743,15 @@ private struct SettingsForm: View {
     }
 
     private var apiKeyPlaceholder: String {
+        if !currentAPIKey.isEmpty {
+            return "••••••••••••"
+        }
+
         switch settings.provider {
         case .openai:
-            "sk-…"
+            return "sk-…"
         case .groq:
-            "gsk_…"
+            return "gsk_…"
         }
     }
 
@@ -875,41 +879,25 @@ private struct SettingsForm: View {
             )
         }
         .onAppear {
-            syncAPIKeyDraftWithStoredKey(resetState: true)
+            resetAPIKeyInput(resetState: true)
         }
         .onDisappear {
             apiKeyValidationTask?.cancel()
             apiKeyValidationTask = nil
         }
         .onChange(of: settings.provider) {
-            syncAPIKeyDraftWithStoredKey(resetState: true)
+            resetAPIKeyInput(resetState: true)
         }
         .onChange(of: currentAPIKey) {
             guard apiKeyValidationState != .checking else { return }
-            syncAPIKeyDraftWithStoredKey(resetState: false)
+            resetAPIKeyInput(resetState: false)
         }
     }
 
-    private func handleAPIKeyDraftChange(oldValue: String, newValue: String) {
-        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            apiKeyValidationTask?.cancel()
-            apiKeyValidationTask = nil
-            apiKeyValidationState = .idle
-            settings.deleteAPIKey(for: settings.provider)
-            return
-        }
-
-        if trimmed == currentAPIKey.trimmingCharacters(in: .whitespacesAndNewlines) {
-            apiKeyValidationTask?.cancel()
-            apiKeyValidationTask = nil
-            apiKeyValidationState = currentAPIKey.isEmpty ? .idle : .accepted("API key saved")
-            return
-        }
-
+    private func handleAPIKeyDraftChange() {
+        apiKeyValidationTask?.cancel()
+        apiKeyValidationTask = nil
         apiKeyValidationState = .idle
-        let likelyPaste = abs(newValue.count - oldValue.count) > 3
-        scheduleAPIKeyValidation(presentNotice: likelyPaste)
     }
 
     private func scheduleAPIKeyValidation(
@@ -966,10 +954,6 @@ private struct SettingsForm: View {
             saveAPIKey(key, for: provider)
             apiKeyValidationState = .accepted("API key saved")
             clearAPIKeyFieldFocus()
-        case .acceptedWithWarning(let message):
-            saveAPIKey(key, for: provider)
-            apiKeyValidationState = .accepted(message)
-            clearAPIKeyFieldFocus()
         case .rejected(let message):
             apiKeyValidationState = .rejected(message)
         case .unavailable(let message):
@@ -1008,20 +992,12 @@ private struct SettingsForm: View {
         }
     }
 
-    private func syncAPIKeyDraftWithStoredKey(resetState: Bool) {
-        let storedKey = currentAPIKey
-        guard apiKeyDraft != storedKey else {
-            if resetState {
-                apiKeyValidationState = storedKey.isEmpty ? .idle : .accepted("API key saved")
-            }
-            return
-        }
-
+    private func resetAPIKeyInput(resetState: Bool) {
         apiKeyValidationTask?.cancel()
         apiKeyValidationTask = nil
-        apiKeyDraft = storedKey
+        apiKeyDraft = ""
         if resetState {
-            apiKeyValidationState = storedKey.isEmpty ? .idle : .accepted("API key saved")
+            apiKeyValidationState = currentAPIKey.isEmpty ? .idle : .accepted("API key saved")
         }
     }
 }
@@ -1114,9 +1090,6 @@ private struct APIKeyValidationNotice: Identifiable {
         case .accepted:
             self.title = "API key accepted"
             self.message = "The API key was validated and saved"
-        case .acceptedWithWarning(let message):
-            self.title = "API key saved"
-            self.message = message
         case .rejected(let message):
             self.title = "Invalid API key"
             self.message = message

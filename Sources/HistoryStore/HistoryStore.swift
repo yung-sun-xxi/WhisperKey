@@ -1,6 +1,16 @@
 import Foundation
 import Combine
 
+public enum HistoryEntryStatus: String, Codable, Equatable, Sendable {
+    case recognized
+    case pendingRecognition
+    case noSpeechDetected
+}
+
+public enum HistoryAudioError: Error, Equatable {
+    case fileUnavailable
+}
+
 public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
     public static let assumedTypingWordsPerMinute: Double = 40
 
@@ -18,11 +28,15 @@ public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
     public let copiedToClipboard: Bool?
     public let autoPasted: Bool?
     public let estimatedSavedSecondsAtTime: TimeInterval?
+    public let status: HistoryEntryStatus
+    /// Relative file name in the history audio directory. Present only while recognition can be retried.
+    public let audioFileName: String?
 
     public var providerID: String { provider }
     public var hasUsageMetadata: Bool {
-        audioDurationSeconds != nil && estimatedPriceAtTime != nil && currency != nil
+        status == .recognized && audioDurationSeconds != nil && estimatedPriceAtTime != nil && currency != nil
     }
+    public var canRetryRecognition: Bool { status != .recognized && audioFileName != nil }
 
     public init(
         id: UUID = UUID(),
@@ -38,7 +52,9 @@ public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
         destinationUsed: String? = nil,
         copiedToClipboard: Bool? = nil,
         autoPasted: Bool? = nil,
-        estimatedSavedSecondsAtTime: TimeInterval? = nil
+        estimatedSavedSecondsAtTime: TimeInterval? = nil,
+        status: HistoryEntryStatus = .recognized,
+        audioFileName: String? = nil
     ) {
         self.id = id
         self.text = text
@@ -55,6 +71,8 @@ public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
         self.autoPasted = autoPasted
         self.estimatedSavedSecondsAtTime = estimatedSavedSecondsAtTime
             ?? Self.estimatedSavedSeconds(wordCount: self.wordCount, audioDurationSeconds: audioDurationSeconds)
+        self.status = status
+        self.audioFileName = audioFileName
     }
 
     public func preview(maxLength: Int = 100) -> String {
@@ -91,6 +109,8 @@ public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
         case copiedToClipboard
         case autoPasted
         case estimatedSavedSecondsAtTime
+        case status
+        case audioFileName
     }
 
     public init(from decoder: Decoder) throws {
@@ -115,6 +135,8 @@ public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
         self.autoPasted = try container.decodeIfPresent(Bool.self, forKey: .autoPasted)
         self.estimatedSavedSecondsAtTime = try container.decodeIfPresent(TimeInterval.self, forKey: .estimatedSavedSecondsAtTime)
             ?? Self.estimatedSavedSeconds(wordCount: wordCount, audioDurationSeconds: audioDurationSeconds)
+        self.status = try container.decodeIfPresent(HistoryEntryStatus.self, forKey: .status) ?? .recognized
+        self.audioFileName = try container.decodeIfPresent(String.self, forKey: .audioFileName)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -133,6 +155,8 @@ public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
         try container.encodeIfPresent(copiedToClipboard, forKey: .copiedToClipboard)
         try container.encodeIfPresent(autoPasted, forKey: .autoPasted)
         try container.encodeIfPresent(estimatedSavedSecondsAtTime, forKey: .estimatedSavedSecondsAtTime)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(audioFileName, forKey: .audioFileName)
     }
 }
 
@@ -280,6 +304,7 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         if trimmed.count != loaded.count {
             try? Self.persist(entries: trimmed, to: resolvedURL)
         }
+        removeOrphanedAudio()
     }
 
     @discardableResult
@@ -317,13 +342,129 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         return entry
     }
 
+    @discardableResult
+    public func appendPendingRecognition(
+        audioData: Data,
+        fileExtension: String,
+        providerID: String,
+        language: String?,
+        audioDurationSeconds: TimeInterval,
+        model: String?,
+        now: Date = Date(),
+        id: UUID = UUID()
+    ) -> HistoryEntry? {
+        guard maxEntries > 0, !audioData.isEmpty else { return nil }
+
+        let normalizedExtension = fileExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedExtension.isEmpty,
+              normalizedExtension.allSatisfy({ $0.isLetter || $0.isNumber }) else { return nil }
+
+        let fileName = "\(id.uuidString).\(normalizedExtension.lowercased())"
+        let entry = HistoryEntry(
+            id: id,
+            text: "",
+            createdAt: now,
+            providerID: providerID,
+            language: language,
+            audioDurationSeconds: audioDurationSeconds,
+            wordCount: 0,
+            model: model,
+            status: .pendingRecognition,
+            audioFileName: fileName
+        )
+
+        do {
+            try writeAudio(audioData, fileName: fileName)
+        } catch {
+            return nil
+        }
+
+        let updated = Self.applyMax(entries: [entry] + entries, max: maxEntries)
+        guard applyAndPersist(updated) else {
+            removeAudio(fileName: fileName)
+            return nil
+        }
+        return entry
+    }
+
+    @discardableResult
+    public func markRecognized(
+        id: UUID,
+        text: String,
+        providerID: String,
+        language: String?,
+        model: String?,
+        estimatedPriceAtTime: Double?,
+        currency: String?,
+        destinationUsed: String?,
+        copiedToClipboard: Bool?,
+        autoPasted: Bool?
+    ) -> HistoryEntry? {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
+        let existing = entries[index]
+        let updatedEntry = HistoryEntry(
+            id: existing.id,
+            text: text,
+            createdAt: existing.createdAt,
+            providerID: providerID,
+            language: language,
+            audioDurationSeconds: existing.audioDurationSeconds,
+            wordCount: HistoryEntry.countWords(in: text),
+            model: model,
+            estimatedPriceAtTime: estimatedPriceAtTime,
+            currency: currency,
+            destinationUsed: destinationUsed,
+            copiedToClipboard: copiedToClipboard,
+            autoPasted: autoPasted,
+            status: .recognized
+        )
+        var updated = entries
+        updated[index] = updatedEntry
+        guard applyAndPersist(updated) else { return nil }
+        return updatedEntry
+    }
+
+    @discardableResult
+    public func markNoSpeechDetected(id: UUID) -> HistoryEntry? {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
+        let existing = entries[index]
+        let updatedEntry = HistoryEntry(
+            id: existing.id,
+            text: "",
+            createdAt: existing.createdAt,
+            providerID: existing.providerID,
+            language: existing.language,
+            audioDurationSeconds: existing.audioDurationSeconds,
+            wordCount: 0,
+            model: existing.model,
+            status: .noSpeechDetected,
+            audioFileName: existing.audioFileName
+        )
+        var updated = entries
+        updated[index] = updatedEntry
+        guard applyAndPersist(updated) else { return nil }
+        return updatedEntry
+    }
+
+    public func audioData(for entry: HistoryEntry) throws -> Data {
+        guard let fileName = entry.audioFileName else { throw HistoryAudioError.fileUnavailable }
+        let fileURL = audioDirectory.appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { throw HistoryAudioError.fileUnavailable }
+        return try Data(contentsOf: fileURL)
+    }
+
+    public func hasAudio(for entry: HistoryEntry) -> Bool {
+        guard let fileName = entry.audioFileName else { return false }
+        return FileManager.default.fileExists(atPath: audioDirectory.appendingPathComponent(fileName).path)
+    }
+
     public func usageSummaryForToday(now: Date = Date(), calendar: Calendar = .current) -> HistoryUsageSummary {
         HistoryUsageSummary.today(from: entries, now: now, calendar: calendar)
     }
 
     public func clear() {
         guard !entries.isEmpty else { return }
-        applyAndPersist([])
+        _ = applyAndPersist([])
     }
 
     public func setMaxEntries(_ value: Int) {
@@ -332,20 +473,52 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         maxEntries = clamped
         let trimmed = Self.applyMax(entries: entries, max: clamped)
         if trimmed.count != entries.count {
-            applyAndPersist(trimmed)
+            _ = applyAndPersist(trimmed)
         }
     }
 
     public var fileURL: URL { url }
+    public var audioDirectoryURL: URL { audioDirectory }
 
     // MARK: - Internals
 
-    private func applyAndPersist(_ updated: [HistoryEntry]) {
-        entries = updated
+    @discardableResult
+    private func applyAndPersist(_ updated: [HistoryEntry]) -> Bool {
         do {
             try Self.persist(entries: updated, to: url)
+            let retainedAudio = Set(updated.compactMap(\.audioFileName))
+            let removedAudio = entries.compactMap(\.audioFileName).filter { !retainedAudio.contains($0) }
+            entries = updated
+            removedAudio.forEach(removeAudio(fileName:))
+            return true
         } catch {
             // Persistence failure is non-fatal — surface via the UI in a future toast.
+            return false
+        }
+    }
+
+    private var audioDirectory: URL {
+        url.deletingLastPathComponent().appendingPathComponent("HistoryAudio", isDirectory: true)
+    }
+
+    private func writeAudio(_ data: Data, fileName: String) throws {
+        try FileManager.default.createDirectory(at: audioDirectory, withIntermediateDirectories: true)
+        try data.write(to: audioDirectory.appendingPathComponent(fileName), options: [.atomic])
+    }
+
+    private func removeAudio(fileName: String) {
+        try? FileManager.default.removeItem(at: audioDirectory.appendingPathComponent(fileName))
+    }
+
+    private func removeOrphanedAudio() {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: audioDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let referenced = Set(entries.compactMap(\.audioFileName))
+        for file in files where !referenced.contains(file.lastPathComponent) {
+            try? FileManager.default.removeItem(at: file)
         }
     }
 

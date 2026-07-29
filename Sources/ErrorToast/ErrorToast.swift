@@ -14,13 +14,20 @@ public enum ToastAction: Sendable, Equatable {
     case none
 }
 
+public enum ToastStyle: Sendable, Equatable {
+    case warning
+    case information
+}
+
 public struct ToastContent: Sendable, Equatable {
     public let message: String
     public let action: ToastAction
+    public let style: ToastStyle
 
-    public init(message: String, action: ToastAction) {
+    public init(message: String, action: ToastAction, style: ToastStyle = .warning) {
         self.message = message
         self.action = action
+        self.style = style
     }
 }
 
@@ -42,10 +49,16 @@ public enum ToastDecision {
         }
     }
 
-    public static func content(reason: ToastReason, message: String, hasCachedAudio: Bool) -> ToastContent {
+    public static func content(
+        reason: ToastReason,
+        message: String,
+        hasCachedAudio: Bool,
+        style: ToastStyle = .warning
+    ) -> ToastContent {
         ToastContent(
             message: message,
-            action: action(for: reason, hasCachedAudio: hasCachedAudio)
+            action: action(for: reason, hasCachedAudio: hasCachedAudio),
+            style: style
         )
     }
 }

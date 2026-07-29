@@ -45,6 +45,18 @@ final class AppCoordinator: ObservableObject {
         var byteSize: Int?
     }
 
+    private struct TranscriptionRequest {
+        let encoded: EncodedAudio
+        let language: String?
+        let audioDuration: TimeInterval
+        let historyEntryID: UUID?
+    }
+
+    private struct CapturedRecording {
+        let recordingID: UUID?
+        let buffer: AudioBuffer
+    }
+
     static let processingTimeout: TimeInterval = 30
 
     @Published private(set) var state: AppState = .idle
@@ -89,7 +101,9 @@ final class AppCoordinator: ObservableObject {
     private var activeProcessingMetrics: ProcessingMetrics?
     private var processingTask: Task<Void, Never>?
     private var processingTimeoutTask: Task<Void, Never>?
-    private var lastTranscriptionRequest: (encoded: EncodedAudio, language: String?, audioDuration: TimeInterval)?
+    private var recordingIDsAwaitingLateStop = Set<UUID>()
+    private var capturedRecordingAwaitingHistory: CapturedRecording?
+    private var lastTranscriptionRequest: TranscriptionRequest?
     var hotkeyStarted = false
     var permissionPollTask: Task<Void, Never>?
     var workspaceActivationObserver: NSObjectProtocol?
@@ -114,11 +128,6 @@ final class AppCoordinator: ObservableObject {
         let resolvedLoginService = loginItemService ?? SMAppServiceLoginItem()
         self.loginItem = LoginItemController(service: resolvedLoginService)
         self.launchAtLoginEnabled = self.loginItem.isEnabled
-
-        if resolvedSettings.consumePendingInstallUsageReset() {
-            resolvedUsageStats.resetAll()
-            log.info("usage counters reset due to fresh install marker")
-        }
 
         hotkey.setOutputHandler { [weak self] output in
             guard let self else { return }
@@ -166,6 +175,7 @@ final class AppCoordinator: ObservableObject {
         guard Self.canStartRecording(from: state), permissions.allGranted else { return }
         let recordingID = UUID()
         lastTranscriptionRequest = nil
+        capturedRecordingAwaitingHistory = nil
         activeRecordingID = recordingID
         recordingCancellationRequested = false
         state = .recording
@@ -256,7 +266,17 @@ final class AppCoordinator: ObservableObject {
             self.appleMusic.recordingDidEnd()
 
             guard self.activeRecordingID == recordingID, self.isCurrentProcessing(operationID) else {
-                self.log.info("recording stop finished after cancellation; ignoring operationID=\(operationID.uuidString, privacy: .public)")
+                if let recordingID,
+                   self.recordingIDsAwaitingLateStop.remove(recordingID) != nil,
+                   let buffer {
+                    self.saveCapturedRecordingForRetry(
+                        buffer,
+                        recordingID: recordingID,
+                        reason: "recording stop timeout"
+                    )
+                } else {
+                    self.log.info("recording stop finished after cancellation; ignoring operationID=\(operationID.uuidString, privacy: .public)")
+                }
                 return
             }
             self.activeRecordingID = nil
@@ -270,6 +290,7 @@ final class AppCoordinator: ObservableObject {
 
             self.activeProcessingMetrics?.audioDuration = buffer.duration
             self.activeProcessingMetrics?.byteSize = buffer.samples.count
+            self.capturedRecordingAwaitingHistory = CapturedRecording(recordingID: recordingID, buffer: buffer)
             self.log.info("recording stop finished operationID=\(operationID.uuidString, privacy: .public) audioDuration=\(buffer.duration, privacy: .public) pcmBytes=\(buffer.samples.count, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public)")
 
             await self.transcribeNew(buffer: buffer, operationID: operationID)
@@ -285,15 +306,22 @@ final class AppCoordinator: ObservableObject {
         log.info("recording cancellation requested")
 
         Task {
-            _ = await recorder.stop()
+            let buffer = await recorder.stop()
             appleMusic.recordingDidEnd()
+            if let buffer {
+                saveCapturedRecordingForRetry(
+                    buffer,
+                    recordingID: recordingID,
+                    reason: "manual recording stop"
+                )
+            }
             finishCanceledRecording(recordingID: recordingID)
         }
     }
 
     private func finishCanceledRecording(recordingID: UUID?) {
         guard activeRecordingID == recordingID else { return }
-        log.info("recording canceled; captured audio discarded")
+        log.info("recording canceled; captured audio was saved to history when available")
         activeRecordingID = nil
         recordingCancellationRequested = false
         lastTranscriptionRequest = nil
@@ -317,11 +345,17 @@ final class AppCoordinator: ObservableObject {
         guard state == .transcribing else { return }
         let operationID = activeProcessingID
         let metrics = activeProcessingMetrics
+        let phase = activeProcessingPhase
+        let recordingID = activeRecordingID
         log.info("manual cancel operationID=\(operationID?.uuidString ?? "nil", privacy: .public) phase=\(self.activeProcessingPhase?.rawValue ?? "none", privacy: .public) provider=\(metrics?.providerID ?? self.settings.provider.rawValue, privacy: .public) model=\(metrics?.modelID ?? self.currentTranscriptionModelID, privacy: .public) audioDuration=\(metrics?.audioDuration ?? -1, privacy: .public) bytes=\(metrics?.byteSize ?? -1, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public)")
         processingTask?.cancel()
         processingTimeoutTask?.cancel()
         processingTask = nil
         processingTimeoutTask = nil
+        if phase == .recordingStop, let recordingID {
+            recordingIDsAwaitingLateStop.insert(recordingID)
+        }
+        saveCapturedRecordingAwaitingHistory(reason: "manual processing stop")
         activeProcessingID = nil
         activeProcessingPhase = nil
         activeProcessingStartedAt = nil
@@ -334,8 +368,17 @@ final class AppCoordinator: ObservableObject {
         hotkey.setAppState(.idle)
 
         Task {
-            _ = await recorder.stop()
+            let buffer = await recorder.stop()
             appleMusic.recordingDidEnd()
+            if let recordingID,
+               recordingIDsAwaitingLateStop.remove(recordingID) != nil,
+               let buffer {
+                saveCapturedRecordingForRetry(
+                    buffer,
+                    recordingID: recordingID,
+                    reason: "manual stop while recording was finalizing"
+                )
+            }
         }
     }
 
@@ -353,6 +396,7 @@ final class AppCoordinator: ObservableObject {
             guard isCurrentProcessing(operationID), !Task.isCancelled else { return }
             log.error("encode failed operationID=\(operationID.uuidString, privacy: .public) provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public) audioDuration=\(buffer.duration, privacy: .public) pcmBytes=\(buffer.samples.count, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public) error=\(String(describing: error), privacy: .public)")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            saveCapturedRecordingAwaitingHistory(reason: "audio encoding failure")
             self.lastTranscriptionRequest = nil
             self.handleTranscriptionFailure(operationID: operationID, reason: .transcription(.unknown), message: message)
             return
@@ -365,11 +409,40 @@ final class AppCoordinator: ObservableObject {
         activeProcessingMetrics?.byteSize = encoded.data.count
         log.info("encode finished operationID=\(operationID.uuidString, privacy: .public) provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public) audioDuration=\(audioDuration, privacy: .public) bytes=\(encoded.data.count, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public)")
 
-        self.lastTranscriptionRequest = (encoded, language, audioDuration)
-        await runTranscription(encoded: encoded, language: language, audioDuration: audioDuration, operationID: operationID)
+        let historyEntry = history.appendPendingRecognition(
+            audioData: encoded.data,
+            fileExtension: encoded.fileExtension,
+            providerID: settings.provider.rawValue,
+            language: language,
+            audioDurationSeconds: audioDuration,
+            model: currentTranscriptionModelID
+        )
+        if history.maxEntries > 0, historyEntry == nil {
+            log.error("could not save recording for transcription history")
+        }
+        capturedRecordingAwaitingHistory = nil
+        self.lastTranscriptionRequest = TranscriptionRequest(
+            encoded: encoded,
+            language: language,
+            audioDuration: audioDuration,
+            historyEntryID: historyEntry?.id
+        )
+        await runTranscription(
+            encoded: encoded,
+            language: language,
+            audioDuration: audioDuration,
+            historyEntryID: historyEntry?.id,
+            operationID: operationID
+        )
     }
 
-    private func runTranscription(encoded: EncodedAudio, language: String?, audioDuration: TimeInterval, operationID: UUID) async {
+    private func runTranscription(
+        encoded: EncodedAudio,
+        language: String?,
+        audioDuration: TimeInterval,
+        historyEntryID: UUID?,
+        operationID: UUID
+    ) async {
         guard isCurrentProcessing(operationID) else { return }
         guard let provider = settings.makeTranscriptionProvider() else {
             log.error("no provider configured; cannot transcribe")
@@ -396,8 +469,16 @@ final class AppCoordinator: ObservableObject {
             log.info("transcription parsed chars=\(text.count, privacy: .public) trimmedChars=\(trimmedLength, privacy: .public)")
 
             guard trimmedLength > 0 else {
-                log.info("empty transcription result; clipboard and paste skipped provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public)")
-                completeProcessing(operationID: operationID, clearCachedAudio: true, playDoneSound: true)
+                log.info("empty transcription result; marking history entry as no speech detected provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public)")
+                if let historyEntryID {
+                    _ = history.markNoSpeechDetected(id: historyEntryID)
+                }
+                handleTranscriptionFailure(
+                    operationID: operationID,
+                    reason: .transcription(.unknown),
+                    message: "No speech detected",
+                    toastStyle: .information
+                )
                 return
             }
 
@@ -421,18 +502,33 @@ final class AppCoordinator: ObservableObject {
                 model: currentTranscriptionModelID,
                 audioDurationSeconds: audioDuration
             )
-            _ = history.append(
-                text: text,
-                providerID: settings.provider.rawValue,
-                language: language,
-                audioDurationSeconds: audioDuration,
-                model: currentTranscriptionModelID,
-                estimatedPriceAtTime: priceEstimate?.amount,
-                currency: priceEstimate?.currency,
-                destinationUsed: Self.destinationUsed(for: outputSettings),
-                copiedToClipboard: outputSettings.saveToClipboard && output.wroteClipboard,
-                autoPasted: output.pasteDecision == .paste
-            )
+            if let historyEntryID {
+                _ = history.markRecognized(
+                    id: historyEntryID,
+                    text: text,
+                    providerID: settings.provider.rawValue,
+                    language: language,
+                    model: currentTranscriptionModelID,
+                    estimatedPriceAtTime: priceEstimate?.amount,
+                    currency: priceEstimate?.currency,
+                    destinationUsed: Self.destinationUsed(for: outputSettings),
+                    copiedToClipboard: outputSettings.saveToClipboard && output.wroteClipboard,
+                    autoPasted: output.pasteDecision == .paste
+                )
+            } else {
+                _ = history.append(
+                    text: text,
+                    providerID: settings.provider.rawValue,
+                    language: language,
+                    audioDurationSeconds: audioDuration,
+                    model: currentTranscriptionModelID,
+                    estimatedPriceAtTime: priceEstimate?.amount,
+                    currency: priceEstimate?.currency,
+                    destinationUsed: Self.destinationUsed(for: outputSettings),
+                    copiedToClipboard: outputSettings.saveToClipboard && output.wroteClipboard,
+                    autoPasted: output.pasteDecision == .paste
+                )
+            }
             if priceEstimate == nil {
                 log.error("missing pricing rule for provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public); usage cost will be omitted")
             }
@@ -486,6 +582,54 @@ final class AppCoordinator: ObservableObject {
                 encoded: request.encoded,
                 language: request.language,
                 audioDuration: request.audioDuration,
+                historyEntryID: request.historyEntryID,
+                operationID: operationID
+            )
+        }
+    }
+
+    func retryHistoryEntry(_ entry: HistoryEntry) {
+        guard entry.canRetryRecognition else { return }
+        guard Self.canStartRecording(from: state) else { return }
+        let audioData: Data
+        do {
+            audioData = try history.audioData(for: entry)
+        } catch {
+            handleTranscriptionFailure(
+                reason: .transcription(.unknown),
+                message: "The audio file is no longer available."
+            )
+            return
+        }
+
+        let fileExtension = entry.audioFileName.map { ($0 as NSString).pathExtension.lowercased() } ?? "wav"
+        guard fileExtension == "wav" else {
+            handleTranscriptionFailure(
+                reason: .transcription(.unknown),
+                message: "This recording uses an unsupported audio format."
+            )
+            return
+        }
+
+        let request = TranscriptionRequest(
+            encoded: EncodedAudio(data: audioData, mimeType: "audio/wav", fileExtension: fileExtension),
+            language: settings.language.isoCode,
+            audioDuration: entry.audioDurationSeconds ?? 0,
+            historyEntryID: entry.id
+        )
+        lastTranscriptionRequest = request
+        let operationID = UUID()
+        beginProcessing(operationID: operationID)
+        activeProcessingMetrics?.audioDuration = request.audioDuration
+        activeProcessingMetrics?.byteSize = request.encoded.data.count
+        state = .transcribing
+        hotkey.setAppState(.transcribing)
+        processingTask = Task { @MainActor in
+            await self.runTranscription(
+                encoded: request.encoded,
+                language: request.language,
+                audioDuration: request.audioDuration,
+                historyEntryID: request.historyEntryID,
                 operationID: operationID
             )
         }
@@ -671,6 +815,7 @@ final class AppCoordinator: ObservableObject {
         activeProcessingStartedAt = nil
         activeProcessingMetrics = nil
         activeRecordingID = nil
+        capturedRecordingAwaitingHistory = nil
         state = .idle
         hotkey.setAppState(.idle)
         if playDoneSound {
@@ -688,6 +833,10 @@ final class AppCoordinator: ObservableObject {
         processingTimeoutTask?.cancel()
         processingTask = nil
         processingTimeoutTask = nil
+        if phase == .recordingStop, let recordingID = activeRecordingID {
+            recordingIDsAwaitingLateStop.insert(recordingID)
+        }
+        saveCapturedRecordingAwaitingHistory(reason: "processing timeout")
         activeProcessingID = nil
         activeProcessingPhase = nil
         activeProcessingStartedAt = nil
@@ -701,16 +850,18 @@ final class AppCoordinator: ObservableObject {
             )
         )
 
-        Task {
-            _ = await recorder.stop()
-            appleMusic.recordingDidEnd()
+        if phase != .recordingStop {
+            Task {
+                _ = await recorder.stop()
+                appleMusic.recordingDidEnd()
+            }
         }
     }
 
     private static func processingTimeoutMessage(phase: ProcessingPhase?, providerID: String) -> String {
         switch phase {
         case .recordingStop:
-            return "WhisperKey spent 30 seconds finishing the recording on this Mac. This is a local audio-processing issue, not a provider error."
+            return "WhisperKey is taking longer than expected to finish the recording. If the audio becomes available, it will be saved to History for Retry."
         case .encode:
             return "WhisperKey spent 30 seconds preparing the audio on this Mac. This is a local processing issue, not a provider error."
         case .transcription:
@@ -723,7 +874,12 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    private func handleTranscriptionFailure(operationID: UUID, reason: ToastReason, message: String) {
+    private func handleTranscriptionFailure(
+        operationID: UUID,
+        reason: ToastReason,
+        message: String,
+        toastStyle: ToastStyle = .warning
+    ) {
         guard isCurrentProcessing(operationID) else { return }
         processingTimeoutTask?.cancel()
         processingTimeoutTask = nil
@@ -733,17 +889,53 @@ final class AppCoordinator: ObservableObject {
         activeProcessingStartedAt = nil
         activeProcessingMetrics = nil
         activeRecordingID = nil
-        handleTranscriptionFailure(reason: reason, message: message)
+        handleTranscriptionFailure(reason: reason, message: message, toastStyle: toastStyle)
     }
 
-    private func handleTranscriptionFailure(reason: ToastReason, message: String) {
+    private func saveCapturedRecordingAwaitingHistory(reason: String) {
+        guard let captured = capturedRecordingAwaitingHistory else { return }
+        capturedRecordingAwaitingHistory = nil
+        saveCapturedRecordingForRetry(captured.buffer, recordingID: captured.recordingID, reason: reason)
+    }
+
+    private func saveCapturedRecordingForRetry(
+        _ buffer: AudioBuffer,
+        recordingID: UUID?,
+        reason: String
+    ) {
+        do {
+            let encoded = try encoder.encode(buffer)
+            let entry = history.appendPendingRecognition(
+                audioData: encoded.data,
+                fileExtension: encoded.fileExtension,
+                providerID: settings.provider.rawValue,
+                language: settings.language.isoCode,
+                audioDurationSeconds: buffer.duration,
+                model: currentTranscriptionModelID
+            )
+            if let entry {
+                log.info("recording saved to history after \(reason, privacy: .public) recordingID=\(recordingID?.uuidString ?? "nil", privacy: .public) historyEntryID=\(entry.id.uuidString, privacy: .public) audioDuration=\(buffer.duration, privacy: .public)")
+            } else {
+                log.error("recording could not be saved to history after \(reason, privacy: .public) recordingID=\(recordingID?.uuidString ?? "nil", privacy: .public)")
+            }
+        } catch {
+            log.error("recording could not be encoded for history after \(reason, privacy: .public) recordingID=\(recordingID?.uuidString ?? "nil", privacy: .public) error=\(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func handleTranscriptionFailure(
+        reason: ToastReason,
+        message: String,
+        toastStyle: ToastStyle = .warning
+    ) {
         state = .error(message)
         hotkey.setAppState(.idle)
         playSound(.error)
         let content = ToastDecision.content(
             reason: reason,
             message: message,
-            hasCachedAudio: lastTranscriptionRequest != nil
+            hasCachedAudio: lastTranscriptionRequest != nil,
+            style: toastStyle
         )
         toastPresenter.show(content: content) { [weak self] in
             guard let self else { return }

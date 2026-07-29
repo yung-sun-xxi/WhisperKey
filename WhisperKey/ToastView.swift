@@ -2,20 +2,27 @@ import SwiftUI
 import ErrorToast
 
 struct ToastView: View {
+    static let contentWidth: CGFloat = 380
+
     let content: ToastContent
     let onAction: () -> Void
     let onDismiss: () -> Void
+    var showsDismissButton = true
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.yellow)
-                .font(.system(size: 16, weight: .semibold))
-                .padding(.top, 1)
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(iconColor.opacity(0.16))
+                Image(systemName: iconName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(iconColor)
+            }
+            .frame(width: 28, height: 28)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(content.message)
-                    .font(.system(size: 12))
+            VStack(alignment: .leading, spacing: 7) {
+                Text(displayMessage)
+                    .font(.system(.callout))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let title = actionTitle {
@@ -27,26 +34,29 @@ struct ToastView: View {
 
             Spacer(minLength: 4)
 
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(4)
-                    .contentShape(Rectangle())
+            if showsDismissButton {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Dismiss")
             }
-            .buttonStyle(.plain)
-            .help("Dismiss")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(width: Self.contentWidth, alignment: .leading)
         .background {
             VisualEffectBackground()
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 14)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private var actionTitle: String? {
@@ -54,6 +64,32 @@ struct ToastView: View {
         case .retry: return "Retry"
         case .openSettings: return "Open Settings"
         case .none: return nil
+        }
+    }
+
+    private var displayMessage: String {
+        var message = content.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        while message.hasSuffix(".") {
+            message.removeLast()
+        }
+        return message
+    }
+
+    private var iconName: String {
+        switch content.style {
+        case .warning:
+            "exclamationmark.triangle.fill"
+        case .information:
+            "waveform.slash"
+        }
+    }
+
+    private var iconColor: Color {
+        switch content.style {
+        case .warning:
+            .orange
+        case .information:
+            .secondary
         }
     }
 }

@@ -12,7 +12,7 @@ final class ToastWindow: NSPanel {
         onDismiss: @escaping () -> Void
     ) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 64),
+            contentRect: NSRect(x: 0, y: 0, width: ToastView.contentWidth, height: 80),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -53,9 +53,7 @@ final class ToastWindow: NSPanel {
     private func sizeToFitContent() {
         hostingView.layoutSubtreeIfNeeded()
         let fitting = hostingView.fittingSize
-        let width = max(280, min(420, fitting.width))
-        let height = max(48, fitting.height)
-        setContentSize(NSSize(width: width, height: height))
+        setContentSize(NSSize(width: ToastView.contentWidth, height: max(56, fitting.height)))
     }
 
     func positionTopRight() {
