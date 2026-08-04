@@ -83,6 +83,10 @@ final class ErrorToastTests: XCTestCase {
         XCTAssertEqual(ToastDecision.action(for: .accessibilityDenied, hasCachedAudio: false), .openSettings)
     }
 
+    func testRecordingCaptureTimeoutHasNoAction() {
+        XCTAssertEqual(ToastDecision.action(for: .recordingCaptureTimedOut, hasCachedAudio: false), .none)
+    }
+
     // MARK: ToastContent passthrough
 
     func testToastContentPreservesMessageAndDerivesAction() {

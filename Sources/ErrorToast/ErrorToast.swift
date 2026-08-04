@@ -6,6 +6,7 @@ public enum ToastReason: Sendable, Equatable {
     case missingProvider
     case microphoneDenied
     case accessibilityDenied
+    case recordingCaptureTimedOut
 }
 
 public enum ToastAction: Sendable, Equatable {
@@ -46,6 +47,8 @@ public enum ToastDecision {
             }
         case .missingProvider, .microphoneDenied, .accessibilityDenied:
             return .openSettings
+        case .recordingCaptureTimedOut:
+            return .none
         }
     }
 

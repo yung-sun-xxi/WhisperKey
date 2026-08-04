@@ -5,6 +5,7 @@ public enum HistoryEntryStatus: String, Codable, Equatable, Sendable {
     case recognized
     case pendingRecognition
     case noSpeechDetected
+    case silentAudio
 }
 
 public enum HistoryAudioError: Error, Equatable {
@@ -36,7 +37,14 @@ public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
     public var hasUsageMetadata: Bool {
         status == .recognized && audioDurationSeconds != nil && estimatedPriceAtTime != nil && currency != nil
     }
-    public var canRetryRecognition: Bool { status != .recognized && audioFileName != nil }
+    public var canRetryRecognition: Bool {
+        switch status {
+        case .pendingRecognition, .noSpeechDetected:
+            audioFileName != nil
+        case .recognized, .silentAudio:
+            false
+        }
+    }
 
     public init(
         id: UUID = UUID(),
@@ -439,6 +447,27 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
             model: existing.model,
             status: .noSpeechDetected,
             audioFileName: existing.audioFileName
+        )
+        var updated = entries
+        updated[index] = updatedEntry
+        guard applyAndPersist(updated) else { return nil }
+        return updatedEntry
+    }
+
+    @discardableResult
+    public func markSilentAudio(id: UUID) -> HistoryEntry? {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
+        let existing = entries[index]
+        let updatedEntry = HistoryEntry(
+            id: existing.id,
+            text: "",
+            createdAt: existing.createdAt,
+            providerID: existing.providerID,
+            language: existing.language,
+            audioDurationSeconds: existing.audioDurationSeconds,
+            wordCount: 0,
+            model: existing.model,
+            status: .silentAudio
         )
         var updated = entries
         updated[index] = updatedEntry

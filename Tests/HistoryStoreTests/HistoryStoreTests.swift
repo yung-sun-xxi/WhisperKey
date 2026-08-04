@@ -138,6 +138,25 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertFalse(noSpeech.hasUsageMetadata)
     }
 
+    func testSilentAudioRemovesAudioAndDisablesRetry() throws {
+        let store = HistoryStore(url: makeURL(), maxEntries: 5)
+        let pending = try XCTUnwrap(store.appendPendingRecognition(
+            audioData: Data([0, 0, 0]),
+            fileExtension: "wav",
+            providerID: "openai",
+            language: nil,
+            audioDurationSeconds: 1,
+            model: "whisper-1"
+        ))
+
+        let silent = try XCTUnwrap(store.markSilentAudio(id: pending.id))
+        XCTAssertEqual(silent.status, .silentAudio)
+        XCTAssertFalse(silent.canRetryRecognition)
+        XCTAssertNil(silent.audioFileName)
+        XCTAssertFalse(store.hasAudio(for: pending))
+        XCTAssertFalse(silent.hasUsageMetadata)
+    }
+
     // MARK: - Persistence round-trip
 
     func testEntriesSurviveReload() throws {

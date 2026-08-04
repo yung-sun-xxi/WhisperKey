@@ -5,6 +5,299 @@ import os
 
 private let recorderLog = Logger(subsystem: "WhisperKey", category: "AudioRecorder")
 
+private final class AudioAppendGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isAppendQueued = false
+
+    func tryAcquire() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isAppendQueued else { return false }
+        isAppendQueued = true
+        return true
+    }
+
+    func release() {
+        lock.lock()
+        isAppendQueued = false
+        lock.unlock()
+    }
+}
+
+public struct AudioRecorderDiagnosticsSnapshot: Codable, Equatable, Sendable {
+    public let captureID: UInt64?
+    public let isRecording: Bool
+    public let inputDeviceObjectID: UInt32?
+    public let inputDeviceName: String?
+    public let inputDeviceUID: String?
+    public let inputSampleRate: Double?
+    public let inputChannelCount: UInt32?
+    public let inputCommonFormatRawValue: UInt?
+    public let inputIsInterleaved: Bool?
+    public let captureStartedAt: Date?
+    public let engineStartedAt: Date?
+    public let stopRequestedAt: Date?
+    public let stopEnteredAt: Date?
+    public let stopFinishedAt: Date?
+    public let lastTapAt: Date?
+    public let lastAppendStartedAt: Date?
+    public let lastAppendFinishedAt: Date?
+    public let tapBuffersReceived: UInt64
+    public let appendTasksScheduled: UInt64
+    public let appendTasksDropped: UInt64
+    public let appendAttempts: UInt64
+    public let appendIgnored: UInt64
+    public let appendedBuffers: UInt64
+    public let converterFailures: UInt64
+    public let outputAllocationFailures: UInt64
+    public let emptyOutputBuffers: UInt64
+    public let tapInputFrames: UInt64
+    public let appendInputFrames: UInt64
+    public let outputFrames: UInt64
+    public let pcmBytes: Int
+    public let totalQueueDelayNanos: UInt64
+    public let maxQueueDelayNanos: UInt64
+    public let totalAppendNanos: UInt64
+    public let maxAppendNanos: UInt64
+    public let estimatedAppendBacklog: UInt64
+    public let stopReturnedBuffer: Bool?
+    public let stopElapsedSeconds: TimeInterval?
+    public let stopCapturedDurationSeconds: TimeInterval?
+}
+
+private final class AudioRecorderDiagnosticsState: @unchecked Sendable {
+    private let lock = NSLock()
+
+    private var captureID: UInt64?
+    private var isRecording = false
+    private var inputDeviceObjectID: UInt32?
+    private var inputDeviceName: String?
+    private var inputDeviceUID: String?
+    private var inputSampleRate: Double?
+    private var inputChannelCount: UInt32?
+    private var inputCommonFormatRawValue: UInt?
+    private var inputIsInterleaved: Bool?
+    private var captureStartedAt: Date?
+    private var engineStartedAt: Date?
+    private var stopRequestedAt: Date?
+    private var stopEnteredAt: Date?
+    private var stopFinishedAt: Date?
+    private var lastTapAt: Date?
+    private var lastAppendStartedAt: Date?
+    private var lastAppendFinishedAt: Date?
+    private var tapBuffersReceived: UInt64 = 0
+    private var appendTasksScheduled: UInt64 = 0
+    private var appendTasksDropped: UInt64 = 0
+    private var appendAttempts: UInt64 = 0
+    private var appendIgnored: UInt64 = 0
+    private var appendedBuffers: UInt64 = 0
+    private var converterFailures: UInt64 = 0
+    private var outputAllocationFailures: UInt64 = 0
+    private var emptyOutputBuffers: UInt64 = 0
+    private var tapInputFrames: UInt64 = 0
+    private var appendInputFrames: UInt64 = 0
+    private var outputFrames: UInt64 = 0
+    private var pcmBytes: Int = 0
+    private var totalQueueDelayNanos: UInt64 = 0
+    private var maxQueueDelayNanos: UInt64 = 0
+    private var totalAppendNanos: UInt64 = 0
+    private var maxAppendNanos: UInt64 = 0
+    private var stopReturnedBuffer: Bool?
+    private var stopElapsedSeconds: TimeInterval?
+    private var stopCapturedDurationSeconds: TimeInterval?
+
+    func beginCapture(captureID: UInt64, inputDevice: AudioInputDeviceSnapshot?, inputFormat: AVAudioFormat) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.captureID = captureID
+        self.isRecording = false
+        self.inputDeviceObjectID = inputDevice.map { UInt32($0.objectID) }
+        self.inputDeviceName = inputDevice?.name
+        self.inputDeviceUID = inputDevice?.uid
+        self.inputSampleRate = inputFormat.sampleRate
+        self.inputChannelCount = inputFormat.channelCount
+        self.inputCommonFormatRawValue = inputFormat.commonFormat.rawValue
+        self.inputIsInterleaved = inputFormat.isInterleaved
+        self.captureStartedAt = Date()
+        self.engineStartedAt = nil
+        self.stopRequestedAt = nil
+        self.stopEnteredAt = nil
+        self.stopFinishedAt = nil
+        self.lastTapAt = nil
+        self.lastAppendStartedAt = nil
+        self.lastAppendFinishedAt = nil
+        self.tapBuffersReceived = 0
+        self.appendTasksScheduled = 0
+        self.appendTasksDropped = 0
+        self.appendAttempts = 0
+        self.appendIgnored = 0
+        self.appendedBuffers = 0
+        self.converterFailures = 0
+        self.outputAllocationFailures = 0
+        self.emptyOutputBuffers = 0
+        self.tapInputFrames = 0
+        self.appendInputFrames = 0
+        self.outputFrames = 0
+        self.pcmBytes = 0
+        self.totalQueueDelayNanos = 0
+        self.maxQueueDelayNanos = 0
+        self.totalAppendNanos = 0
+        self.maxAppendNanos = 0
+        self.stopReturnedBuffer = nil
+        self.stopElapsedSeconds = nil
+        self.stopCapturedDurationSeconds = nil
+    }
+
+    func recordEngineStarted() {
+        lock.lock()
+        engineStartedAt = Date()
+        isRecording = true
+        lock.unlock()
+    }
+
+    func recordStopRequested() {
+        lock.lock()
+        stopRequestedAt = stopRequestedAt ?? Date()
+        lock.unlock()
+    }
+
+    func recordStopEntered() {
+        lock.lock()
+        stopEnteredAt = Date()
+        lock.unlock()
+    }
+
+    func recordStopFinished(returnedBuffer: Bool, pcmBytes: Int, elapsed: TimeInterval, capturedDuration: TimeInterval) {
+        lock.lock()
+        isRecording = false
+        stopFinishedAt = Date()
+        stopReturnedBuffer = returnedBuffer
+        stopElapsedSeconds = elapsed
+        stopCapturedDurationSeconds = capturedDuration
+        self.pcmBytes = pcmBytes
+        lock.unlock()
+    }
+
+    func recordTap(inputFrameLength: AVAudioFrameCount) {
+        lock.lock()
+        tapBuffersReceived += 1
+        tapInputFrames += UInt64(inputFrameLength)
+        lastTapAt = Date()
+        lock.unlock()
+    }
+
+    func recordAppendScheduled() {
+        lock.lock()
+        appendTasksScheduled += 1
+        lock.unlock()
+    }
+
+    func recordAppendDropped() {
+        lock.lock()
+        appendTasksDropped += 1
+        lock.unlock()
+    }
+
+    func recordAppendIgnored() {
+        lock.lock()
+        appendIgnored += 1
+        lock.unlock()
+    }
+
+    func recordAppendStart(inputFrameLength: AVAudioFrameCount, queueDelayNanos: UInt64) {
+        lock.lock()
+        appendAttempts += 1
+        appendInputFrames += UInt64(inputFrameLength)
+        totalQueueDelayNanos += queueDelayNanos
+        maxQueueDelayNanos = max(maxQueueDelayNanos, queueDelayNanos)
+        lastAppendStartedAt = Date()
+        lock.unlock()
+    }
+
+    func recordOutputAllocationFailure(appendNanos: UInt64) {
+        lock.lock()
+        outputAllocationFailures += 1
+        recordAppendDurationLocked(appendNanos)
+        lock.unlock()
+    }
+
+    func recordConverterFailure(appendNanos: UInt64) {
+        lock.lock()
+        converterFailures += 1
+        recordAppendDurationLocked(appendNanos)
+        lock.unlock()
+    }
+
+    func recordEmptyOutputBuffer(appendNanos: UInt64) {
+        lock.lock()
+        emptyOutputBuffers += 1
+        recordAppendDurationLocked(appendNanos)
+        lock.unlock()
+    }
+
+    func recordAppendSuccess(outputFrameLength: AVAudioFrameCount, appendNanos: UInt64, pcmBytes: Int) {
+        lock.lock()
+        appendedBuffers += 1
+        outputFrames += UInt64(outputFrameLength)
+        self.pcmBytes = pcmBytes
+        recordAppendDurationLocked(appendNanos)
+        lock.unlock()
+    }
+
+    func snapshot() -> AudioRecorderDiagnosticsSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        let completed = appendIgnored + appendedBuffers + converterFailures + outputAllocationFailures + emptyOutputBuffers
+        let backlog = appendTasksScheduled > completed ? appendTasksScheduled - completed : 0
+        return AudioRecorderDiagnosticsSnapshot(
+            captureID: captureID,
+            isRecording: isRecording,
+            inputDeviceObjectID: inputDeviceObjectID,
+            inputDeviceName: inputDeviceName,
+            inputDeviceUID: inputDeviceUID,
+            inputSampleRate: inputSampleRate,
+            inputChannelCount: inputChannelCount,
+            inputCommonFormatRawValue: inputCommonFormatRawValue,
+            inputIsInterleaved: inputIsInterleaved,
+            captureStartedAt: captureStartedAt,
+            engineStartedAt: engineStartedAt,
+            stopRequestedAt: stopRequestedAt,
+            stopEnteredAt: stopEnteredAt,
+            stopFinishedAt: stopFinishedAt,
+            lastTapAt: lastTapAt,
+            lastAppendStartedAt: lastAppendStartedAt,
+            lastAppendFinishedAt: lastAppendFinishedAt,
+            tapBuffersReceived: tapBuffersReceived,
+            appendTasksScheduled: appendTasksScheduled,
+            appendTasksDropped: appendTasksDropped,
+            appendAttempts: appendAttempts,
+            appendIgnored: appendIgnored,
+            appendedBuffers: appendedBuffers,
+            converterFailures: converterFailures,
+            outputAllocationFailures: outputAllocationFailures,
+            emptyOutputBuffers: emptyOutputBuffers,
+            tapInputFrames: tapInputFrames,
+            appendInputFrames: appendInputFrames,
+            outputFrames: outputFrames,
+            pcmBytes: pcmBytes,
+            totalQueueDelayNanos: totalQueueDelayNanos,
+            maxQueueDelayNanos: maxQueueDelayNanos,
+            totalAppendNanos: totalAppendNanos,
+            maxAppendNanos: maxAppendNanos,
+            estimatedAppendBacklog: backlog,
+            stopReturnedBuffer: stopReturnedBuffer,
+            stopElapsedSeconds: stopElapsedSeconds,
+            stopCapturedDurationSeconds: stopCapturedDurationSeconds
+        )
+    }
+
+    private func recordAppendDurationLocked(_ nanos: UInt64) {
+        totalAppendNanos += nanos
+        maxAppendNanos = max(maxAppendNanos, nanos)
+        lastAppendFinishedAt = Date()
+    }
+}
+
 private struct AudioInputDeviceSnapshot: Equatable, Sendable {
     let objectID: AudioObjectID
     let name: String?
@@ -165,6 +458,10 @@ public struct AudioBuffer: Sendable, Equatable {
         let totalSamples = Double(samples.count) / bytesPerSample
         return totalSamples / sampleRate
     }
+
+    public var isDigitalSilence: Bool {
+        !samples.isEmpty && samples.allSatisfy { $0 == 0 }
+    }
 }
 
 public enum AudioRecorderError: Error, Equatable {
@@ -184,6 +481,7 @@ public actor AudioRecorder {
     public static let defaultMaxDuration: TimeInterval = 10 * 60
 
     public let maxDuration: TimeInterval
+    private nonisolated let diagnostics = AudioRecorderDiagnosticsState()
 
     private var engine = AVAudioEngine()
     private let outputFormat: AVAudioFormat = {
@@ -223,6 +521,14 @@ public actor AudioRecorder {
     public var sampleRate: Double { outputFormat.sampleRate }
     public var channelCount: UInt32 { outputFormat.channelCount }
 
+    public nonisolated func diagnosticsSnapshot() -> AudioRecorderDiagnosticsSnapshot {
+        diagnostics.snapshot()
+    }
+
+    public nonisolated func recordStopRequestedForDiagnostics() {
+        diagnostics.recordStopRequested()
+    }
+
     public func start() async throws {
         guard !isRecording else { throw AudioRecorderError.alreadyRecording }
         try await ensureMicrophonePermission()
@@ -230,7 +536,11 @@ public actor AudioRecorder {
     }
 
     public func stop() -> AudioBuffer? {
-        guard isRecording else { return nil }
+        diagnostics.recordStopEntered()
+        guard isRecording else {
+            diagnostics.recordStopFinished(returnedBuffer: false, pcmBytes: 0, elapsed: 0, capturedDuration: 0)
+            return nil
+        }
         isRecording = false
 
         maxDurationTask?.cancel()
@@ -253,6 +563,13 @@ public actor AudioRecorder {
                 "captureMetrics: captureID=\(self.activeCaptureID ?? 0, privacy: .public) tapBuffers=\(metrics.tapBuffersScheduled, privacy: .public) appendAttempts=\(metrics.appendAttempts, privacy: .public) appendedBuffers=\(metrics.appendedBuffers, privacy: .public) converterFailures=\(metrics.converterFailures, privacy: .public) outputAllocationFailures=\(metrics.outputAllocationFailures, privacy: .public) emptyOutputBuffers=\(metrics.emptyOutputBuffers, privacy: .public) inputFrames=\(metrics.inputFrames, privacy: .public) outputFrames=\(metrics.outputFrames, privacy: .public) avgQueueMs=\(metrics.averageQueueDelayMillis, privacy: .public) maxQueueMs=\(metrics.maxQueueDelayMillis, privacy: .public) avgAppendMs=\(metrics.averageAppendMillis, privacy: .public) maxAppendMs=\(metrics.maxAppendMillis, privacy: .public) maxEstimatedPendingTasks=\(metrics.maxEstimatedPendingTasks, privacy: .public)"
             )
         }
+        let returnedBuffer = elapsed >= Self.minDuration && !captured.isEmpty
+        diagnostics.recordStopFinished(
+            returnedBuffer: returnedBuffer,
+            pcmBytes: captured.count,
+            elapsed: elapsed,
+            capturedDuration: capturedDuration
+        )
         pcmData.removeAll(keepingCapacity: false)
         startTime = nil
         converter = nil
@@ -322,6 +639,7 @@ public actor AudioRecorder {
         engine = AVAudioEngine()
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
+        diagnostics.beginCapture(captureID: captureID, inputDevice: inputDevice, inputFormat: inputFormat)
         recorderLog.info(
             "beginCapture: captureID=\(captureID, privacy: .public) inputFormat sampleRate=\(inputFormat.sampleRate, privacy: .public) channelCount=\(inputFormat.channelCount, privacy: .public) commonFormat=\(inputFormat.commonFormat.rawValue, privacy: .public) interleaved=\(inputFormat.isInterleaved, privacy: .public)"
         )
@@ -343,13 +661,21 @@ public actor AudioRecorder {
         let outputFormat = self.outputFormat
         recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) installing input tap")
         var tapBufferSequence: UInt64 = 0
+        let appendGate = AudioAppendGate()
         input.installTap(onBus: 0, bufferSize: 4_096, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
             tapBufferSequence += 1
             let tapBufferID = tapBufferSequence
             let enqueuedAtNanos = Self.nowNanos()
             let inputFrameLength = buffer.frameLength
+            self.diagnostics.recordTap(inputFrameLength: inputFrameLength)
+            guard appendGate.tryAcquire() else {
+                self.diagnostics.recordAppendDropped()
+                return
+            }
+            self.diagnostics.recordAppendScheduled()
             Task {
+                defer { appendGate.release() }
                 await self.append(
                     buffer: buffer,
                     inputFormat: inputFormat,
@@ -379,6 +705,7 @@ public actor AudioRecorder {
         activeCaptureID = captureID
         activeInputDevice = inputDevice
         lastInputDevice = inputDevice
+        diagnostics.recordEngineStarted()
         recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) engine started")
 
         scheduleMaxDurationTask()
@@ -404,12 +731,17 @@ public actor AudioRecorder {
     ) {
         let startedAtNanos = Self.nowNanos()
         guard isRecording, activeCaptureID == captureID, let converter else {
+            diagnostics.recordAppendIgnored()
             recorderLog.info(
                 "append: captureID=\(captureID, privacy: .public) tapBufferID=\(tapBufferID, privacy: .public) ignored because capture is no longer active"
             )
             return
         }
 
+        diagnostics.recordAppendStart(
+            inputFrameLength: inputFrameLength,
+            queueDelayNanos: startedAtNanos - enqueuedAtNanos
+        )
         activeCaptureMetrics?.recordAppendStart(
             tapBufferID: tapBufferID,
             inputFrameLength: inputFrameLength,
@@ -422,7 +754,9 @@ public actor AudioRecorder {
             pcmFormat: outputFormat,
             frameCapacity: outputCapacity
         ) else {
-            activeCaptureMetrics?.recordOutputAllocationFailure(appendNanos: Self.nowNanos() - startedAtNanos)
+            let appendNanos = Self.nowNanos() - startedAtNanos
+            diagnostics.recordOutputAllocationFailure(appendNanos: appendNanos)
+            activeCaptureMetrics?.recordOutputAllocationFailure(appendNanos: appendNanos)
             recorderLog.error(
                 "append: captureID=\(captureID, privacy: .public) tapBufferID=\(tapBufferID, privacy: .public) output buffer allocation failed capacity=\(outputCapacity, privacy: .public)"
             )
@@ -442,7 +776,9 @@ public actor AudioRecorder {
         }
 
         guard status != .error, error == nil else {
-            activeCaptureMetrics?.recordConverterFailure(appendNanos: Self.nowNanos() - startedAtNanos)
+            let appendNanos = Self.nowNanos() - startedAtNanos
+            diagnostics.recordConverterFailure(appendNanos: appendNanos)
+            activeCaptureMetrics?.recordConverterFailure(appendNanos: appendNanos)
             recorderLog.error(
                 "append: captureID=\(captureID, privacy: .public) tapBufferID=\(tapBufferID, privacy: .public) converter failed status=\(status.rawValue, privacy: .public) error=\(error?.localizedDescription ?? "nil", privacy: .public)"
             )
@@ -451,16 +787,24 @@ public actor AudioRecorder {
 
         let frameCount = Int(outputBuffer.frameLength)
         guard frameCount > 0, let int16Channel = outputBuffer.int16ChannelData?.pointee else {
-            activeCaptureMetrics?.recordEmptyOutputBuffer(appendNanos: Self.nowNanos() - startedAtNanos)
+            let appendNanos = Self.nowNanos() - startedAtNanos
+            diagnostics.recordEmptyOutputBuffer(appendNanos: appendNanos)
+            activeCaptureMetrics?.recordEmptyOutputBuffer(appendNanos: appendNanos)
             return
         }
         let byteCount = frameCount * MemoryLayout<Int16>.size * Int(outputFormat.channelCount)
         pcmData.append(UnsafeBufferPointer(start: int16Channel, count: frameCount * Int(outputFormat.channelCount)).withMemoryRebound(to: UInt8.self) { ptr in
             Data(bytes: ptr.baseAddress!, count: byteCount)
         })
+        let appendNanos = Self.nowNanos() - startedAtNanos
+        diagnostics.recordAppendSuccess(
+            outputFrameLength: outputBuffer.frameLength,
+            appendNanos: appendNanos,
+            pcmBytes: pcmData.count
+        )
         activeCaptureMetrics?.recordAppendSuccess(
             outputFrameLength: outputBuffer.frameLength,
-            appendNanos: Self.nowNanos() - startedAtNanos
+            appendNanos: appendNanos
         )
     }
 

@@ -20,6 +20,83 @@ enum PermissionWindowZOrderState: Equatable {
     case yieldingToSystemSettings
 }
 
+private struct RecordingDiagnosticsEvent: Encodable {
+    let timestamp: Date
+    let name: String
+    let operationID: String?
+    let recordingID: String?
+    let phase: String?
+    let providerID: String
+    let modelID: String
+    let elapsedSeconds: TimeInterval?
+    let audioDurationSeconds: TimeInterval?
+    let byteSize: Int?
+    let appBundleID: String?
+    let appVersion: String?
+    let recorder: AudioRecorderDiagnosticsSnapshot
+}
+
+private enum RecordingDiagnosticsFile {
+    private static let lock = NSLock()
+    private static let maxFileBytes = 5 * 1024 * 1024
+
+    static func append(_ event: RecordingDiagnosticsEvent, logger: Logger) {
+        do {
+            let url = diagnosticsURL()
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.sortedKeys]
+
+            var line = try encoder.encode(event)
+            line.append(0x0A)
+
+            lock.lock()
+            defer { lock.unlock() }
+
+            if FileManager.default.fileExists(atPath: url.path) {
+                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                guard size + line.count > maxFileBytes else {
+                    let handle = try FileHandle(forWritingTo: url)
+                    defer { handle.closeFile() }
+                    handle.seekToEndOfFile()
+                    handle.write(line)
+                    return
+                }
+
+                let existing = try Data(contentsOf: url)
+                let retainedBudget = max(maxFileBytes - line.count, 0)
+                var retained = Data(existing.suffix(retainedBudget))
+                if existing.count > retainedBudget, let newlineIndex = retained.firstIndex(of: 0x0A) {
+                    retained.removeSubrange(retained.startIndex...newlineIndex)
+                }
+                retained.append(line)
+                try retained.write(to: url, options: [.atomic])
+            } else {
+                if line.count > maxFileBytes {
+                    line = Data(line.suffix(maxFileBytes))
+                }
+                try line.write(to: url, options: [.atomic])
+            }
+        } catch {
+            logger.error("recording diagnostics append failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    static func diagnosticsURL() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: (NSHomeDirectory() as NSString).appendingPathComponent("Library/Application Support"))
+        return base
+            .appendingPathComponent("WhisperKey", isDirectory: true)
+            .appendingPathComponent("Diagnostics", isDirectory: true)
+            .appendingPathComponent("recording-events.jsonl")
+    }
+}
+
 @MainActor
 final class AppCoordinator: ObservableObject {
     enum AppState: Equatable {
@@ -199,16 +276,27 @@ final class AppCoordinator: ObservableObject {
                 try await recorder.start()
 
                 guard activeRecordingID == recordingID else {
+                    recorder.recordStopRequestedForDiagnostics()
+                    appendRecordingDiagnostic(
+                        "recording_stop_requested_after_stale_start",
+                        recordingID: recordingID
+                    )
                     _ = await recorder.stop()
                     return
                 }
 
                 if recordingCancellationRequested {
+                    recorder.recordStopRequestedForDiagnostics()
+                    appendRecordingDiagnostic(
+                        "recording_stop_requested_after_cancelled_start",
+                        recordingID: recordingID
+                    )
                     _ = await recorder.stop()
                     finishCanceledRecording(recordingID: recordingID)
                     return
                 }
 
+                appendRecordingDiagnostic("recording_session_started", recordingID: recordingID)
                 playSound(.start)
             } catch AudioRecorderError.microphonePermissionDenied {
                 guard activeRecordingID == recordingID else { return }
@@ -259,6 +347,13 @@ final class AppCoordinator: ObservableObject {
         playSound(.stop)
         setProcessingPhase(.recordingStop, operationID: operationID)
         log.info("recording stop started operationID=\(operationID.uuidString, privacy: .public) provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public) elapsed=0")
+        recorder.recordStopRequestedForDiagnostics()
+        appendRecordingDiagnostic(
+            "recording_stop_requested",
+            operationID: operationID,
+            recordingID: recordingID,
+            phase: .recordingStop
+        )
 
         processingTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -269,12 +364,24 @@ final class AppCoordinator: ObservableObject {
                 if let recordingID,
                    self.recordingIDsAwaitingLateStop.remove(recordingID) != nil,
                    let buffer {
+                    self.appendRecordingDiagnostic(
+                        "recording_stop_finished_late",
+                        operationID: operationID,
+                        recordingID: recordingID,
+                        phase: .recordingStop
+                    )
                     self.saveCapturedRecordingForRetry(
                         buffer,
                         recordingID: recordingID,
                         reason: "recording stop timeout"
                     )
                 } else {
+                    self.appendRecordingDiagnostic(
+                        "recording_stop_finished_ignored",
+                        operationID: operationID,
+                        recordingID: recordingID,
+                        phase: .recordingStop
+                    )
                     self.log.info("recording stop finished after cancellation; ignoring operationID=\(operationID.uuidString, privacy: .public)")
                 }
                 return
@@ -284,6 +391,12 @@ final class AppCoordinator: ObservableObject {
             guard let buffer else {
                 self.log.info("recording stop finished operationID=\(operationID.uuidString, privacy: .public) audioDuration=0 pcmBytes=0 elapsed=\(self.processingElapsed(), privacy: .public)")
                 self.log.info("recording discarded (under min duration) operationID=\(operationID.uuidString, privacy: .public)")
+                self.appendRecordingDiagnostic(
+                    "recording_stop_finished_no_buffer",
+                    operationID: operationID,
+                    recordingID: recordingID,
+                    phase: .recordingStop
+                )
                 self.completeProcessing(operationID: operationID, clearCachedAudio: true, playDoneSound: false)
                 return
             }
@@ -292,6 +405,12 @@ final class AppCoordinator: ObservableObject {
             self.activeProcessingMetrics?.byteSize = buffer.samples.count
             self.capturedRecordingAwaitingHistory = CapturedRecording(recordingID: recordingID, buffer: buffer)
             self.log.info("recording stop finished operationID=\(operationID.uuidString, privacy: .public) audioDuration=\(buffer.duration, privacy: .public) pcmBytes=\(buffer.samples.count, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public)")
+            self.appendRecordingDiagnostic(
+                "recording_stop_finished",
+                operationID: operationID,
+                recordingID: recordingID,
+                phase: .recordingStop
+            )
 
             await self.transcribeNew(buffer: buffer, operationID: operationID)
         }
@@ -304,10 +423,19 @@ final class AppCoordinator: ObservableObject {
         lastTranscriptionRequest = nil
         stopRecordingTimer()
         log.info("recording cancellation requested")
+        recorder.recordStopRequestedForDiagnostics()
+        appendRecordingDiagnostic(
+            "recording_stop_requested_cancel",
+            recordingID: recordingID
+        )
 
         Task {
             let buffer = await recorder.stop()
             appleMusic.recordingDidEnd()
+            appendRecordingDiagnostic(
+                "recording_stop_finished_cancel",
+                recordingID: recordingID
+            )
             if let buffer {
                 saveCapturedRecordingForRetry(
                     buffer,
@@ -367,9 +495,24 @@ final class AppCoordinator: ObservableObject {
         state = .idle
         hotkey.setAppState(.idle)
 
+        recorder.recordStopRequestedForDiagnostics()
+        appendRecordingDiagnostic(
+            "recording_stop_requested_processing_cancel",
+            operationID: operationID,
+            recordingID: recordingID,
+            phase: phase,
+            metrics: metrics
+        )
         Task {
             let buffer = await recorder.stop()
             appleMusic.recordingDidEnd()
+            appendRecordingDiagnostic(
+                "recording_stop_finished_processing_cancel",
+                operationID: operationID,
+                recordingID: recordingID,
+                phase: phase,
+                metrics: metrics
+            )
             if let recordingID,
                recordingIDsAwaitingLateStop.remove(recordingID) != nil,
                let buffer {
@@ -421,6 +564,25 @@ final class AppCoordinator: ObservableObject {
             log.error("could not save recording for transcription history")
         }
         capturedRecordingAwaitingHistory = nil
+        if buffer.isDigitalSilence {
+            log.error("recording contains digital silence operationID=\(operationID.uuidString, privacy: .public) audioDuration=\(audioDuration, privacy: .public) pcmBytes=\(buffer.samples.count, privacy: .public)")
+            appendRecordingDiagnostic(
+                "recording_digital_silence",
+                operationID: operationID,
+                phase: activeProcessingPhase
+            )
+            if let historyEntryID = historyEntry?.id {
+                _ = history.markSilentAudio(id: historyEntryID)
+            }
+            lastTranscriptionRequest = nil
+            handleTranscriptionFailure(
+                operationID: operationID,
+                reason: .transcription(.unknown),
+                message: "WhisperKey recorded silence. Check the input level and microphone selected in System Settings.",
+                toastStyle: .information
+            )
+            return
+        }
         self.lastTranscriptionRequest = TranscriptionRequest(
             encoded: encoded,
             language: language,
@@ -802,6 +964,33 @@ final class AppCoordinator: ObservableObject {
         activeProcessingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
     }
 
+    private func appendRecordingDiagnostic(
+        _ name: String,
+        operationID: UUID? = nil,
+        recordingID: UUID? = nil,
+        phase: ProcessingPhase? = nil,
+        metrics: ProcessingMetrics? = nil,
+        recorderSnapshot: AudioRecorderDiagnosticsSnapshot? = nil
+    ) {
+        let resolvedMetrics = metrics ?? activeProcessingMetrics
+        let event = RecordingDiagnosticsEvent(
+            timestamp: Date(),
+            name: name,
+            operationID: operationID?.uuidString,
+            recordingID: recordingID?.uuidString,
+            phase: phase?.rawValue ?? activeProcessingPhase?.rawValue,
+            providerID: resolvedMetrics?.providerID ?? settings.provider.rawValue,
+            modelID: resolvedMetrics?.modelID ?? currentTranscriptionModelID,
+            elapsedSeconds: activeProcessingStartedAt.map { Date().timeIntervalSince($0) },
+            audioDurationSeconds: resolvedMetrics?.audioDuration,
+            byteSize: resolvedMetrics?.byteSize,
+            appBundleID: Bundle.main.bundleIdentifier,
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+            recorder: recorderSnapshot ?? recorder.diagnosticsSnapshot()
+        )
+        RecordingDiagnosticsFile.append(event, logger: log)
+    }
+
     private func completeProcessing(operationID: UUID, clearCachedAudio: Bool, playDoneSound: Bool) {
         guard isCurrentProcessing(operationID) else { return }
         if clearCachedAudio {
@@ -827,8 +1016,17 @@ final class AppCoordinator: ObservableObject {
         guard isCurrentProcessing(operationID) else { return }
         let metrics = activeProcessingMetrics
         let phase = activeProcessingPhase
+        let recorderSnapshot = recorder.diagnosticsSnapshot()
         log.error("processing timeout operationID=\(operationID.uuidString, privacy: .public) phase=\(self.activeProcessingPhase?.rawValue ?? "none", privacy: .public) provider=\(metrics?.providerID ?? self.settings.provider.rawValue, privacy: .public) model=\(metrics?.modelID ?? self.currentTranscriptionModelID, privacy: .public) audioDuration=\(metrics?.audioDuration ?? -1, privacy: .public) bytes=\(metrics?.byteSize ?? -1, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public)")
         log.error("provider timeout operationID=\(operationID.uuidString, privacy: .public) provider=\(metrics?.providerID ?? self.settings.provider.rawValue, privacy: .public) model=\(metrics?.modelID ?? self.currentTranscriptionModelID, privacy: .public) audioDuration=\(metrics?.audioDuration ?? -1, privacy: .public) bytes=\(metrics?.byteSize ?? -1, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public)")
+        appendRecordingDiagnostic(
+            phase == .recordingStop ? "recording_stop_timeout" : "processing_timeout",
+            operationID: operationID,
+            recordingID: activeRecordingID,
+            phase: phase,
+            metrics: metrics,
+            recorderSnapshot: recorderSnapshot
+        )
         processingTask?.cancel()
         processingTimeoutTask?.cancel()
         processingTask = nil
@@ -843,7 +1041,7 @@ final class AppCoordinator: ObservableObject {
         activeProcessingMetrics = nil
         activeRecordingID = nil
         handleTranscriptionFailure(
-            reason: .transcription(.timedOut),
+            reason: phase == .recordingStop ? .recordingCaptureTimedOut : .transcription(.timedOut),
             message: Self.processingTimeoutMessage(
                 phase: phase,
                 providerID: metrics?.providerID ?? settings.provider.rawValue
@@ -852,6 +1050,7 @@ final class AppCoordinator: ObservableObject {
 
         if phase != .recordingStop {
             Task {
+                recorder.recordStopRequestedForDiagnostics()
                 _ = await recorder.stop()
                 appleMusic.recordingDidEnd()
             }
@@ -861,7 +1060,7 @@ final class AppCoordinator: ObservableObject {
     private static func processingTimeoutMessage(phase: ProcessingPhase?, providerID: String) -> String {
         switch phase {
         case .recordingStop:
-            return "WhisperKey is taking longer than expected to finish the recording. If the audio becomes available, it will be saved to History for Retry."
+            return "WhisperKey could not finish reading audio from the microphone. No audio was available to save for Retry. Check the input device, then try again."
         case .encode:
             return "WhisperKey spent 30 seconds preparing the audio on this Mac. This is a local processing issue, not a provider error."
         case .transcription:

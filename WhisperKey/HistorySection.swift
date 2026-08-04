@@ -214,6 +214,8 @@ private struct HistoryInlineRow: View {
             "File to recognize"
         case .noSpeechDetected:
             "No speech detected"
+        case .silentAudio:
+            "No microphone audio captured"
         }
     }
 }

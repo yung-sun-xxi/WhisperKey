@@ -53,6 +53,16 @@ final class AudioRecorderTests: XCTestCase {
         await recorder._armMaxDurationTaskForTesting()
         try await Task.sleep(nanoseconds: 200_000_000)
     }
+
+    func testAudioBufferDetectsDigitalSilence() {
+        let silent = AudioBuffer(samples: Data(repeating: 0, count: 8), sampleRate: 16_000, channelCount: 1)
+        let nonSilent = AudioBuffer(samples: Data([0, 0, 1, 0]), sampleRate: 16_000, channelCount: 1)
+        let empty = AudioBuffer(samples: Data(), sampleRate: 16_000, channelCount: 1)
+
+        XCTAssertTrue(silent.isDigitalSilence)
+        XCTAssertFalse(nonSilent.isDigitalSilence)
+        XCTAssertFalse(empty.isDigitalSilence)
+    }
 }
 
 private actor HandlerCallCounter {
