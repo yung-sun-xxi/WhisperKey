@@ -236,7 +236,7 @@ extension AppCoordinator {
     }
 
     private func synchronizePermissionDrivenState(with snapshot: PermissionState) {
-        guard state != .recording, state != .transcribing else { return }
+        guard state != .starting, state != .recording, state != .transcribing else { return }
 
         if !snapshot.accessibilityGranted || !hotkeyStarted {
             updateState(.accessibilityDenied)

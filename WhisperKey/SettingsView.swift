@@ -382,7 +382,7 @@ private struct CommandCenterHeader: View {
     @ViewBuilder
     private var statusControl: some View {
         switch appState {
-        case .recording, .transcribing:
+        case .starting, .recording, .transcribing:
             cancelStatusButton
         case .idle, .error, .microphoneDenied, .accessibilityDenied:
             ZStack {
@@ -415,7 +415,16 @@ private struct CommandCenterHeader: View {
     }
 
     private var cancelHelpText: String {
-        appState == .recording ? "Stop and save recording" : "Cancel processing"
+        switch appState {
+        case .starting:
+            "Cancel microphone startup"
+        case .recording:
+            "Stop and save recording"
+        case .transcribing:
+            "Cancel processing"
+        case .idle, .error, .microphoneDenied, .accessibilityDenied:
+            "Cancel"
+        }
     }
 }
 
@@ -641,7 +650,7 @@ private struct SettingsWindowContent: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Settings")
                 .font(.title2.weight(.semibold))
-            SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .recording)
+            SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .starting || coordinator.state == .recording)
         }
         .padding(SettingsWindowLayout.contentPadding)
         .frame(width: SettingsWindowLayout.contentWidth, alignment: .topLeading)

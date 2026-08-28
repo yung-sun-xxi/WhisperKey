@@ -237,6 +237,8 @@ private struct HistoryFullRow: View {
             "No speech detected"
         case .silentAudio:
             "No microphone audio captured"
+        case .captureFailed:
+            entry.text.isEmpty ? "Audio capture failed" : entry.text
         }
     }
 }

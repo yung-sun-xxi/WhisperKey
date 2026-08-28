@@ -101,6 +101,7 @@ private enum RecordingDiagnosticsFile {
 final class AppCoordinator: ObservableObject {
     enum AppState: Equatable {
         case idle
+        case starting
         case recording
         case transcribing
         case error(String)
@@ -148,7 +149,7 @@ final class AppCoordinator: ObservableObject {
         switch state {
         case .idle, .error:
             return true
-        case .recording, .transcribing, .microphoneDenied, .accessibilityDenied:
+        case .starting, .recording, .transcribing, .microphoneDenied, .accessibilityDenied:
             return false
         }
     }
@@ -179,6 +180,7 @@ final class AppCoordinator: ObservableObject {
     private var processingTask: Task<Void, Never>?
     private var processingTimeoutTask: Task<Void, Never>?
     private var recordingIDsAwaitingLateStop = Set<UUID>()
+    private var captureFailureHistoryEntryIDs = [UUID: UUID]()
     private var capturedRecordingAwaitingHistory: CapturedRecording?
     private var lastTranscriptionRequest: TranscriptionRequest?
     var hotkeyStarted = false
@@ -256,10 +258,8 @@ final class AppCoordinator: ObservableObject {
         capturedRecordingAwaitingHistory = nil
         activeRecordingID = recordingID
         recordingCancellationRequested = false
-        state = .recording
+        state = .starting
         hotkey.setAppState(.recording)
-        appleMusic.recordingDidStart(enabled: settings.pauseAppleMusicWhileRecording)
-        startRecordingTimer()
         toastPresenter.dismiss(animated: false)
 
         Task {
@@ -297,8 +297,14 @@ final class AppCoordinator: ObservableObject {
                     return
                 }
 
+                state = .recording
+                appleMusic.recordingDidStart(enabled: settings.pauseAppleMusicWhileRecording)
+                startRecordingTimer()
                 appendRecordingDiagnostic("recording_session_started", recordingID: recordingID)
                 playSound(.start)
+            } catch AudioRecorderError.engineStartTimedOut(let seconds) {
+                guard activeRecordingID == recordingID else { return }
+                handleCaptureStartTimeout(recordingID: recordingID, seconds: seconds)
             } catch AudioRecorderError.microphonePermissionDenied {
                 guard activeRecordingID == recordingID else { return }
                 if recordingCancellationRequested {
@@ -336,6 +342,15 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func stopRecording() {
+        if state == .starting {
+            recordingCancellationRequested = true
+            recorder.recordStopRequestedForDiagnostics()
+            appendRecordingDiagnostic(
+                "recording_stop_requested_while_starting",
+                recordingID: activeRecordingID
+            )
+            return
+        }
         guard state == .recording else { return }
         let recordingID = activeRecordingID
         let operationID = UUID()
@@ -363,19 +378,25 @@ final class AppCoordinator: ObservableObject {
 
             guard self.activeRecordingID == recordingID, self.isCurrentProcessing(operationID) else {
                 if let recordingID,
-                   self.recordingIDsAwaitingLateStop.remove(recordingID) != nil,
-                   let buffer {
-                    self.appendRecordingDiagnostic(
-                        "recording_stop_finished_late",
-                        operationID: operationID,
-                        recordingID: recordingID,
-                        phase: .recordingStop
-                    )
-                    self.saveCapturedRecordingForRetry(
-                        buffer,
-                        recordingID: recordingID,
-                        reason: "recording stop timeout"
-                    )
+                   self.recordingIDsAwaitingLateStop.remove(recordingID) != nil {
+                    if let buffer {
+                        if let failureEntryID = self.captureFailureHistoryEntryIDs.removeValue(forKey: recordingID) {
+                            _ = self.history.remove(id: failureEntryID)
+                        }
+                        self.appendRecordingDiagnostic(
+                            "recording_stop_finished_late",
+                            operationID: operationID,
+                            recordingID: recordingID,
+                            phase: .recordingStop
+                        )
+                        self.saveCapturedRecordingForRetry(
+                            buffer,
+                            recordingID: recordingID,
+                            reason: "recording stop timeout"
+                        )
+                    } else {
+                        _ = self.captureFailureHistoryEntryIDs.removeValue(forKey: recordingID)
+                    }
                 } else {
                     self.appendRecordingDiagnostic(
                         "recording_stop_finished_ignored",
@@ -418,6 +439,10 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func cancelRecording() {
+        if state == .starting {
+            recordingCancellationRequested = true
+            return
+        }
         guard state == .recording else { return }
         let recordingID = activeRecordingID
         recordingCancellationRequested = true
@@ -461,7 +486,7 @@ final class AppCoordinator: ObservableObject {
 
     func cancelActiveOperation() {
         switch state {
-        case .recording:
+        case .starting, .recording:
             cancelRecording()
         case .transcribing:
             cancelProcessingManually()
@@ -927,6 +952,10 @@ final class AppCoordinator: ObservableObject {
         openMenuBarPopoverHandler?()
     }
 
+    func setToastAnchorProvider(_ provider: @escaping () -> NSRect?) {
+        toastPresenter.setAnchorProvider(provider)
+    }
+
     private func beginProcessing(operationID: UUID) {
         processingTask?.cancel()
         processingTimeoutTask?.cancel()
@@ -1013,6 +1042,33 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// The microphone never started: the audio engine did not answer within
+    /// the recorder's start deadline. No audio exists, so this is reported and
+    /// recorded as a terminal capture failure rather than a cancelled press.
+    private func handleCaptureStartTimeout(recordingID: UUID, seconds: TimeInterval) {
+        let recorderSnapshot = recorder.diagnosticsSnapshot()
+        log.error("recording start timeout recordingID=\(recordingID.uuidString, privacy: .public) deadline=\(seconds, privacy: .public)")
+        appendRecordingDiagnostic(
+            "recording_start_timeout",
+            recordingID: recordingID,
+            recorderSnapshot: recorderSnapshot
+        )
+        history.appendCaptureFailed(
+            providerID: settings.provider.rawValue,
+            language: settings.language.isoCode,
+            model: currentTranscriptionModelID,
+            message: "Microphone did not start; the audio system stopped responding"
+        )
+        appleMusic.recordingDidEnd()
+        stopRecordingTimer()
+        activeRecordingID = nil
+        recordingCancellationRequested = false
+        handleTranscriptionFailure(
+            reason: .recordingCaptureTimedOut,
+            message: "Recording did not start: the audio system is not responding"
+        )
+    }
+
     private func handleProcessingTimeout(operationID: UUID) {
         guard isCurrentProcessing(operationID) else { return }
         let metrics = activeProcessingMetrics
@@ -1034,6 +1090,15 @@ final class AppCoordinator: ObservableObject {
         processingTimeoutTask = nil
         if phase == .recordingStop, let recordingID = activeRecordingID {
             recordingIDsAwaitingLateStop.insert(recordingID)
+            if capturedRecordingAwaitingHistory == nil,
+               let entry = history.appendCaptureFailed(
+                   providerID: metrics?.providerID ?? settings.provider.rawValue,
+                   language: settings.language.isoCode,
+                   model: metrics?.modelID ?? currentTranscriptionModelID,
+                   message: "Audio capture timed out before audio was available"
+               ) {
+                captureFailureHistoryEntryIDs[recordingID] = entry.id
+            }
         }
         saveCapturedRecordingAwaitingHistory(reason: "processing timeout")
         activeProcessingID = nil
