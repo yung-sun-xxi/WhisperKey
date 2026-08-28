@@ -182,6 +182,7 @@ final class AppCoordinator: ObservableObject {
     private var capturedRecordingAwaitingHistory: CapturedRecording?
     private var lastTranscriptionRequest: TranscriptionRequest?
     var hotkeyStarted = false
+    var hasAppliedPermissionSnapshot = false
     var permissionPollTask: Task<Void, Never>?
     var workspaceActivationObserver: NSObjectProtocol?
     var onboardingWindowController: OnboardingWindowController?

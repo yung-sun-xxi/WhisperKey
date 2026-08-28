@@ -10,9 +10,22 @@ extension AppCoordinator {
     static let microphoneSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
     static let accessibilitySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
     private static let permissionLog = Logger(subsystem: "WhisperKey", category: "Permissions")
+    private static let pendingPermissionPollInterval: UInt64 = 1_000_000_000
+    private static let grantedPermissionPollInterval: UInt64 = 5_000_000_000
 
     func refreshPermissions(forceOnboarding: Bool = false) {
-        let snapshot = PermissionState.current()
+        apply(PermissionState.current(), forceOnboarding: forceOnboarding)
+    }
+
+    func refreshPermissionsOffMainThread(forceOnboarding: Bool = false) async {
+        let snapshot = await PermissionState.currentDetached()
+        apply(snapshot, forceOnboarding: forceOnboarding)
+    }
+
+    private func apply(_ snapshot: PermissionState, forceOnboarding: Bool) {
+        guard forceOnboarding || !hasAppliedPermissionSnapshot || snapshot != permissions else { return }
+
+        hasAppliedPermissionSnapshot = true
         permissions = snapshot
 
         if snapshot.allGranted {
@@ -69,8 +82,11 @@ extension AppCoordinator {
     func startPermissionPolling() {
         permissionPollTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                self?.refreshPermissions()
+                let interval = self?.permissions.allGranted == true
+                    ? Self.grantedPermissionPollInterval
+                    : Self.pendingPermissionPollInterval
+                try? await Task.sleep(nanoseconds: interval)
+                await self?.refreshPermissionsOffMainThread()
             }
         }
     }

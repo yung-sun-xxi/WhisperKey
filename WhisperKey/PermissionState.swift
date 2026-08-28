@@ -1,7 +1,7 @@
 import ApplicationServices
 import AVFoundation
 
-struct PermissionState: Equatable {
+nonisolated struct PermissionState: Equatable {
     var microphoneStatus: AVAuthorizationStatus
     var accessibilityGranted: Bool
 
@@ -10,6 +10,10 @@ struct PermissionState: Equatable {
             microphoneStatus: AVCaptureDevice.authorizationStatus(for: .audio),
             accessibilityGranted: AXIsProcessTrusted()
         )
+    }
+
+    static func currentDetached() async -> PermissionState {
+        await Task.detached(priority: .utility) { PermissionState.current() }.value
     }
 
     var microphoneGranted: Bool {
