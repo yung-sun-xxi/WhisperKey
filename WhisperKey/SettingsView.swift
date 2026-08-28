@@ -479,7 +479,7 @@ private struct UsageSummaryRow: View {
         guard let cost = summary.estimatedCost, let currency = summary.currency else {
             return nil
         }
-        return "~\(UsageLineFormatter.compactCostLabel(cost, currency: currency))"
+        return UsageLineFormatter.compactApproximateCostLabel(cost, currency: currency)
     }
 }
 
@@ -578,7 +578,7 @@ enum UsageLineFormatter {
         let time = audioDurationLabel(summary.audioDurationSeconds)
         var parts: [String] = ["\(words) words", time]
         if let cost = summary.estimatedCost, let currency = summary.currency {
-            parts.append("~\(costLabel(cost, currency: currency))")
+            parts.append(approximateCostLabel(cost, currency: currency))
         }
         return parts.joined(separator: " · ")
     }
@@ -628,6 +628,19 @@ enum UsageLineFormatter {
         default:
             return String(format: "%.2f %@", amount, currency.uppercased())
         }
+    }
+
+    static func approximateCostLabel(_ amount: Double, currency: String) -> String {
+        approximated(costLabel(amount, currency: currency))
+    }
+
+    static func compactApproximateCostLabel(_ amount: Double, currency: String) -> String {
+        approximated(compactCostLabel(amount, currency: currency))
+    }
+
+    /// "<$0.01" already states an upper bound, so the "~" would be redundant.
+    private static func approximated(_ label: String) -> String {
+        label.hasPrefix("<") ? label : "~\(label)"
     }
 
     static func compactCostLabel(_ amount: Double, currency: String) -> String {
