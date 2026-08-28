@@ -6,6 +6,7 @@ public enum HistoryEntryStatus: String, Codable, Equatable, Sendable {
     case pendingRecognition
     case noSpeechDetected
     case silentAudio
+    case captureFailed
 }
 
 public enum HistoryAudioError: Error, Equatable {
@@ -41,7 +42,7 @@ public struct HistoryEntry: Codable, Equatable, Sendable, Identifiable {
         switch status {
         case .pendingRecognition, .noSpeechDetected:
             audioFileName != nil
-        case .recognized, .silentAudio:
+        case .recognized, .silentAudio, .captureFailed:
             false
         }
     }
@@ -395,6 +396,32 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         return entry
     }
 
+    /// Records a failed microphone capture when no audio was available to save or retry.
+    @discardableResult
+    public func appendCaptureFailed(
+        providerID: String,
+        language: String?,
+        model: String?,
+        message: String,
+        now: Date = Date(),
+        id: UUID = UUID()
+    ) -> HistoryEntry? {
+        guard maxEntries > 0 else { return nil }
+        let entry = HistoryEntry(
+            id: id,
+            text: message,
+            createdAt: now,
+            providerID: providerID,
+            language: language,
+            wordCount: 0,
+            model: model,
+            status: .captureFailed
+        )
+        let updated = Self.applyMax(entries: [entry] + entries, max: maxEntries)
+        guard applyAndPersist(updated) else { return nil }
+        return entry
+    }
+
     @discardableResult
     public func markRecognized(
         id: UUID,
@@ -485,6 +512,12 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
     public func hasAudio(for entry: HistoryEntry) -> Bool {
         guard let fileName = entry.audioFileName else { return false }
         return FileManager.default.fileExists(atPath: audioDirectory.appendingPathComponent(fileName).path)
+    }
+
+    @discardableResult
+    public func remove(id: UUID) -> Bool {
+        guard entries.contains(where: { $0.id == id }) else { return false }
+        return applyAndPersist(entries.filter { $0.id != id })
     }
 
     public func usageSummaryForToday(now: Date = Date(), calendar: Calendar = .current) -> HistoryUsageSummary {

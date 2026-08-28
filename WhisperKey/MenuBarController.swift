@@ -54,6 +54,9 @@ final class MenuBarController: NSObject {
         coordinator.closeMenuBarPopoverHandler = { [weak self] in
             self?.closePopover()
         }
+        coordinator.setToastAnchorProvider { [weak self] in
+            self?.statusIconScreenFrame()
+        }
 
         prewarmSettingsWindow()
         coordinator.scheduleWelcomePresentationAfterLaunch()
@@ -256,6 +259,16 @@ final class MenuBarController: NSObject {
         return buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
     }
 
+    private func statusIconScreenFrame() -> NSRect? {
+        guard let button = statusItem.button,
+              let buttonWindow = button.window
+        else { return nil }
+
+        button.layoutSubtreeIfNeeded()
+        let iconFrameInWindow = statusIconView.convert(statusIconView.bounds, to: nil)
+        return buttonWindow.convertToScreen(iconFrameInWindow)
+    }
+
     private func observeCoordinator() {
         coordinator.objectWillChange
             .sink { [weak self] _ in
@@ -290,6 +303,11 @@ final class MenuBarController: NSObject {
         statusIconView.image = Self.makeMenuBarImage()
 
         switch coordinator.state {
+        case .starting:
+            hideProcessingIndicator()
+            statusTimerLabel.isHidden = true
+            button.toolTip = "Starting microphone..."
+            stopBlinkTimer(resetBlink: true)
         case .recording:
             hideProcessingIndicator()
             statusTimerLabel.stringValue = coordinator.recordingTimerText

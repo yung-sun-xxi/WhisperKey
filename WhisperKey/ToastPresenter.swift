@@ -9,6 +9,11 @@ final class ToastPresenter {
 
     private var window: ToastWindow?
     private var dismissTask: Task<Void, Never>?
+    private var anchorProvider: (() -> NSRect?)?
+
+    func setAnchorProvider(_ provider: @escaping () -> NSRect?) {
+        anchorProvider = provider
+    }
 
     func show(content: ToastContent, onAction: @escaping () -> Void) {
         dismissTask?.cancel()
@@ -18,8 +23,11 @@ final class ToastPresenter {
             window = nil
         }
 
+        let anchor = anchorProvider?()
+
         let panel = ToastWindow(
             content: content,
+            anchor: anchor,
             onAction: { [weak self] in
                 guard let self else { return }
                 self.dismiss(animated: true)
@@ -30,7 +38,7 @@ final class ToastPresenter {
             }
         )
         window = panel
-        panel.fadeIn(duration: Self.fadeDuration)
+        panel.fadeIn(duration: Self.fadeDuration, anchor: anchor)
 
         let panelRef = panel
         dismissTask = Task { @MainActor [weak self] in

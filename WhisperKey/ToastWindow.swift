@@ -8,6 +8,7 @@ final class ToastWindow: NSPanel {
 
     init(
         content: ToastContent,
+        anchor: NSRect?,
         onAction: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -30,7 +31,12 @@ final class ToastWindow: NSPanel {
         isOpaque = false
         ignoresMouseEvents = false
 
-        let view = ToastView(content: content, onAction: onAction, onDismiss: onDismiss)
+        let view = ToastView(
+            content: content,
+            pointerCenterX: Self.pointerCenterX(for: anchor),
+            onAction: onAction,
+            onDismiss: onDismiss
+        )
         let hosting = NSHostingView(rootView: view)
         hosting.translatesAutoresizingMaskIntoConstraints = false
         let container = NSView(frame: contentRect(forFrameRect: frame))
@@ -56,7 +62,12 @@ final class ToastWindow: NSPanel {
         setContentSize(NSSize(width: ToastView.contentWidth, height: max(56, fitting.height)))
     }
 
-    func positionTopRight() {
+    func position(anchor: NSRect?) {
+        if let anchor {
+            positionBelowMenuBarItem(anchor)
+            return
+        }
+
         guard let screen = NSScreen.main else { return }
         let visible = screen.visibleFrame
         let size = frame.size
@@ -67,9 +78,43 @@ final class ToastWindow: NSPanel {
         setFrameOrigin(origin)
     }
 
-    func fadeIn(duration: TimeInterval) {
+    private func positionBelowMenuBarItem(_ anchor: NSRect) {
+        guard let origin = Self.originBelowMenuBarItem(anchor, size: frame.size) else { return }
+        setFrameOrigin(origin)
+    }
+
+    private static func pointerCenterX(for anchor: NSRect?) -> CGFloat? {
+        guard let anchor,
+              let origin = originBelowMenuBarItem(
+                  anchor,
+                  size: NSSize(width: ToastView.contentWidth, height: 0)
+              )
+        else { return nil }
+
+        return min(
+            max(anchor.midX - origin.x, 26),
+            ToastView.contentWidth - 26
+        )
+    }
+
+    private static func originBelowMenuBarItem(_ anchor: NSRect, size: NSSize) -> NSPoint? {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else {
+            return nil
+        }
+
+        let visible = screen.visibleFrame
+        let horizontalInset: CGFloat = 6
+        let preferredPointerCenterX: CGFloat = 46
+        let x = min(
+            max(anchor.midX - preferredPointerCenterX, visible.minX + horizontalInset),
+            visible.maxX - size.width - horizontalInset
+        )
+        return NSPoint(x: x, y: visible.maxY - size.height)
+    }
+
+    func fadeIn(duration: TimeInterval, anchor: NSRect?) {
         alphaValue = 0
-        positionTopRight()
+        position(anchor: anchor)
         orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = duration

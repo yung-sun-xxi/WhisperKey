@@ -157,6 +157,29 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertFalse(silent.hasUsageMetadata)
     }
 
+    func testCaptureFailurePersistsWithoutAudioAndCannotRetry() throws {
+        let url = makeURL()
+        let store = HistoryStore(url: url, maxEntries: 5)
+
+        let failed = try XCTUnwrap(store.appendCaptureFailed(
+            providerID: "openai",
+            language: "en",
+            model: "gpt-4o-mini-transcribe",
+            message: "Audio capture timed out before audio was available",
+            now: Date(timeIntervalSince1970: 100)
+        ))
+
+        XCTAssertEqual(failed.status, .captureFailed)
+        XCTAssertEqual(failed.text, "Audio capture timed out before audio was available")
+        XCTAssertFalse(failed.canRetryRecognition)
+        XCTAssertFalse(store.hasAudio(for: failed))
+
+        let reloaded = HistoryStore(url: url, maxEntries: 5)
+        XCTAssertEqual(reloaded.entries, [failed])
+        XCTAssertTrue(reloaded.remove(id: failed.id))
+        XCTAssertTrue(reloaded.entries.isEmpty)
+    }
+
     // MARK: - Persistence round-trip
 
     func testEntriesSurviveReload() throws {
