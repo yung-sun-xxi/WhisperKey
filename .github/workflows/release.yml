@@ -50,7 +50,10 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             MODE="${{ github.event.inputs.release_mode }}"
           else
-            MODE="developer-id"
+            # Temporary: notarization is unavailable on the signing account, so
+            # a tag build cannot complete in developer-id mode. Restore
+            # 'developer-id' here once notarization works again.
+            MODE="ad-hoc"
           fi
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "Using $MODE distribution mode"

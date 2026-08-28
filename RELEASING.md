@@ -204,6 +204,12 @@ The job unlocks the dedicated keychain, builds/signs/notarizes via
 `release.sh` (with `WHISPERKEY_SKIP_INSTALL=1`, so it does not touch
 `/Applications`), and attaches the DMG to the release.
 
+A tag build currently uses ad-hoc mode, because notarization is unavailable on
+the signing account: a `developer-id` tag build fails before it reaches Apple.
+Dispatching manually still accepts either mode through the `release_mode`
+input. Once notarization works again, change the tag default back to
+`developer-id` in `.github/workflows/release.yml`.
+
 ## If Notarization Fails
 
 Pull the human-readable log:
