@@ -631,16 +631,18 @@ enum UsageLineFormatter {
     }
 
     static func approximateCostLabel(_ amount: Double, currency: String) -> String {
-        approximated(costLabel(amount, currency: currency))
+        approximated(costLabel(amount, currency: currency), amount: amount)
     }
 
     static func compactApproximateCostLabel(_ amount: Double, currency: String) -> String {
-        approximated(compactCostLabel(amount, currency: currency))
+        approximated(compactCostLabel(amount, currency: currency), amount: amount)
     }
 
-    /// "<$0.01" already states an upper bound, so the "~" would be redundant.
-    private static func approximated(_ label: String) -> String {
-        label.hasPrefix("<") ? label : "~\(label)"
+    /// "<$0.01" already states an upper bound and a zero cost is exact, so in
+    /// both cases the "~" would be redundant.
+    private static func approximated(_ label: String, amount: Double) -> String {
+        guard amount > 0, !label.hasPrefix("<") else { return label }
+        return "~\(label)"
     }
 
     static func compactCostLabel(_ amount: Double, currency: String) -> String {
