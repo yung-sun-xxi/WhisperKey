@@ -23,22 +23,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Swift package build & test
+      - name: Build and test
         shell: bash
-        run: |
-          set -euo pipefail
-          swift build
-          swift test
-
-      - name: Xcode app build
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project WhisperKey.xcodeproj \
-            -scheme WhisperKey \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/whisperkey_derived" \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+        run: scripts/verify.sh

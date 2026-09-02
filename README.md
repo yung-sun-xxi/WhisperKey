@@ -77,30 +77,15 @@ audio.
 
 ## Development
 
-Build the Swift package targets:
+Build the package, run its tests, and build the macOS app:
 
 ```sh
-swift build
+scripts/verify.sh
 ```
 
-Run package tests:
-
-```sh
-swift test
-```
-
-Build the macOS app with signing disabled:
-
-```sh
-xcodebuild \
-  -project WhisperKey.xcodeproj \
-  -scheme WhisperKey \
-  -configuration Debug \
-  -destination 'platform=macOS' \
-  -derivedDataPath build/debug-dd \
-  CODE_SIGNING_ALLOWED=NO \
-  build
-```
+That script is the only place those commands live; CI runs the same one. `-t`
+runs the package tests alone, `-b` skips them, `-c` cleans the app's derived
+data first.
 
 The shared Xcode schemes run the installed Debug app when TCC-sensitive
 behavior is involved:
