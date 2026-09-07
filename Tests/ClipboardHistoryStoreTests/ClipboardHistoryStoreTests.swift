@@ -148,6 +148,140 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertEqual(store.entries.first?.capturedAt, date(5))
     }
 
+    // MARK: - Concealed entries
+
+    /// The central assertion of #91, and the only one that proves anything about the
+    /// disk: the file is read back as raw bytes and the password is not in it.
+    ///
+    /// Regression proof. An in-memory flag says nothing about what was written; this is
+    /// what fails if the persistence filter is removed or inverted.
+    func testAConcealedEntryIsInTheListButNotInTheFile() throws {
+        let url = makeURL()
+        let store = ClipboardHistoryStore(url: url)
+        store.record(text: "an ordinary copy", origin: .otherApplication, now: date(1))
+        store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(2))
+
+        XCTAssertEqual(store.entries.map(\.text), ["hunter2", "an ordinary copy"])
+
+        let onDisk = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+        XCTAssertFalse(onDisk.contains("hunter2"), "the concealed text must not be on disk:\n\(onDisk)")
+        XCTAssertTrue(onDisk.contains("an ordinary copy"))
+    }
+
+    /// Lowering the cap rewrites the file, and that write is as capable of leaking a
+    /// concealed entry as any other. `setMaxEntries` is not called on the clipboard store
+    /// from the app today, but the entry-count setting is one obvious wire away from it,
+    /// and without this test that wiring would put passwords on disk silently.
+    func testLoweringTheCapDoesNotWriteConcealedEntriesToTheFile() throws {
+        let url = makeURL()
+        let store = ClipboardHistoryStore(url: url, maxEntries: 5)
+        store.record(text: "oldest", origin: .otherApplication, now: date(1))
+        store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(2))
+        store.record(text: "newest", origin: .otherApplication, now: date(3))
+
+        store.setMaxEntries(2)
+
+        XCTAssertEqual(store.entries.map(\.text), ["newest", "hunter2"])
+        let onDisk = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+        XCTAssertFalse(onDisk.contains("hunter2"), "the concealed text must not be on disk:\n\(onDisk)")
+        XCTAssertTrue(onDisk.contains("newest"))
+    }
+
+    /// Coverage for the round trip the user actually experiences: quit, relaunch, the
+    /// password is gone and everything else is still there.
+    func testARestartDropsConcealedEntriesAndKeepsTheRest() {
+        let url = makeURL()
+        let first = ClipboardHistoryStore(url: url)
+        first.record(text: "keep me", origin: .otherApplication, now: date(1))
+        first.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(2))
+        first.record(text: "keep me too", origin: .whisperKey, now: date(3))
+
+        let reloaded = ClipboardHistoryStore(url: url)
+        XCTAssertEqual(reloaded.entries.map(\.text), ["keep me too", "keep me"])
+        XCTAssertEqual(reloaded.entries.map(\.isConcealed), [false, false])
+    }
+
+    /// A concealed entry that was never written must not be re-written by a *later*
+    /// ordinary copy either. The filter is on every write, not only on the one that
+    /// records the password.
+    func testALaterOrdinaryCopyDoesNotDragTheConcealedEntryOntoDisk() throws {
+        let url = makeURL()
+        let store = ClipboardHistoryStore(url: url)
+        store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(1))
+        store.record(text: "afterwards", origin: .otherApplication, now: date(2))
+        store.setMaxEntries(5)
+
+        let onDisk = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+        XCTAssertFalse(onDisk.contains("hunter2"), "the concealed text must not be on disk:\n\(onDisk)")
+        XCTAssertTrue(onDisk.contains("afterwards"))
+    }
+
+    /// De-duplication compares text and nothing else. A concealed entry is not a
+    /// separate lane: copying the same password twice in a row still makes one entry,
+    /// and an ordinary copy of the same text right after it is still a repeat.
+    func testDeduplicationTreatsConcealedEntriesLikeAnyOther() {
+        let store = ClipboardHistoryStore(url: makeURL())
+        XCTAssertNotNil(store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(1)))
+        XCTAssertNil(store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(2)))
+        XCTAssertNil(store.record(text: "hunter2", origin: .otherApplication, now: date(3)))
+
+        XCTAssertEqual(store.entries.map(\.text), ["hunter2"])
+        XCTAssertEqual(store.entries.first?.isConcealed, true)
+    }
+
+    /// Nor does a concealed entry get a free slot: it counts against the cap and pushes
+    /// the oldest entry out exactly as an ordinary copy would.
+    func testConcealedEntriesCountAgainstTheCap() {
+        let store = ClipboardHistoryStore(url: makeURL(), maxEntries: 3)
+        store.record(text: "one", origin: .otherApplication, now: date(1))
+        store.record(text: "two", origin: .otherApplication, now: date(2))
+        store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(3))
+        store.record(text: "four", origin: .otherApplication, now: date(4))
+
+        XCTAssertEqual(store.entries.map(\.text), ["four", "hunter2", "two"])
+    }
+
+    func testClearRemovesConcealedEntriesFromTheListToo() {
+        let store = ClipboardHistoryStore(url: makeURL())
+        store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(1))
+        store.clear()
+
+        XCTAssertTrue(store.entries.isEmpty)
+    }
+
+    /// A store file written before the concealed field existed still loads, and nothing
+    /// in it is treated as concealed — which also means a later write keeps it, rather
+    /// than silently filtering the whole legacy file off the disk.
+    func testStoreFileWrittenBeforeConcealedExistedStillLoads() throws {
+        let url = makeURL()
+        let legacy = """
+        [
+          {
+            "id" : "9F1B3C4D-0000-4000-8000-00000000ABCD",
+            "text" : "copied last week",
+            "capturedAt" : "1970-01-01T00:00:05Z",
+            "origin" : "whisperKey"
+          }
+        ]
+        """
+        try Data(legacy.utf8).write(to: url)
+
+        let store = ClipboardHistoryStore(url: url)
+        XCTAssertEqual(store.entries.map(\.text), ["copied last week"])
+        XCTAssertEqual(store.entries.first?.isConcealed, false)
+
+        store.record(text: "something new", origin: .otherApplication, now: date(9))
+        let onDisk = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+        XCTAssertTrue(onDisk.contains("copied last week"), "the legacy entry must survive a later write:\n\(onDisk)")
+    }
+
+    func testAnOrdinaryEntryComesBackNotConcealed() {
+        let url = makeURL()
+        ClipboardHistoryStore(url: url).record(text: "ordinary", origin: .otherApplication, now: date(1))
+
+        XCTAssertEqual(ClipboardHistoryStore(url: url).entries.map(\.isConcealed), [false])
+    }
+
     func testLoadedEntriesBeyondTheCapAreTrimmedOnInit() throws {
         let url = makeURL()
         let seed = ClipboardHistoryStore(url: url, maxEntries: 10)

@@ -42,9 +42,13 @@ public final class SystemClipboardReader: ClipboardReading {
 public final class ClipboardMonitor {
     /// The convention password managers write so clipboard managers skip their item. It
     /// is a convention, not a guarantee.
+    ///
+    /// An item carrying it is recorded like any other — the popup exists so that a
+    /// password copied a minute ago is still reachable. The marker travels with the entry
+    /// instead, and stops it at the edge of the file: see `ClipboardHistoryStore`.
     public static let concealedTypeIdentifier = "org.nspasteboard.ConcealedType"
 
-    public typealias Capture = (String, ClipboardEntryOrigin) -> Void
+    public typealias Capture = (String, ClipboardEntryOrigin, Bool) -> Void
 
     private let pasteboard: ClipboardReading
     private let pollInterval: TimeInterval
@@ -104,7 +108,7 @@ public final class ClipboardMonitor {
         isSuspended = false
     }
 
-    /// A monitor that records everything it captures into `store`.
+    /// A monitor that records everything it captures into `store`, concealment included.
     ///
     /// This is the join between the two halves of the target, and it lives here rather
     /// than at the call site so it is covered by a test instead of by eye.
@@ -113,8 +117,8 @@ public final class ClipboardMonitor {
         pasteboard: ClipboardReading = SystemClipboardReader(),
         pollInterval: TimeInterval = 0.5
     ) -> ClipboardMonitor {
-        ClipboardMonitor(pasteboard: pasteboard, pollInterval: pollInterval) { [weak store] text, origin in
-            store?.record(text: text, origin: origin)
+        ClipboardMonitor(pasteboard: pasteboard, pollInterval: pollInterval) { [weak store] text, origin, isConcealed in
+            store?.record(text: text, origin: origin, isConcealed: isConcealed)
         }
     }
 
@@ -127,10 +131,9 @@ public final class ClipboardMonitor {
         lastChangeCount = current
 
         let content = pasteboard.read()
-        // The convention password managers write. Skipped, and the counter still advances,
-        // so the next ordinary copy is not swallowed with it.
-        guard !content.types.contains(Self.concealedTypeIdentifier) else { return }
         guard let string = content.string else { return }
-        onCapture(string, ClipboardOriginMarker.origin(forTypes: content.types))
+        // Recorded, not skipped — but flagged, so the store keeps it out of the file.
+        let isConcealed = content.types.contains(Self.concealedTypeIdentifier)
+        onCapture(string, ClipboardOriginMarker.origin(forTypes: content.types), isConcealed)
     }
 }

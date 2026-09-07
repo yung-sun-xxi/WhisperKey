@@ -17,17 +17,24 @@ public struct ClipboardEntry: Codable, Equatable, Sendable, Identifiable {
     public let text: String
     public let capturedAt: Date
     public let origin: ClipboardEntryOrigin
+    /// The pasteboard item carried the password managers' concealed marker.
+    ///
+    /// Recorded like any other entry and shown in the popup like any other entry — but
+    /// never written to disk. See `ClipboardHistoryStore.persistable(_:)`.
+    public let isConcealed: Bool
 
     public init(
         id: UUID = UUID(),
         text: String,
         capturedAt: Date,
-        origin: ClipboardEntryOrigin = .otherApplication
+        origin: ClipboardEntryOrigin = .otherApplication,
+        isConcealed: Bool = false
     ) {
         self.id = id
         self.text = text
         self.capturedAt = capturedAt
         self.origin = origin
+        self.isConcealed = isConcealed
     }
 
     /// A single line short enough for a popup row.
@@ -50,6 +57,7 @@ public struct ClipboardEntry: Codable, Equatable, Sendable, Identifiable {
         case text
         case capturedAt
         case origin
+        case isConcealed
     }
 
     public init(from decoder: Decoder) throws {
@@ -60,6 +68,10 @@ public struct ClipboardEntry: Codable, Equatable, Sendable, Identifiable {
         // Present-if-absent with a default, so a file written before the origin field
         // existed still loads. Anything from back then was a hand copy.
         self.origin = try container.decodeIfPresent(ClipboardEntryOrigin.self, forKey: .origin) ?? .otherApplication
+        // Same rule for the concealed flag. Nothing written before this field existed was
+        // concealed — a concealed entry could not have reached the file in the first
+        // place — so absent means `false`.
+        self.isConcealed = try container.decodeIfPresent(Bool.self, forKey: .isConcealed) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -68,6 +80,7 @@ public struct ClipboardEntry: Codable, Equatable, Sendable, Identifiable {
         try container.encode(text, forKey: .text)
         try container.encode(capturedAt, forKey: .capturedAt)
         try container.encode(origin, forKey: .origin)
+        try container.encode(isConcealed, forKey: .isConcealed)
     }
 }
 
