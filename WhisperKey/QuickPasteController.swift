@@ -1,16 +1,18 @@
 import AppKit
+import ClipboardHistoryStore
 import Foundation
 import HotkeyEngine
 import PasteEngine
 import os
 
-/// Tracer bullet for the quick-paste popup (#79): hold the trigger, a non-activating
-/// panel appears under the cursor showing the current clipboard text, release and that
-/// text is pasted where the caret still is.
+/// The quick-paste popup: hold the trigger, a non-activating panel appears under the
+/// cursor listing the most recent clipboard entries, release and the newest is pasted
+/// where the caret still is.
 ///
-/// Everything here is behind a stored boolean, default off, with no UI. `makeIfEnabled`
-/// returns `nil` when the flag is off, so with the feature disabled nothing is
-/// constructed, no event tap exists and no key is intercepted for it.
+/// Everything here is behind a stored boolean, default off, with no UI. `AppCoordinator`
+/// consults `isEnabled` before it builds the store, the monitor or this controller, so
+/// with the feature disabled nothing is constructed, no watcher polls the pasteboard, no
+/// event tap exists and no key is intercepted for it.
 ///
 /// The hold timer lives here rather than in `HoldToRevealStateMachine`, which stays pure.
 @MainActor
@@ -27,11 +29,8 @@ final class QuickPasteController {
         defaults.bool(forKey: defaultsKey)
     }
 
-    /// The only way to build one. Returns `nil` when the stored flag is off.
-    static func makeIfEnabled(defaults: UserDefaults = .standard) -> QuickPasteController? {
-        guard isEnabled(defaults: defaults) else { return nil }
-        return QuickPasteController()
-    }
+    /// How many entries the panel lists. Hardcoded until the settings UI exists.
+    static let visibleEntryCount = 5
 
     private let log = Logger(subsystem: "WhisperKey", category: "QuickPaste")
     private let runner: HoldToRevealRunner
@@ -42,7 +41,16 @@ final class QuickPasteController {
     private var pendingText: String?
     private var started = false
 
-    private init() {
+    /// The history the panel renders. Filled by `ClipboardMonitor`, not read live off the
+    /// pasteboard.
+    private let store: ClipboardHistoryStore
+    /// Silenced around this controller's own clipboard swap, so the popup's temporary use
+    /// of the clipboard never lands in the history it displays.
+    private let monitor: ClipboardMonitor
+
+    init(store: ClipboardHistoryStore, monitor: ClipboardMonitor) {
+        self.store = store
+        self.monitor = monitor
         self.runner = HoldToRevealRunner(trigger: Self.trigger)
         self.machine = HoldToRevealStateMachine(holdThreshold: Self.holdThreshold)
 
@@ -134,11 +142,11 @@ final class QuickPasteController {
     }
 
     private func revealPanel() {
-        let text = NSPasteboard.general.string(forType: .string)
-        pendingText = text
+        let content = QuickPasteContent(entries: Array(store.entries.prefix(Self.visibleEntryCount)))
+        pendingText = content.committedEntry?.text
 
         hidePanel()
-        let panel = QuickPastePanel(content: QuickPasteContent(text: text))
+        let panel = QuickPastePanel(content: content)
         panel.show(at: NSEvent.mouseLocation)
         self.panel = panel
     }
@@ -151,11 +159,15 @@ final class QuickPasteController {
 
     private func paste(_ text: String?) {
         guard let text, !text.isEmpty else {
-            log.info("quick-paste committed with nothing on the clipboard")
+            log.info("quick-paste committed with an empty clipboard history")
             return
         }
 
-        Task { [outputRouter] in
+        // Silenced before the swap and re-baselined on resume afterwards. Without this the
+        // swap-and-restore — two moves of the change counter — would be recorded as two
+        // fresh copies, and the popup would pollute the very list it shows.
+        monitor.suspend()
+        Task { @MainActor [outputRouter, monitor] in
             // The existing clipboard-output path: snapshot, substitute, synthesise ⌘V,
             // restore. Reused unchanged and in the configuration that leaves the
             // clipboard as it was.
@@ -163,6 +175,7 @@ final class QuickPasteController {
                 text: text,
                 settings: TranscriptionOutputSettings(saveToClipboard: false, autoPaste: true)
             )
+            monitor.resume()
         }
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import ClipboardHistoryStore
 import Foundation
 import os
 
@@ -58,10 +59,24 @@ struct SystemTranscriptionPasteboard: TranscriptionPasteboard {
         return PasteboardSnapshot(items: snapshotItems)
     }
 
+    /// Writes the string together with WhisperKey's private origin marker.
+    ///
+    /// The marker is what lets `ClipboardMonitor` tell this write apart from a hand copy.
+    /// It has to be produced here, at the point of writing: the monitor only ever sees
+    /// that the change counter moved. It matters most in the `saveToClipboard: true`
+    /// configuration, where this runs on a path with the monitor *not* suspended, so an
+    /// unmarked transcription would be recorded as an ordinary hand copy.
     @discardableResult
     func replaceWithString(_ string: String) -> Bool {
         pasteboard.clearContents()
-        return pasteboard.setString(string, forType: .string)
+        let item = NSPasteboardItem()
+        guard item.setString(string, forType: .string) else { return false }
+        // Presence of the type is the signal; the value carries no meaning.
+        item.setString(
+            ClipboardOriginMarker.markerValue,
+            forType: NSPasteboard.PasteboardType(ClipboardOriginMarker.pasteboardType)
+        )
+        return pasteboard.writeObjects([item])
     }
 
     @discardableResult
