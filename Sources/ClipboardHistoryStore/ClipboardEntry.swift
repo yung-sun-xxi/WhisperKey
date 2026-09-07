@@ -31,13 +31,16 @@ public struct ClipboardEntry: Codable, Equatable, Sendable, Identifiable {
     }
 
     /// A single line short enough for a popup row.
+    ///
+    /// Every run of whitespace — newlines, tabs, indentation, blank lines — becomes one
+    /// space. Replacing each newline with its own space would be enough to make the text
+    /// one line, but a dictated paragraph or an indented code fragment would then arrive
+    /// as words separated by gaps, and the character budget would be spent on whitespace
+    /// the reader cannot see.
     public func preview(maxLength: Int = 80) -> String {
         let oneLine = text
-            .replacingOccurrences(of: "\r\n", with: " ")
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .replacingOccurrences(of: "\t", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+            .joined(separator: " ")
         guard oneLine.count > maxLength else { return oneLine }
         return oneLine.prefix(maxLength).trimmingCharacters(in: .whitespaces) + "…"
     }

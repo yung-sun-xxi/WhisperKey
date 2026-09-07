@@ -168,4 +168,44 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertEqual(ClipboardEntry(text: String(repeating: "x", count: 200), capturedAt: date(1)).preview(maxLength: 10),
                        "xxxxxxxxxx…")
     }
+
+    /// A dictated paragraph arrives with blank lines and indentation in it. Collapsing
+    /// each *run* of whitespace — not merely turning every newline into its own space —
+    /// is what keeps a one-line row from being mostly gaps, and is what makes the
+    /// character budget count characters the reader can actually see.
+    func testPreviewCollapsesRunsOfWhitespaceToASingleSpace() {
+        XCTAssertEqual(ClipboardEntry(text: "a\n\nb", capturedAt: date(1)).preview(), "a b")
+        XCTAssertEqual(
+            ClipboardEntry(text: "line one\n\tline two", capturedAt: date(1)).preview(),
+            "line one line two"
+        )
+        XCTAssertEqual(
+            ClipboardEntry(text: "  padded \r\n\r\n  text  ", capturedAt: date(1)).preview(),
+            "padded text"
+        )
+    }
+
+    /// The truncation boundary, from both sides. An entry at exactly the limit is shown
+    /// whole; one character more is cut and marked.
+    func testPreviewTruncationBoundary() {
+        let atLimit = ClipboardEntry(text: String(repeating: "y", count: 10), capturedAt: date(1))
+        XCTAssertEqual(atLimit.preview(maxLength: 10), String(repeating: "y", count: 10))
+
+        let overLimit = ClipboardEntry(text: String(repeating: "y", count: 11), capturedAt: date(1))
+        XCTAssertEqual(overLimit.preview(maxLength: 10), String(repeating: "y", count: 10) + "…")
+    }
+
+    /// An entry shorter than the limit comes back untouched — no ellipsis, no padding.
+    func testPreviewLeavesShortEntriesAlone() {
+        let entry = ClipboardEntry(text: "short", capturedAt: date(1))
+        XCTAssertEqual(entry.preview(maxLength: 80), "short")
+        XCTAssertFalse(entry.preview(maxLength: 80).hasSuffix("…"))
+    }
+
+    /// The cut lands between words often enough that a trailing space before the ellipsis
+    /// is the common case, and " …" reads as a gap rather than as a continuation.
+    func testPreviewDoesNotLeaveASpaceBeforeTheEllipsis() {
+        let entry = ClipboardEntry(text: "abcde fghij klmno", capturedAt: date(1))
+        XCTAssertEqual(entry.preview(maxLength: 6), "abcde…")
+    }
 }

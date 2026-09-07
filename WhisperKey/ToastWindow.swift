@@ -113,14 +113,8 @@ final class ToastWindow: NSPanel {
     }
 
     func fadeIn(duration: TimeInterval, anchor: NSRect?) {
-        alphaValue = 0
         position(anchor: anchor)
-        orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = duration
-            context.allowsImplicitAnimation = true
-            self.animator().alphaValue = 1.0
-        }
+        fadeInOrderingFront(duration: duration)
     }
 
     func fadeOut(duration: TimeInterval, completion: @escaping @Sendable () -> Void) {
