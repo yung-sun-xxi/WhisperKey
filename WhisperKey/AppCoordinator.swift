@@ -248,6 +248,10 @@ final class AppCoordinator: ObservableObject {
             Task { @MainActor in self.handle(output) }
         }
 
+        quickPaste.onNotice = { [weak self] notice in
+            self?.showQuickPasteNotice(notice)
+        }
+
         observeSettings()
         observeWorkspaceActivation()
         startPermissionPolling()
@@ -1255,6 +1259,23 @@ final class AppCoordinator: ObservableObject {
                 break
             }
         }
+    }
+
+    /// The quick-paste gesture's only voice.
+    ///
+    /// Deliberately not `handleTranscriptionFailure`: that sets `state = .error`, which
+    /// paints the menu bar, and plays the error sound. Neither belongs here. The gesture
+    /// is silent by contract — nothing on open, on choose or on cancel — and a refused
+    /// paste is a *choice* the user made, not a transcription that failed.
+    ///
+    /// No action button either: there is nothing for the user to press. The remedy is to
+    /// put the caret somewhere that is not a password field and repeat the gesture.
+    private func showQuickPasteNotice(_ notice: QuickPasteNotice) {
+        log.info("quick-paste toast notice=\(String(describing: notice), privacy: .public)")
+        toastPresenter.show(
+            content: ToastContent(message: notice.message, action: .none, style: .warning),
+            onAction: {}
+        )
     }
 
     private func playSound(_ event: SoundPlayer.Event) {

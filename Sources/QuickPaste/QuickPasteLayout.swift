@@ -44,6 +44,11 @@ public enum QuickPasteLayout {
     /// How far left of the cursor the panel's leading edge sits, so the pointer starts
     /// just inside the panel's width rather than on its corner.
     public static let cursorInsetX: CGFloat = 16
+    /// Characters of an entry a row shows. Generous rather than tight: the row itself is
+    /// one line with tail truncation, so this is the point at which the *text* is cut,
+    /// and the row cuts again if even this does not fit the width. A short budget would
+    /// throw away characters the row had room for.
+    public static let previewLength = 80
 
     /// Height of everything above the first row: the outer padding and the header.
     static var headerBand: CGFloat { verticalPadding + headerHeight + headerBottomSpacing }

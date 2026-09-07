@@ -81,6 +81,14 @@ final class QuickPasteController: QuickPasteGestureControlling {
         }
     }
 
+    /// Called when the gesture has something to say — in practice, when the paste was
+    /// refused. Set by `AppCoordinator`, which owns the toast.
+    ///
+    /// A closure rather than a `ToastPresenter` held here, because *whether* to speak is
+    /// `QuickPasteFeedback.notice(for:)` in the package, and *how* to speak is the
+    /// application's one toast. This object is left with neither decision.
+    var onNotice: ((QuickPasteNotice) -> Void)?
+
     var isRunning: Bool { started }
 
     /// Starts the event tap. Requires Accessibility permission.
@@ -293,15 +301,28 @@ final class QuickPasteController: QuickPasteGestureControlling {
         // swap-and-restore — two moves of the change counter — would be recorded as two
         // fresh copies, and the popup would pollute the very list it shows.
         monitor.suspend()
-        Task { @MainActor [outputRouter, monitor] in
+        Task { @MainActor [weak self, outputRouter, monitor] in
             // The existing clipboard-output path: snapshot, substitute, synthesise ⌘V,
             // restore. Reused unchanged and in the configuration that leaves the
             // clipboard as it was.
-            await outputRouter.deliver(
+            let result = await outputRouter.deliver(
                 text: text,
                 settings: TranscriptionOutputSettings(saveToClipboard: false, autoPaste: true)
             )
             monitor.resume()
+            self?.report(result)
         }
+    }
+
+    /// Turns the outcome of the paste into a word to the user, or into silence.
+    ///
+    /// The case that matters is `PasteEngine` declining because a secure field is
+    /// focused: the router restores the clipboard afterwards, so without this the user's
+    /// deliberate choice produces nothing at all — nothing pasted, and nothing left on
+    /// the clipboard to paste by hand.
+    private func report(_ result: TranscriptionOutputResult) {
+        guard let notice = QuickPasteFeedback.notice(for: result) else { return }
+        log.info("quick-paste notice=\(String(describing: notice), privacy: .public)")
+        onNotice?(notice)
     }
 }
