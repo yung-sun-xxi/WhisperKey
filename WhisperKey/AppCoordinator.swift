@@ -10,6 +10,7 @@ import TranscriptionProvider
 import PasteEngine
 import ErrorToast
 import HistoryStore
+import ClipboardHistoryStore
 import LoginItem
 import UsageStatsStore
 
@@ -157,8 +158,14 @@ final class AppCoordinator: ObservableObject {
     let settings: SettingsStore
     let hotkey: HotkeyEngineRunner
     /// `nil` whenever the hidden quick-paste flag is off — nothing is constructed, so no
-    /// second event tap exists and no key is intercepted for that feature.
+    /// second event tap exists, no key is intercepted and no watcher polls the pasteboard
+    /// for that feature.
     let quickPaste: QuickPasteController?
+    /// The system-clipboard history behind the quick-paste popup. Deliberately unrelated
+    /// to `history`, which is the transcription journal; the two meet only through the
+    /// system clipboard.
+    let clipboardHistory: ClipboardHistoryStore?
+    private let clipboardMonitor: ClipboardMonitor?
     let history: HistoryStore
     let usageStats: UsageStatsStore
     private let loginItem: LoginItemController
@@ -208,7 +215,21 @@ final class AppCoordinator: ObservableObject {
         let resolvedUsageStats = usageStats ?? UsageStatsStore()
         self.usageStats = resolvedUsageStats
         self.hotkey = HotkeyEngineRunner(config: resolvedSettings.hotkeyConfig)
-        self.quickPaste = QuickPasteController.makeIfEnabled()
+        if QuickPasteController.isEnabled() {
+            let clipboardHistory = ClipboardHistoryStore()
+            // The one line that connects the pasteboard watcher to the stored history.
+            let clipboardMonitor = ClipboardMonitor.recording(into: clipboardHistory)
+            self.clipboardHistory = clipboardHistory
+            self.clipboardMonitor = clipboardMonitor
+            self.quickPaste = QuickPasteController(store: clipboardHistory, monitor: clipboardMonitor)
+            // The watcher runs whenever the feature is enabled. It needs no Accessibility
+            // permission, unlike the event tap that `quickPaste.start()` creates.
+            clipboardMonitor.start()
+        } else {
+            self.clipboardHistory = nil
+            self.clipboardMonitor = nil
+            self.quickPaste = nil
+        }
         let resolvedLoginService = loginItemService ?? SMAppServiceLoginItem()
         self.loginItem = LoginItemController(service: resolvedLoginService)
         self.launchAtLoginEnabled = self.loginItem.isEnabled
@@ -228,6 +249,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     deinit {
+        clipboardMonitor?.stop()
         permissionPollTask?.cancel()
         recordingTimerTask?.cancel()
         processingTask?.cancel()

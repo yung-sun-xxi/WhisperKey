@@ -4,6 +4,7 @@
 @_exported import TranscriptionProvider
 @_exported import PasteEngine
 @_exported import HistoryStore
+@_exported import ClipboardHistoryStore
 @_exported import KeychainStore
 @_exported import SettingsStore
 @_exported import UsageStatsStore

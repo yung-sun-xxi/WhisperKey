@@ -1,25 +1,45 @@
 import AppKit
+import ClipboardHistoryStore
 import SwiftUI
 
-/// What the quick-paste panel shows. One entry for now — the tracer bullet carries a
-/// single clipboard string, not a history.
+/// What the quick-paste panel shows: the most recent clipboard entries, newest first.
+///
+/// The entries come from `ClipboardHistoryStore`, not from a live read of the pasteboard.
+/// Picking one of them by pointing is the next slice; this one still commits the newest.
 struct QuickPasteContent: Equatable {
-    let text: String?
+    /// Newest first, already trimmed to what the panel should display.
+    let entries: [ClipboardEntry]
 
-    var preview: String {
-        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "Clipboard is empty"
+    var isEmpty: Bool { entries.isEmpty }
+
+    /// The entry the gesture commits. Selection is unchanged from the previous slice —
+    /// releasing takes the newest entry, which is what the clipboard itself held.
+    var committedEntry: ClipboardEntry? { entries.first }
+}
+
+struct QuickPasteRow: View {
+    let entry: ClipboardEntry
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: entry.origin == .whisperKey ? "waveform" : "doc.on.clipboard")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(entry.preview(maxLength: 80))
+                .font(.system(size: 12))
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
         }
-        let collapsed = text
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return collapsed
-    }
-
-    var hasText: Bool {
-        guard let text else { return false }
-        return !text.isEmpty
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.22) : Color.clear)
+        )
     }
 }
 
@@ -29,18 +49,25 @@ struct QuickPasteView: View {
     let content: QuickPasteContent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text("Clipboard")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
-            Text(content.preview)
-                .font(.system(size: 12))
-                .foregroundStyle(content.hasText ? Color.primary : Color.secondary)
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 2)
+            if content.isEmpty {
+                Text("Clipboard history is empty")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+            } else {
+                ForEach(content.entries) { entry in
+                    QuickPasteRow(entry: entry, isSelected: entry.id == content.committedEntry?.id)
+                }
+            }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 4)
         .padding(.vertical, 9)
         .frame(width: Self.contentWidth, alignment: .leading)
         .background(
