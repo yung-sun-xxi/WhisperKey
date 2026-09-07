@@ -100,6 +100,109 @@ final class PasteEngineDecisionTests: XCTestCase {
     }
 }
 
+/// Refusing a secure text field is a property of the *caller*, not of the engine.
+///
+/// The transcription auto-paste fires on its own when a transcription lands, so a caret
+/// that happens to sit in a password field must not receive a dictated sentence. The
+/// quick-paste popup is the opposite: the user held a key, looked at a list, pointed at
+/// one entry and released, and pasting a password is one of the things he wants it for.
+///
+/// A caller that says nothing gets the refusal. That default is what keeps every existing
+/// call site — the transcription path included — behaving exactly as it did.
+final class PasteEngineSecureFieldPolicyTests: XCTestCase {
+    private let secureField = AXFocusInfo(role: "AXTextField", subrole: "AXSecureTextField")
+
+    // MARK: The default
+
+    func testACallerThatSaysNothingStillRefusesASecureField() {
+        XCTAssertEqual(
+            PasteEngine.decide(for: secureField, secureInputActive: false),
+            .clipboardOnly
+        )
+    }
+
+    func testTheRefusingPolicyRefusesASecureField() {
+        XCTAssertEqual(
+            PasteEngine.decide(
+                for: secureField,
+                secureInputActive: false,
+                secureFieldPolicy: .refuse
+            ),
+            .clipboardOnly
+        )
+    }
+
+    // MARK: The permissive policy
+
+    func testTheAllowingPolicyPastesIntoASecureField() {
+        XCTAssertEqual(
+            PasteEngine.decide(
+                for: secureField,
+                secureInputActive: false,
+                secureFieldPolicy: .allow
+            ),
+            .paste
+        )
+    }
+
+    /// A real password field almost always has macOS secure input switched on. Were the
+    /// secure subrole merely *ignored* rather than treated as a known text field, the
+    /// unknown-role probe would refuse and the popup would still paste nothing.
+    func testTheAllowingPolicyPastesIntoASecureFieldWhileSecureInputIsActive() {
+        XCTAssertEqual(
+            PasteEngine.decide(
+                for: secureField,
+                secureInputActive: true,
+                secureFieldPolicy: .allow
+            ),
+            .paste
+        )
+    }
+
+    /// Some applications expose the subrole without a role. It is still a positive
+    /// identification of a text field.
+    func testTheAllowingPolicyPastesIntoASecureSubroleWithNoRole() {
+        XCTAssertEqual(
+            PasteEngine.decide(
+                for: AXFocusInfo(role: nil, subrole: "AXSecureTextField"),
+                secureInputActive: true,
+                secureFieldPolicy: .allow
+            ),
+            .paste
+        )
+    }
+
+    // MARK: The rest of the matrix is untouched by the policy
+
+    /// The Electron path: no AX role at all. The secure-input probe is the only guard
+    /// left there, and allowing labelled secure fields must not remove it.
+    func testTheAllowingPolicyStillRefusesAnUnidentifiedFieldWhileSecureInputIsActive() {
+        XCTAssertEqual(
+            PasteEngine.decide(for: nil, secureInputActive: true, secureFieldPolicy: .allow),
+            .clipboardOnly
+        )
+        XCTAssertEqual(
+            PasteEngine.decide(
+                for: AXFocusInfo(role: "AXButton", subrole: nil),
+                secureInputActive: true,
+                secureFieldPolicy: .allow
+            ),
+            .clipboardOnly
+        )
+    }
+
+    func testTheAllowingPolicyLeavesTheKnownRoleBranchAlone() {
+        XCTAssertEqual(
+            PasteEngine.decide(
+                for: AXFocusInfo(role: "AXTextField", subrole: nil),
+                secureInputActive: true,
+                secureFieldPolicy: .allow
+            ),
+            .paste
+        )
+    }
+}
+
 final class PasteEngineAttemptTests: XCTestCase {
     func testKnownRoleFiresKeyboard() {
         let inspector = StubInspector(focus: AXFocusInfo(role: "AXTextField", subrole: nil))
@@ -144,6 +247,32 @@ final class PasteEngineAttemptTests: XCTestCase {
         let engine = PasteEngine(inspector: inspector, keyboard: keyboard, secureProbe: probe)
 
         let decision = engine.attemptPaste()
+
+        XCTAssertEqual(decision, .clipboardOnly)
+        XCTAssertEqual(keyboard.callCount, 0)
+    }
+
+    /// The route the popup needs: `attemptPaste` has to carry the caller's policy through
+    /// to `decide`, or the pure function's parameter is unreachable from the real app.
+    func testSecureSubroleFiresKeyboardWhenTheCallerAllowsIt() {
+        let inspector = StubInspector(focus: AXFocusInfo(role: "AXTextField", subrole: "AXSecureTextField"))
+        let keyboard = SpyKeyboard()
+        let probe = StubProbe(active: true)
+        let engine = PasteEngine(inspector: inspector, keyboard: keyboard, secureProbe: probe)
+
+        let decision = engine.attemptPaste(secureFieldPolicy: .allow)
+
+        XCTAssertEqual(decision, .paste)
+        XCTAssertEqual(keyboard.callCount, 1)
+    }
+
+    func testSecureSubroleSkipsKeyboardWhenTheCallerAsksToRefuse() {
+        let inspector = StubInspector(focus: AXFocusInfo(role: "AXTextField", subrole: "AXSecureTextField"))
+        let keyboard = SpyKeyboard()
+        let probe = StubProbe(active: false)
+        let engine = PasteEngine(inspector: inspector, keyboard: keyboard, secureProbe: probe)
+
+        let decision = engine.attemptPaste(secureFieldPolicy: .refuse)
 
         XCTAssertEqual(decision, .clipboardOnly)
         XCTAssertEqual(keyboard.callCount, 0)
@@ -310,6 +439,70 @@ final class TranscriptionOutputRouterTests: XCTestCase {
             pasteDecision: nil,
             restoredClipboard: true
         ))
+    }
+
+    /// The transcription auto-paste passes no policy, and must keep refusing. This is the
+    /// regression proof for the default: it is the transcription's own call shape.
+    func testDeliveryThatNamesNoPolicyRefusesToPasteIntoASecureField() async {
+        let pasteboard = SpyPasteboard(currentString: "previous")
+        let keyboard = SpyKeyboard()
+        let router = makeRouter(
+            pasteboard: pasteboard,
+            keyboard: keyboard,
+            focus: AXFocusInfo(role: "AXTextField", subrole: "AXSecureTextField")
+        )
+
+        let result = await router.deliver(
+            text: "hello",
+            settings: TranscriptionOutputSettings(saveToClipboard: false, autoPaste: true)
+        )
+
+        XCTAssertEqual(keyboard.callCount, 0)
+        XCTAssertEqual(result.pasteDecision, .clipboardOnly)
+        XCTAssertEqual(pasteboard.currentString, "previous")
+    }
+
+    /// The route the quick-paste popup uses.
+    func testDeliveryThatAllowsSecureFieldsPastesIntoOne() async {
+        let pasteboard = SpyPasteboard(currentString: "previous")
+        let keyboard = SpyKeyboard()
+        let router = makeRouter(
+            pasteboard: pasteboard,
+            keyboard: keyboard,
+            focus: AXFocusInfo(role: "AXTextField", subrole: "AXSecureTextField")
+        )
+
+        let result = await router.deliver(
+            text: "hello",
+            settings: TranscriptionOutputSettings(saveToClipboard: false, autoPaste: true),
+            secureFieldPolicy: .allow
+        )
+
+        XCTAssertEqual(keyboard.callCount, 1)
+        XCTAssertEqual(result.pasteDecision, .paste)
+        // Still the popup's contract: the clipboard is left as the user had it.
+        XCTAssertEqual(pasteboard.currentString, "previous")
+        XCTAssertEqual(pasteboard.restoreCallCount, 1)
+    }
+
+    /// The `saveToClipboard: true` branch has its own paste call and needs the same route.
+    func testDeliveryThatAllowsSecureFieldsAlsoAppliesWhenTheClipboardIsKept() async {
+        let pasteboard = SpyPasteboard(currentString: "previous")
+        let keyboard = SpyKeyboard()
+        let router = makeRouter(
+            pasteboard: pasteboard,
+            keyboard: keyboard,
+            focus: AXFocusInfo(role: "AXTextField", subrole: "AXSecureTextField")
+        )
+
+        let result = await router.deliver(
+            text: "hello",
+            settings: TranscriptionOutputSettings(saveToClipboard: true, autoPaste: true),
+            secureFieldPolicy: .allow
+        )
+
+        XCTAssertEqual(keyboard.callCount, 1)
+        XCTAssertEqual(result.pasteDecision, .paste)
     }
 
     private func makeRouter(

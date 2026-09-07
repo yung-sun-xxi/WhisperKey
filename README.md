@@ -71,7 +71,11 @@ provider you configure.
 - API keys are stored in the macOS Keychain.
 - Transcription history and usage counters are stored locally.
 - WhisperKey does not run an owner-controlled backend service.
-- Auto-paste is skipped for secure text fields and can be disabled.
+- Transcription auto-paste is skipped for secure text fields and can be disabled.
+- The quick-paste popup does paste into a secure text field, because choosing an
+  entry is a deliberate hold-and-release rather than something that fires on its
+  own. Either way the protection depends on the application labelling its own
+  field, so it never applied to Electron applications.
 
 Review your selected provider's terms and data policy before sending sensitive
 audio.

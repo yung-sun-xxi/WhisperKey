@@ -24,6 +24,31 @@ public enum PasteDecision: Equatable, Sendable {
     case clipboardOnly
 }
 
+/// What a caller wants done about a focused element the application has *labelled* as a
+/// secure text field (AX subrole `AXSecureTextField`).
+///
+/// This is a property of the caller, not of the engine, because the two paste paths are
+/// not the same situation:
+///
+/// - The transcription auto-paste fires **on its own** the moment a transcription lands.
+///   A caret that happens to be sitting in a password field would receive a dictated
+///   sentence nobody asked for. It refuses, and refusing is the default so that any caller
+///   that says nothing gets that behaviour.
+/// - The quick-paste popup is a deliberate gesture: the user held a key, looked at a list,
+///   pointed at one entry and released. Pasting a password is one of the things a
+///   clipboard popup is for, so it asks for `.allow`.
+///
+/// Neither setting is a security boundary. The subrole is whatever the target application
+/// chooses to publish, so the refusal covers native applications and Safari and does not
+/// cover Electron applications, which expose no AX role at all and are pasted into
+/// optimistically. What guards those is `secureInputActive`, which no policy here touches.
+public enum SecureFieldPolicy: Equatable, Sendable {
+    /// Never paste into a field labelled secure. The default.
+    case refuse
+    /// Treat a field labelled secure as the text field it is, and paste into it.
+    case allow
+}
+
 public protocol AXFocusInspector: Sendable {
     func currentFocus() -> AXFocusInfo?
 }
@@ -68,16 +93,30 @@ public struct PasteEngine: Sendable {
     ///   not return the focused element.
     /// - `secureInputActive` reports whether the system is broadcasting the
     ///   secure-input signal (e.g. a password field is focused somewhere).
+    /// - `secureFieldPolicy` is what the *caller* wants done about a field the
+    ///   application has labelled secure. Defaulted to `.refuse`, so a caller
+    ///   that says nothing keeps the behaviour every caller had.
     ///
     /// Logic:
-    /// 1. AX subrole `AXSecureTextField` -> never paste.
+    /// 1. AX subrole `AXSecureTextField` -> decided by `secureFieldPolicy`:
+    ///    `.refuse` never pastes; `.allow` pastes, because the subrole is a
+    ///    positive identification of a text field and stands in for rule 2.
+    ///    That matters: a real password field almost always has secure input
+    ///    switched on, so merely ignoring the subrole would drop through to
+    ///    rule 3 and refuse anyway.
     /// 2. AX role on the pasteable allow-list -> paste.
     /// 3. AX query failed or returned an unknown role: paste only when the
     ///    OS-level secure-input signal is *not* active. This covers Electron
     ///    and other apps that don't expose AX while still being safe around
-    ///    real password contexts.
-    public static func decide(for focus: AXFocusInfo?, secureInputActive: Bool) -> PasteDecision {
-        if focus?.subrole == secureSubrole { return .clipboardOnly }
+    ///    real password contexts. No policy reaches this rule.
+    public static func decide(
+        for focus: AXFocusInfo?,
+        secureInputActive: Bool,
+        secureFieldPolicy: SecureFieldPolicy = .refuse
+    ) -> PasteDecision {
+        if focus?.subrole == secureSubrole {
+            return secureFieldPolicy == .allow ? .paste : .clipboardOnly
+        }
         if let role = focus?.role, pasteableRoles.contains(role) {
             return .paste
         }
@@ -85,11 +124,18 @@ public struct PasteEngine: Sendable {
     }
 
     /// Inspects the focused element and pastes if the role matrix permits it.
+    ///
+    /// `secureFieldPolicy` defaults to `.refuse` — the behaviour every caller had before
+    /// the popup needed something else.
     @discardableResult
-    public func attemptPaste() -> PasteDecision {
+    public func attemptPaste(secureFieldPolicy: SecureFieldPolicy = .refuse) -> PasteDecision {
         let focus = inspector.currentFocus()
         let secureInputActive = secureProbe.isSecureInputActive()
-        let decision = Self.decide(for: focus, secureInputActive: secureInputActive)
+        let decision = Self.decide(
+            for: focus,
+            secureInputActive: secureInputActive,
+            secureFieldPolicy: secureFieldPolicy
+        )
         pasteLog.info("focus role=\(focus?.role ?? "nil", privacy: .public) subrole=\(focus?.subrole ?? "nil", privacy: .public) secureInput=\(secureInputActive, privacy: .public) decision=\(String(describing: decision), privacy: .public)")
         if decision == .paste {
             keyboard.sendCommandV()

@@ -121,8 +121,18 @@ public struct TranscriptionOutputRouter {
         self.restoreDelayNanoseconds = restoreDelayNanoseconds
     }
 
+    /// Puts `text` where `settings` says, and reports what happened.
+    ///
+    /// `secureFieldPolicy` is passed straight through to `PasteEngine` and says what this
+    /// caller wants done about a focused field the application has labelled secure. It
+    /// defaults to `.refuse`, which is what the transcription auto-paste wants and what
+    /// every caller got before the quick-paste popup needed the other answer.
     @discardableResult
-    public func deliver(text: String, settings: TranscriptionOutputSettings) async -> TranscriptionOutputResult {
+    public func deliver(
+        text: String,
+        settings: TranscriptionOutputSettings,
+        secureFieldPolicy: SecureFieldPolicy = .refuse
+    ) async -> TranscriptionOutputResult {
         guard !Task.isCancelled else {
             return TranscriptionOutputResult(wroteClipboard: false, pasteDecision: nil, restoredClipboard: false)
         }
@@ -133,7 +143,7 @@ public struct TranscriptionOutputRouter {
             guard !Task.isCancelled else {
                 return TranscriptionOutputResult(wroteClipboard: wroteClipboard, pasteDecision: nil, restoredClipboard: false)
             }
-            let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard)
+            let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard, secureFieldPolicy: secureFieldPolicy)
             return TranscriptionOutputResult(
                 wroteClipboard: wroteClipboard,
                 pasteDecision: decision,
@@ -158,7 +168,7 @@ public struct TranscriptionOutputRouter {
                 let restored = pasteboard.restore(snapshot)
                 return TranscriptionOutputResult(wroteClipboard: wroteClipboard, pasteDecision: nil, restoredClipboard: restored)
             }
-            let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard)
+            let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard, secureFieldPolicy: secureFieldPolicy)
             if wroteClipboard && restoreDelayNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: restoreDelayNanoseconds)
             }
@@ -181,11 +191,14 @@ public struct TranscriptionOutputRouter {
         }
     }
 
-    private func attemptPasteIfClipboardWriteSucceeded(_ wroteClipboard: Bool) -> PasteDecision? {
+    private func attemptPasteIfClipboardWriteSucceeded(
+        _ wroteClipboard: Bool,
+        secureFieldPolicy: SecureFieldPolicy
+    ) -> PasteDecision? {
         guard wroteClipboard else {
             outputLog.error("failed to write transcription to pasteboard; paste skipped")
             return nil
         }
-        return pasteEngine.attemptPaste()
+        return pasteEngine.attemptPaste(secureFieldPolicy: secureFieldPolicy)
     }
 }
