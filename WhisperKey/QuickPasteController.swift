@@ -303,11 +303,16 @@ final class QuickPasteController: QuickPasteGestureControlling {
         monitor.suspend()
         Task { @MainActor [weak self, outputRouter, monitor] in
             // The existing clipboard-output path: snapshot, substitute, synthesise ⌘V,
-            // restore. Reused unchanged and in the configuration that leaves the
-            // clipboard as it was.
+            // restore. Reused in the configuration that leaves the clipboard as it was.
+            //
+            // The one thing this path is asked to do differently from the transcription
+            // auto-paste is `QuickPastePolicy.secureFieldPolicy`: a password field is
+            // pasted into, because the user pointed at the entry and released. The
+            // transcription path passes nothing and keeps refusing.
             let result = await outputRouter.deliver(
                 text: text,
-                settings: TranscriptionOutputSettings(saveToClipboard: false, autoPaste: true)
+                settings: TranscriptionOutputSettings(saveToClipboard: false, autoPaste: true),
+                secureFieldPolicy: QuickPastePolicy.secureFieldPolicy
             )
             monitor.resume()
             self?.report(result)
@@ -316,10 +321,12 @@ final class QuickPasteController: QuickPasteGestureControlling {
 
     /// Turns the outcome of the paste into a word to the user, or into silence.
     ///
-    /// The case that matters is `PasteEngine` declining because a secure field is
-    /// focused: the router restores the clipboard afterwards, so without this the user's
-    /// deliberate choice produces nothing at all — nothing pasted, and nothing left on
-    /// the clipboard to paste by hand.
+    /// The case that matters is `PasteEngine` declining: the router restores the
+    /// clipboard afterwards, so without this the user's deliberate choice produces
+    /// nothing at all — nothing pasted, and nothing left on the clipboard to paste by
+    /// hand. Since the popup asks for `SecureFieldPolicy.allow`, a labelled password
+    /// field is no longer one of those cases; what is left is a field the paste path
+    /// could not identify while macOS secure input was on.
     private func report(_ result: TranscriptionOutputResult) {
         guard let notice = QuickPasteFeedback.notice(for: result) else { return }
         log.info("quick-paste notice=\(String(describing: notice), privacy: .public)")

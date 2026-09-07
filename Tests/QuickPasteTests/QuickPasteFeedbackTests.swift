@@ -67,4 +67,15 @@ final class QuickPasteFeedbackTests: XCTestCase {
             XCTAssertFalse(notice.message.isEmpty, "\(notice) has no message")
         }
     }
+
+    /// The popup now asks the paste path to paste into a labelled secure text field, so a
+    /// refusal is no longer a password field being protected — it is the paste path not
+    /// being able to identify what is focused while macOS secure input is on. A message
+    /// that still named a password field would be telling the user something untrue.
+    func testTheRefusalMessageNoLongerBlamesAPasswordField() {
+        XCTAssertFalse(
+            QuickPasteNotice.pasteRefused.message.lowercased().contains("password"),
+            "the popup pastes into password fields now; the refusal has another cause"
+        )
+    }
 }

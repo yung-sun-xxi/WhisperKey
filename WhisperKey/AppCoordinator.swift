@@ -1268,8 +1268,7 @@ final class AppCoordinator: ObservableObject {
     /// is silent by contract — nothing on open, on choose or on cancel — and a refused
     /// paste is a *choice* the user made, not a transcription that failed.
     ///
-    /// No action button either: there is nothing for the user to press. The remedy is to
-    /// put the caret somewhere that is not a password field and repeat the gesture.
+    /// No action button either: there is nothing for the user to press.
     private func showQuickPasteNotice(_ notice: QuickPasteNotice) {
         log.info("quick-paste toast notice=\(String(describing: notice), privacy: .public)")
         toastPresenter.show(
