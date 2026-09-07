@@ -223,12 +223,14 @@ extension AppCoordinator {
     private func synchronizeHotkey(with snapshot: PermissionState) {
         guard snapshot.accessibilityGranted else {
             hotkey.stop()
+            quickPaste?.stop()
             hotkeyStarted = false
             return
         }
 
         guard !hotkeyStarted else { return }
         hotkeyStarted = hotkey.start()
+        quickPaste?.start()
         if !hotkeyStarted {
             Logger(subsystem: "WhisperKey", category: "Permissions")
                 .error("CGEventTap could not be created even though Accessibility is trusted")
@@ -244,7 +246,7 @@ extension AppCoordinator {
             updateState(.microphoneDenied)
         } else if state == .accessibilityDenied || state == .microphoneDenied {
             updateState(.idle)
-            hotkey.setAppState(.idle)
+            setEngineAppState(.idle)
         }
     }
 }

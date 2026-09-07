@@ -156,6 +156,9 @@ final class AppCoordinator: ObservableObject {
 
     let settings: SettingsStore
     let hotkey: HotkeyEngineRunner
+    /// `nil` whenever the hidden quick-paste flag is off — nothing is constructed, so no
+    /// second event tap exists and no key is intercepted for that feature.
+    let quickPaste: QuickPasteController?
     let history: HistoryStore
     let usageStats: UsageStatsStore
     private let loginItem: LoginItemController
@@ -205,6 +208,7 @@ final class AppCoordinator: ObservableObject {
         let resolvedUsageStats = usageStats ?? UsageStatsStore()
         self.usageStats = resolvedUsageStats
         self.hotkey = HotkeyEngineRunner(config: resolvedSettings.hotkeyConfig)
+        self.quickPaste = QuickPasteController.makeIfEnabled()
         let resolvedLoginService = loginItemService ?? SMAppServiceLoginItem()
         self.loginItem = LoginItemController(service: resolvedLoginService)
         self.launchAtLoginEnabled = self.loginItem.isEnabled
@@ -239,6 +243,13 @@ final class AppCoordinator: ObservableObject {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
+    /// One place that tells every engine what the application is doing. The quick-paste
+    /// gesture must not open while a recording or a transcription is in flight.
+    func setEngineAppState(_ state: HotkeyStateMachine.AppState) {
+        hotkey.setAppState(state)
+        quickPaste?.setAppState(state)
+    }
+
     private func handle(_ output: HotkeyOutput) {
         switch output {
         case .recordingShouldStart:
@@ -259,7 +270,7 @@ final class AppCoordinator: ObservableObject {
         activeRecordingID = recordingID
         recordingCancellationRequested = false
         state = .starting
-        hotkey.setAppState(.recording)
+        setEngineAppState(.recording)
         toastPresenter.dismiss(animated: false)
 
         Task {
@@ -318,7 +329,7 @@ final class AppCoordinator: ObservableObject {
                     activeRecordingID = nil
                     recordingCancellationRequested = false
                     state = .microphoneDenied
-                    hotkey.setAppState(.idle)
+                    setEngineAppState(.idle)
                     playSound(.error)
                 }
             } catch {
@@ -334,7 +345,7 @@ final class AppCoordinator: ObservableObject {
                     activeRecordingID = nil
                     recordingCancellationRequested = false
                     state = .error("Recording failed: \(error)")
-                    hotkey.setAppState(.idle)
+                    setEngineAppState(.idle)
                     playSound(.error)
                 }
             }
@@ -357,7 +368,7 @@ final class AppCoordinator: ObservableObject {
         recordingCancellationRequested = false
         beginProcessing(operationID: operationID)
         state = .transcribing
-        hotkey.setAppState(.transcribing)
+        setEngineAppState(.transcribing)
         log.info("transcription in flight; further hotkey presses will be suppressed")
         stopRecordingTimer()
         playSound(.stop)
@@ -481,7 +492,7 @@ final class AppCoordinator: ObservableObject {
         lastTranscriptionRequest = nil
         stopRecordingTimer()
         state = .idle
-        hotkey.setAppState(.idle)
+        setEngineAppState(.idle)
     }
 
     func cancelActiveOperation() {
@@ -519,7 +530,7 @@ final class AppCoordinator: ObservableObject {
         stopRecordingTimer()
         toastPresenter.dismiss(animated: false)
         state = .idle
-        hotkey.setAppState(.idle)
+        setEngineAppState(.idle)
 
         recorder.recordStopRequestedForDiagnostics()
         appendRecordingDiagnostic(
@@ -764,7 +775,7 @@ final class AppCoordinator: ObservableObject {
         activeProcessingMetrics?.audioDuration = request.audioDuration
         activeProcessingMetrics?.byteSize = request.encoded.data.count
         state = .transcribing
-        hotkey.setAppState(.transcribing)
+        setEngineAppState(.transcribing)
         processingTask = Task { @MainActor in
             await self.runTranscription(
                 encoded: request.encoded,
@@ -811,7 +822,7 @@ final class AppCoordinator: ObservableObject {
         activeProcessingMetrics?.audioDuration = request.audioDuration
         activeProcessingMetrics?.byteSize = request.encoded.data.count
         state = .transcribing
-        hotkey.setAppState(.transcribing)
+        setEngineAppState(.transcribing)
         processingTask = Task { @MainActor in
             await self.runTranscription(
                 encoded: request.encoded,
@@ -1036,7 +1047,7 @@ final class AppCoordinator: ObservableObject {
         activeRecordingID = nil
         capturedRecordingAwaitingHistory = nil
         state = .idle
-        hotkey.setAppState(.idle)
+        setEngineAppState(.idle)
         if playDoneSound {
             playSound(.done)
         }
@@ -1194,7 +1205,7 @@ final class AppCoordinator: ObservableObject {
         toastStyle: ToastStyle = .warning
     ) {
         state = .error(message)
-        hotkey.setAppState(.idle)
+        setEngineAppState(.idle)
         playSound(.error)
         let content = ToastDecision.content(
             reason: reason,
