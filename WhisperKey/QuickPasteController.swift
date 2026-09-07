@@ -3,18 +3,23 @@ import ClipboardHistoryStore
 import Foundation
 import HotkeyEngine
 import PasteEngine
+import QuickPaste
 import os
 
 /// The quick-paste popup: hold the trigger, a non-activating panel appears under the
-/// cursor listing the most recent clipboard entries, release and the newest is pasted
-/// where the caret still is.
+/// cursor listing the most recent clipboard entries, point at one, release, and it is
+/// pasted where the caret still is. Releasing over none of them cancels.
 ///
 /// Everything here is behind a stored boolean, default off, with no UI. `AppCoordinator`
 /// consults `isEnabled` before it builds the store, the monitor or this controller, so
 /// with the feature disabled nothing is constructed, no watcher polls the pasteboard, no
 /// event tap exists and no key is intercepted for it.
 ///
-/// The hold timer lives here rather than in `HoldToRevealStateMachine`, which stays pure.
+/// This file is deliberately thin, because the application target has no test bundle: the
+/// gesture is in `HoldToRevealStateMachine`, the event translation in `HoldToRevealRunner`,
+/// and every piece of geometry — panel size, placement, which row a point is in — in
+/// `QuickPasteLayout`. What is left here is the parts that only exist against a live
+/// system: a timer, an `NSPanel`, `NSEvent.mouseLocation` and `NSWorkspace`.
 @MainActor
 final class QuickPasteController {
     /// Hidden flag. Absent reads as `false`, so the feature is off until it is written.
@@ -32,13 +37,30 @@ final class QuickPasteController {
     /// How many entries the panel lists. Hardcoded until the settings UI exists.
     static let visibleEntryCount = 5
 
+    /// How often the highlight is repainted while the panel is open. Display only — a
+    /// coarser interval would show a stale highlight, never paste the wrong entry.
+    private static let highlightInterval: TimeInterval = 1.0 / 60.0
+
+    /// What is on screen right now, and what the world looked like when it appeared.
+    private struct Reveal {
+        let entryCount: Int
+        let frame: CGRect
+        let isFlipped: Bool
+        /// The application that was in front when the threshold fired. Anything else in
+        /// front at release time means the text would land somewhere the user was not
+        /// looking when the gesture began.
+        let targetProcessIdentifier: Int32?
+    }
+
     private let log = Logger(subsystem: "WhisperKey", category: "QuickPaste")
     private let runner: HoldToRevealRunner
     private let outputRouter = TranscriptionOutputRouter()
     private var machine: HoldToRevealStateMachine
     private var panel: QuickPastePanel?
     private var holdTimer: Timer?
-    private var pendingText: String?
+    private var highlightTimer: Timer?
+    private var reveal: Reveal?
+    private var revealedEntries: [ClipboardEntry] = []
     private var started = false
 
     /// The history the panel renders. Filled by `ClipboardMonitor`, not read live off the
@@ -131,35 +153,124 @@ final class QuickPasteController {
         case .reveal:
             revealPanel()
         case .dismiss:
-            pendingText = nil
             hidePanel()
         case .commit:
-            let text = pendingText
-            pendingText = nil
-            hidePanel()
-            paste(text)
+            commit()
         }
     }
 
-    private func revealPanel() {
-        let content = QuickPasteContent(entries: Array(store.entries.prefix(Self.visibleEntryCount)))
-        pendingText = content.committedEntry?.text
+    // MARK: - Showing the panel
 
+    private func revealPanel() {
         hidePanel()
+
+        let entries = Array(store.entries.prefix(Self.visibleEntryCount))
+        let cursor = NSEvent.mouseLocation
+        let size = QuickPasteLayout.panelSize(entryCount: entries.count)
+        let placement = QuickPasteLayout.placement(
+            cursor: cursor,
+            size: size,
+            visibleFrame: Self.visibleFrame(containing: cursor)
+        )
+
+        let content = QuickPasteContent(entries: entries, isFlipped: placement.isFlipped)
         let panel = QuickPastePanel(content: content)
-        panel.show(at: NSEvent.mouseLocation)
+        panel.show(at: placement.origin)
         self.panel = panel
+        self.revealedEntries = entries
+        self.reveal = Reveal(
+            entryCount: entries.count,
+            frame: CGRect(origin: placement.origin, size: size),
+            isFlipped: placement.isFlipped,
+            targetProcessIdentifier: NSWorkspace.shared.frontmostApplication?.processIdentifier
+        )
+
+        startHighlightTimer()
+    }
+
+    /// The visible area of the display the cursor is actually on, so the panel never
+    /// opens on the wrong monitor. `NSScreen.main` is the screen with the key window,
+    /// which for an accessory app with no windows is not necessarily where the mouse is.
+    private static func visibleFrame(containing cursor: NSPoint) -> CGRect {
+        let screen = NSScreen.screens.first { NSMouseInRect(cursor, $0.frame, false) }
+            ?? NSScreen.main
+        return screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+    }
+
+    private func startHighlightTimer() {
+        highlightTimer?.invalidate()
+        let timer = Timer(timeInterval: Self.highlightInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.repaintHighlight()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        highlightTimer = timer
+    }
+
+    private func repaintHighlight() {
+        guard let reveal, let panel else { return }
+        panel.setHighlightedIndex(Self.index(at: NSEvent.mouseLocation, in: reveal))
+    }
+
+    private static func index(at mouse: NSPoint, in reveal: Reveal) -> Int? {
+        QuickPasteLayout.highlightedIndex(
+            mouse: mouse,
+            panelFrame: reveal.frame,
+            entryCount: reveal.entryCount,
+            isFlipped: reveal.isFlipped
+        )
     }
 
     private func hidePanel() {
+        highlightTimer?.invalidate()
+        highlightTimer = nil
         panel?.orderOut(nil)
         panel?.close()
         panel = nil
+        reveal = nil
+        revealedEntries = []
     }
 
-    private func paste(_ text: String?) {
-        guard let text, !text.isEmpty else {
-            log.info("quick-paste committed with an empty clipboard history")
+    // MARK: - Choosing
+
+    /// Resolves the chosen entry from a mouse position read *now*, at the moment the key
+    /// release arrived — not from whatever the highlight timer last sampled. A fast move
+    /// followed by a release would otherwise commit the neighbouring row, or none.
+    private func commit() {
+        guard let reveal else {
+            hidePanel()
+            return
+        }
+
+        let index = Self.index(at: NSEvent.mouseLocation, in: reveal)
+        let entries = revealedEntries
+        let target = reveal.targetProcessIdentifier
+
+        hidePanel()
+
+        guard let index, index < entries.count else {
+            // Released over no entry. This is the gesture's only cancel: nothing pasted,
+            // nothing written to the clipboard, and no error — backing out is the same
+            // motion as choosing.
+            log.info("quick-paste released over no entry; nothing pasted")
+            return
+        }
+
+        guard QuickPasteTargetGuard.shouldPaste(
+            captured: target,
+            current: NSWorkspace.shared.frontmostApplication?.processIdentifier
+        ) else {
+            log.info("quick-paste target application changed during the hold; nothing pasted")
+            return
+        }
+
+        paste(entries[index].text)
+    }
+
+    private func paste(_ text: String) {
+        guard !text.isEmpty else {
+            log.info("quick-paste committed an empty entry")
             return
         }
 
