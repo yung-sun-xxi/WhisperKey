@@ -685,6 +685,26 @@ private struct SettingsForm: View {
     @State private var apiKeyValidationNotice: APIKeyValidationNotice?
     @FocusState private var apiKeyFieldFocused: Bool
 
+    /// Stated because it is invisible from the settings screen otherwise: dictated text
+    /// only reaches the popup by way of the clipboard.
+    static let quickPasteHelp = """
+        Hold the popup trigger to pick from the last few things on the clipboard and paste \
+        without leaving the field you are typing in. Dictated text reaches the popup only \
+        while Clipboard is on: with Clipboard off and Auto-paste on, transcriptions never \
+        touch the clipboard and so never appear here.
+        """
+
+    /// Held in milliseconds because that is the unit the setting is stated in; the store
+    /// keeps seconds, and it is the store that clamps.
+    static let holdMillisecondsRange: ClosedRange<Int> = Int((SettingsStore.quickPasteHoldDurationRange.lowerBound * 1000).rounded())...Int((SettingsStore.quickPasteHoldDurationRange.upperBound * 1000).rounded())
+
+    private var holdMilliseconds: Binding<Int> {
+        Binding(
+            get: { Int((settings.quickPasteHoldDuration * 1000).rounded()) },
+            set: { settings.quickPasteHoldDuration = Double($0) / 1000 }
+        )
+    }
+
     @ViewBuilder private var modelPicker: some View {
         switch settings.provider {
         case .openai:
@@ -870,6 +890,90 @@ private struct SettingsForm: View {
                 }
                 .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
             }
+            SettingsRow("Quick paste popup") {
+                Toggle("", isOn: $settings.quickPasteEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .settingsControlFrame()
+                    .help(Self.quickPasteHelp)
+            }
+            // Shown whether or not the feature is on, and merely disabled while it is
+            // off. The settings window's size is measured once, when it is built, and it
+            // is not resizable — rows appearing later would fall off the bottom.
+            Group {
+                SettingsRow("Popup trigger") {
+                    Picker("", selection: $settings.quickPasteTriggerKey) {
+                        ForEach(TriggerKey.allCases, id: \.self) { trigger in
+                            Text(trigger.displayName)
+                                .tag(trigger)
+                        }
+                    }
+                    .labelsHidden()
+                    .settingsControlFrame()
+                    .disabled(isRecording)
+                    .help(
+                        isRecording
+                            ? "Stop recording to change."
+                            : "The recording trigger cannot be reused here."
+                    )
+                }
+                SettingsRow("Popup hold") {
+                    HStack(spacing: 6) {
+                        TextField("", value: holdMilliseconds, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 64)
+                            .settingsControlFrame()
+                        Stepper("",
+                                value: holdMilliseconds,
+                                in: Self.holdMillisecondsRange,
+                                step: 50)
+                            .labelsHidden()
+                            .settingsControlFrame()
+                        Text("ms")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                    }
+                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                }
+                SettingsRow("Popup entries") {
+                    HStack(spacing: 6) {
+                        TextField("", value: $settings.quickPasteEntryCount, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 64)
+                            .settingsControlFrame()
+                        Stepper("",
+                                value: $settings.quickPasteEntryCount,
+                                in: SettingsStore.quickPasteEntryCountRange,
+                                step: 1)
+                            .labelsHidden()
+                            .settingsControlFrame()
+                        Text("entries")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                    }
+                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                }
+                SettingsRow("Clipboard history") {
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button("Clear history") {
+                            coordinator.clearClipboardHistory()
+                        }
+                        .controlSize(.small)
+                        .help("Empties the list the popup shows. The clipboard itself is left alone.")
+                    }
+                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                }
+            }
+            .disabled(!settings.quickPasteEnabled)
+            Text(Self.quickPasteHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             SettingsRow("Usage stats") {
                 HStack {
                     Spacer(minLength: 0)

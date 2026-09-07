@@ -4,6 +4,7 @@ import HotkeyEngine
 import KeychainStore
 import TranscriptionProvider
 import UsageStatsStore
+import QuickPaste
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {
@@ -262,6 +263,109 @@ final class SettingsStoreTests: XCTestCase {
         }
         XCTAssertEqual(provider.apiKey, "sk-x")
         XCTAssertEqual(provider.model, .gpt4oMiniTranscribe)
+    }
+
+    // MARK: - Quick paste
+
+    func testQuickPasteDefaultsWhenEmpty() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertFalse(store.quickPasteEnabled)
+        XCTAssertEqual(store.quickPasteTriggerKey, .rightCommand)
+        XCTAssertEqual(store.quickPasteHoldDuration, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(store.quickPasteEntryCount, 5)
+    }
+
+    func testQuickPasteSettingsPersistAcrossInstances() {
+        let first = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        first.quickPasteEnabled = true
+        first.quickPasteTriggerKey = .rightShift
+        first.quickPasteHoldDuration = 0.8
+        first.quickPasteEntryCount = 3
+
+        let second = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertTrue(second.quickPasteEnabled)
+        XCTAssertEqual(second.quickPasteTriggerKey, .rightShift)
+        XCTAssertEqual(second.quickPasteHoldDuration, 0.8, accuracy: 0.0001)
+        XCTAssertEqual(second.quickPasteEntryCount, 3)
+    }
+
+    /// Direction one: the popup may not be given the key recording already holds.
+    func testAssigningQuickPasteTheRecordingTriggerIsRejected() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(store.triggerKey, .rightOption)
+        XCTAssertEqual(store.quickPasteTriggerKey, .rightCommand)
+
+        store.quickPasteTriggerKey = .rightOption
+
+        XCTAssertEqual(store.quickPasteTriggerKey, .rightCommand, "the popup keeps the key it had")
+        XCTAssertEqual(store.triggerKey, .rightOption, "recording is untouched")
+    }
+
+    /// Direction two: recording may not be moved onto the key the popup already holds.
+    func testAssigningRecordingTheQuickPasteTriggerIsRejected() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(store.triggerKey, .rightOption)
+        XCTAssertEqual(store.quickPasteTriggerKey, .rightCommand)
+
+        store.triggerKey = .rightCommand
+
+        XCTAssertEqual(store.triggerKey, .rightOption, "recording keeps the key it had")
+        XCTAssertEqual(store.quickPasteTriggerKey, .rightCommand, "the popup is untouched")
+    }
+
+    func testANonConflictingTriggerPairIsAccepted() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.quickPasteTriggerKey = .rightShift
+        XCTAssertEqual(store.quickPasteTriggerKey, .rightShift)
+        store.triggerKey = .rightCommand
+        XCTAssertEqual(store.triggerKey, .rightCommand)
+        XCTAssertEqual(store.quickPasteTriggerKey, .rightShift)
+    }
+
+    /// A pair can only collide on disk if it was written before this validation existed.
+    /// Recording wins; the popup moves to a free key.
+    func testStoredConflictingTriggerPairIsResolvedOnLoad() {
+        defaults.set(TriggerKey.rightCommand.rawValue, forKey: "WhisperKey.settings.triggerKey")
+        defaults.set(TriggerKey.rightCommand.rawValue, forKey: "WhisperKey.settings.quickPasteTriggerKey")
+
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+
+        XCTAssertEqual(store.triggerKey, .rightCommand)
+        XCTAssertNotEqual(store.quickPasteTriggerKey, store.triggerKey)
+    }
+
+    func testQuickPasteHoldDurationIsClamped() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.quickPasteHoldDuration = 99
+        XCTAssertEqual(store.quickPasteHoldDuration, SettingsStore.quickPasteHoldDurationRange.upperBound, accuracy: 0.0001)
+        store.quickPasteHoldDuration = -1
+        XCTAssertEqual(store.quickPasteHoldDuration, SettingsStore.quickPasteHoldDurationRange.lowerBound, accuracy: 0.0001)
+    }
+
+    func testQuickPasteEntryCountIsClamped() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.quickPasteEntryCount = 999
+        XCTAssertEqual(store.quickPasteEntryCount, SettingsStore.quickPasteEntryCountRange.upperBound)
+        store.quickPasteEntryCount = 0
+        XCTAssertEqual(store.quickPasteEntryCount, SettingsStore.quickPasteEntryCountRange.lowerBound)
+    }
+
+    func testQuickPasteConfigurationMirrorsTheStoredSettings() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.quickPasteEnabled = true
+        store.quickPasteTriggerKey = .rightShift
+        store.quickPasteHoldDuration = 0.75
+        store.quickPasteEntryCount = 4
+
+        XCTAssertEqual(
+            store.quickPasteConfiguration,
+            QuickPasteConfiguration(
+                isEnabled: true,
+                trigger: .rightShift,
+                holdDuration: 0.75,
+                visibleEntryCount: 4
+            )
+        )
     }
 }
 

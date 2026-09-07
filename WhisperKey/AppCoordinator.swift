@@ -11,6 +11,7 @@ import PasteEngine
 import ErrorToast
 import HistoryStore
 import ClipboardHistoryStore
+import QuickPaste
 import LoginItem
 import UsageStatsStore
 
@@ -157,15 +158,18 @@ final class AppCoordinator: ObservableObject {
 
     let settings: SettingsStore
     let hotkey: HotkeyEngineRunner
-    /// `nil` whenever the hidden quick-paste flag is off — nothing is constructed, so no
-    /// second event tap exists, no key is intercepted and no watcher polls the pasteboard
-    /// for that feature.
-    let quickPaste: QuickPasteController?
+    /// Built whether or not the feature is on, because the toggle can be flipped while
+    /// the app runs. Whether its event tap exists is `quickPasteActivation`'s answer, not
+    /// this object's — see `QuickPasteActivation`.
+    let quickPaste: QuickPasteController
     /// The system-clipboard history behind the quick-paste popup. Deliberately unrelated
     /// to `history`, which is the transcription journal; the two meet only through the
     /// system clipboard.
-    let clipboardHistory: ClipboardHistoryStore?
-    private let clipboardMonitor: ClipboardMonitor?
+    let clipboardHistory: ClipboardHistoryStore
+    private let clipboardMonitor: ClipboardMonitor
+    /// The one place that decides whether the pasteboard watcher and the gesture are
+    /// running, from the settings and the Accessibility permission.
+    let quickPasteActivation: QuickPasteActivation
     let history: HistoryStore
     let usageStats: UsageStatsStore
     private let loginItem: LoginItemController
@@ -215,21 +219,26 @@ final class AppCoordinator: ObservableObject {
         let resolvedUsageStats = usageStats ?? UsageStatsStore()
         self.usageStats = resolvedUsageStats
         self.hotkey = HotkeyEngineRunner(config: resolvedSettings.hotkeyConfig)
-        if QuickPasteController.isEnabled() {
-            let clipboardHistory = ClipboardHistoryStore()
-            // The one line that connects the pasteboard watcher to the stored history.
-            let clipboardMonitor = ClipboardMonitor.recording(into: clipboardHistory)
-            self.clipboardHistory = clipboardHistory
-            self.clipboardMonitor = clipboardMonitor
-            self.quickPaste = QuickPasteController(store: clipboardHistory, monitor: clipboardMonitor)
-            // The watcher runs whenever the feature is enabled. It needs no Accessibility
-            // permission, unlike the event tap that `quickPaste.start()` creates.
-            clipboardMonitor.start()
-        } else {
-            self.clipboardHistory = nil
-            self.clipboardMonitor = nil
-            self.quickPaste = nil
-        }
+        let clipboardHistory = ClipboardHistoryStore()
+        // The one line that connects the pasteboard watcher to the stored history.
+        let clipboardMonitor = ClipboardMonitor.recording(into: clipboardHistory)
+        let quickPasteConfiguration = resolvedSettings.quickPasteConfiguration
+        let quickPaste = QuickPasteController(
+            store: clipboardHistory,
+            monitor: clipboardMonitor,
+            configuration: quickPasteConfiguration
+        )
+        self.clipboardHistory = clipboardHistory
+        self.clipboardMonitor = clipboardMonitor
+        self.quickPaste = quickPaste
+        // Constructing these is not turning the feature on. The activation starts the
+        // watcher only when the setting says so, and the event tap only when Accessibility
+        // is also granted — which `synchronizeHotkey` reports as the permission changes.
+        self.quickPasteActivation = QuickPasteActivation(
+            watcher: clipboardMonitor,
+            gesture: quickPaste,
+            configuration: quickPasteConfiguration
+        )
         let resolvedLoginService = loginItemService ?? SMAppServiceLoginItem()
         self.loginItem = LoginItemController(service: resolvedLoginService)
         self.launchAtLoginEnabled = self.loginItem.isEnabled
@@ -249,7 +258,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     deinit {
-        clipboardMonitor?.stop()
+        clipboardMonitor.stop()
         permissionPollTask?.cancel()
         recordingTimerTask?.cancel()
         processingTask?.cancel()
@@ -269,7 +278,7 @@ final class AppCoordinator: ObservableObject {
     /// gesture must not open while a recording or a transcription is in flight.
     func setEngineAppState(_ state: HotkeyStateMachine.AppState) {
         hotkey.setAppState(state)
-        quickPaste?.setAppState(state)
+        quickPaste.setAppState(state)
     }
 
     private func handle(_ output: HotkeyOutput) {
@@ -1296,5 +1305,33 @@ final class AppCoordinator: ObservableObject {
                 self?.history.setMaxEntries(value)
             }
             .store(in: &cancellables)
+
+        // The quick-paste feature used to be read once, in this initialiser. A real
+        // toggle can be flipped at any moment, so the four settings are watched and the
+        // activation recomputes what should be running.
+        settings.$quickPasteEnabled
+            .combineLatest(
+                settings.$quickPasteTriggerKey,
+                settings.$quickPasteHoldDuration,
+                settings.$quickPasteEntryCount
+            )
+            .map { enabled, trigger, holdDuration, entryCount in
+                QuickPasteConfiguration(
+                    isEnabled: enabled,
+                    trigger: trigger,
+                    holdDuration: holdDuration,
+                    visibleEntryCount: entryCount
+                )
+            }
+            .removeDuplicates()
+            .sink { [weak self] configuration in
+                self?.quickPasteActivation.apply(configuration)
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Wipes the clipboard history the popup shows. Surfaced as a button in Settings.
+    func clearClipboardHistory() {
+        clipboardHistory.clear()
     }
 }

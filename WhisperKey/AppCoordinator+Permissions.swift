@@ -3,6 +3,7 @@ import AppKit
 import AVFoundation
 import CoreGraphics
 import HotkeyEngine
+import QuickPaste
 import SettingsStore
 import os
 
@@ -221,16 +222,19 @@ extension AppCoordinator {
     }
 
     private func synchronizeHotkey(with snapshot: PermissionState) {
+        // Told unconditionally, ahead of the guards below: the quick-paste event tap
+        // depends on the permission *and* on the feature's own toggle, and only the
+        // activation knows both.
+        quickPasteActivation.setAccessibilityGranted(snapshot.accessibilityGranted)
+
         guard snapshot.accessibilityGranted else {
             hotkey.stop()
-            quickPaste?.stop()
             hotkeyStarted = false
             return
         }
 
         guard !hotkeyStarted else { return }
         hotkeyStarted = hotkey.start()
-        quickPaste?.start()
         if !hotkeyStarted {
             Logger(subsystem: "WhisperKey", category: "Permissions")
                 .error("CGEventTap could not be created even though Accessibility is trusted")
