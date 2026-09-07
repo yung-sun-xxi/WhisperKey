@@ -7,6 +7,12 @@ import Foundation
 /// features meet only through the system clipboard. The persistence shape is copied from
 /// `HistoryStore` on purpose: `decodeIfPresent` with a default for every field, atomic
 /// file replacement, cap enforced newest-first.
+///
+/// Recording and persistence are deliberately not the same thing. Everything offered is
+/// kept in memory and shown in the popup, concealed items included; only what
+/// `persistable(_:)` allows is written to the file. The file is plain JSON at mode 0644
+/// in Application Support, so it survives restarts and travels into Time Machine — which
+/// is the right home for a copied heading and the wrong one for a copied password.
 public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable {
 
     public static let defaultMaxEntries = 20
@@ -27,17 +33,22 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
         let trimmed = Self.applyMax(entries: loaded, max: self.maxEntries)
         self.entries = trimmed
         if trimmed.count != loaded.count {
-            try? Self.persist(entries: trimmed, to: resolvedURL)
+            try? Self.persist(entries: Self.persistable(trimmed), to: resolvedURL)
         }
     }
 
     /// Offers a candidate entry. Returns the entry that was stored, or `nil` when it was
     /// rejected as whitespace-only, as a repeat of the newest entry, or because the cap
     /// is zero.
+    ///
+    /// `isConcealed` changes nothing about whether the entry is kept, where it sits, how
+    /// it de-duplicates or whether it counts against the cap. It changes only whether it
+    /// is written to the file.
     @discardableResult
     public func record(
         text: String,
         origin: ClipboardEntryOrigin,
+        isConcealed: Bool = false,
         now: Date = Date(),
         id: UUID = UUID()
     ) -> ClipboardEntry? {
@@ -47,10 +58,10 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
         // else in between is a deliberate second copy and gets its own entry.
         guard entries.first?.text != text else { return nil }
 
-        let entry = ClipboardEntry(id: id, text: text, capturedAt: now, origin: origin)
+        let entry = ClipboardEntry(id: id, text: text, capturedAt: now, origin: origin, isConcealed: isConcealed)
         let updated = Self.applyMax(entries: [entry] + entries, max: maxEntries)
         entries = updated
-        try? Self.persist(entries: updated, to: url)
+        try? Self.persist(entries: Self.persistable(updated), to: url)
         return entry
     }
 
@@ -67,7 +78,7 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
         let trimmed = Self.applyMax(entries: entries, max: clamped)
         if trimmed.count != entries.count {
             entries = trimmed
-            try? Self.persist(entries: trimmed, to: url)
+            try? Self.persist(entries: Self.persistable(trimmed), to: url)
         }
     }
 
@@ -77,6 +88,15 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
 
     static func clamp(_ value: Int) -> Int {
         min(max(value, allowedMaxRange.lowerBound), allowedMaxRange.upperBound)
+    }
+
+    /// The filter that separates what is remembered from what is written.
+    ///
+    /// It sits on the way *out*, not on the way in: the in-memory list is complete, and
+    /// every path that writes the file goes through here. A concealed entry therefore
+    /// lives exactly as long as the process does.
+    static func persistable(_ entries: [ClipboardEntry]) -> [ClipboardEntry] {
+        entries.filter { !$0.isConcealed }
     }
 
     static func applyMax(entries: [ClipboardEntry], max: Int) -> [ClipboardEntry] {

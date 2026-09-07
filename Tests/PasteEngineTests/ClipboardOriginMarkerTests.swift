@@ -20,7 +20,7 @@ final class ClipboardOriginMarkerTests: XCTestCase {
         board = NSPasteboard(name: NSPasteboard.Name("WhisperKeyOriginTests-\(UUID().uuidString)"))
         board.clearContents()
         captures = []
-        monitor = ClipboardMonitor(pasteboard: SystemClipboardReader(pasteboard: board)) { [weak self] text, origin in
+        monitor = ClipboardMonitor(pasteboard: SystemClipboardReader(pasteboard: board)) { [weak self] text, origin, _ in
             self?.captures.append((text, origin))
         }
         monitor.start()

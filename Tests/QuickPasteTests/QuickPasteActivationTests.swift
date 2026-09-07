@@ -52,7 +52,7 @@ final class QuickPasteActivationTests: XCTestCase {
         configuration: QuickPasteConfiguration = disabled,
         accessibilityGranted: Bool = true
     ) -> (QuickPasteActivation, ClipboardMonitor, FakeGesture) {
-        let monitor = ClipboardMonitor(pasteboard: StillPasteboard()) { _, _ in }
+        let monitor = ClipboardMonitor(pasteboard: StillPasteboard()) { _, _, _ in }
         let gesture = FakeGesture()
         let activation = QuickPasteActivation(
             watcher: monitor,
