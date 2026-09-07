@@ -97,32 +97,49 @@ public final class HoldToRevealRunner: @unchecked Sendable {
             return
         }
 
-        let now = CFAbsoluteTimeGetCurrent()
-        let trigger = self.trigger
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        let rawFlags = event.flags.rawValue
-
-        let translated: HoldToRevealStateMachine.Event?
-        switch type {
-        case .flagsChanged:
-            if keyCode == trigger.virtualKeyCode {
-                translated = trigger.transition(rawFlags: rawFlags) == .pressed
-                    ? .triggerDown(at: now)
-                    : .triggerUp(at: now)
-            } else {
-                // A foreign modifier coming *up* is not a keystroke and must not cancel.
-                translated = ModifierKey.transition(keyCode: keyCode, rawFlags: rawFlags) == .pressed
-                    ? .otherKeyDown(at: now)
-                    : .otherModifierUp(at: now)
-            }
-        case .keyDown:
-            translated = .otherKeyDown(at: now)
-        default:
-            translated = nil
-        }
+        let translated = Self.translate(
+            type: type,
+            keyCode: event.getIntegerValueField(.keyboardEventKeycode),
+            rawFlags: event.flags.rawValue,
+            trigger: self.trigger,
+            now: CFAbsoluteTimeGetCurrent()
+        )
 
         guard let translated else { return }
         handler?(translated)
+    }
+
+    /// The whole of the tap's decision-making, with the tap taken out of it.
+    ///
+    /// A `CGEvent` carries exactly three things this runner cares about — its type, its
+    /// key code and its raw flags — so lifting them out leaves a pure function that can be
+    /// proved without an event tap, a keyboard or a run loop.
+    static func translate(
+        type: CGEventType,
+        keyCode: Int64,
+        rawFlags: UInt64,
+        trigger: TriggerKey,
+        now: TimeInterval
+    ) -> HoldToRevealStateMachine.Event? {
+        switch type {
+        case .flagsChanged:
+            if keyCode == trigger.virtualKeyCode {
+                return trigger.transition(rawFlags: rawFlags) == .pressed
+                    ? .triggerDown(at: now)
+                    : .triggerUp(at: now)
+            }
+            // A foreign modifier coming *up* is not a keystroke and must not cancel:
+            // letting go of a Shift that was already held has to leave the panel alone.
+            // Only `ModifierKey.transition` can tell the two directions apart, because
+            // the shared flag bit reads the same either way while the other side is held.
+            return ModifierKey.transition(keyCode: keyCode, rawFlags: rawFlags) == .pressed
+                ? .otherKeyDown(at: now)
+                : .otherModifierUp(at: now)
+        case .keyDown:
+            return .otherKeyDown(at: now)
+        default:
+            return nil
+        }
     }
 
     private static let tapCallback: CGEventTapCallBack = { _, type, event, refcon in

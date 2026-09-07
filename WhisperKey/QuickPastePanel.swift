@@ -1,20 +1,37 @@
 import AppKit
 import ClipboardHistoryStore
+import QuickPaste
 import SwiftUI
 
-/// What the quick-paste panel shows: the most recent clipboard entries, newest first.
+/// What the quick-paste panel shows: the most recent clipboard entries, and which of them
+/// the pointer is currently over.
 ///
 /// The entries come from `ClipboardHistoryStore`, not from a live read of the pasteboard.
-/// Picking one of them by pointing is the next slice; this one still commits the newest.
+/// Which one is chosen is decided by `QuickPasteLayout` from the mouse position, never by
+/// the view — the panel takes no mouse events at all.
 struct QuickPasteContent: Equatable {
     /// Newest first, already trimmed to what the panel should display.
     let entries: [ClipboardEntry]
+    /// Rows are drawn bottom-up when the panel had to open above the cursor, so the
+    /// newest entry is the one next to the pointer either way.
+    let isFlipped: Bool
+    /// Index into `entries` — not into the rows on screen — of the entry under the
+    /// pointer. `nil` means the pointer is over none of them, and releasing cancels.
+    var highlightedIndex: Int?
+
+    init(entries: [ClipboardEntry], isFlipped: Bool = false, highlightedIndex: Int? = nil) {
+        self.entries = entries
+        self.isFlipped = isFlipped
+        self.highlightedIndex = highlightedIndex
+    }
 
     var isEmpty: Bool { entries.isEmpty }
 
-    /// The entry the gesture commits. Selection is unchanged from the previous slice —
-    /// releasing takes the newest entry, which is what the clipboard itself held.
-    var committedEntry: ClipboardEntry? { entries.first }
+    /// Entries in the order they appear from the top of the panel down.
+    var displayOrder: [(index: Int, entry: ClipboardEntry)] {
+        let numbered = Array(entries.enumerated()).map { (index: $0.offset, entry: $0.element) }
+        return isFlipped ? numbered.reversed() : numbered
+    }
 }
 
 struct QuickPasteRow: View {
@@ -35,7 +52,10 @@ struct QuickPasteRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        // A fixed height, because the hit test computes row bands from the same number.
+        // A row that sized itself to its content would put the highlight and the choice
+        // on different rows.
+        .frame(height: QuickPasteLayout.rowHeight)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(isSelected ? Color.accentColor.opacity(0.22) : Color.clear)
@@ -44,32 +64,34 @@ struct QuickPasteRow: View {
 }
 
 struct QuickPasteView: View {
-    static let contentWidth: CGFloat = 320
-
     let content: QuickPasteContent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Clipboard")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
-                .padding(.bottom, 2)
+                .frame(height: QuickPasteLayout.headerHeight, alignment: .center)
+                .padding(.bottom, QuickPasteLayout.headerBottomSpacing)
             if content.isEmpty {
                 Text("Clipboard history is empty")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.secondary)
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
+                    .frame(height: QuickPasteLayout.rowHeight, alignment: .leading)
             } else {
-                ForEach(content.entries) { entry in
-                    QuickPasteRow(entry: entry, isSelected: entry.id == content.committedEntry?.id)
+                ForEach(content.displayOrder, id: \.entry.id) { row in
+                    QuickPasteRow(
+                        entry: row.entry,
+                        isSelected: row.index == content.highlightedIndex
+                    )
                 }
             }
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 9)
-        .frame(width: Self.contentWidth, alignment: .leading)
+        .padding(.horizontal, QuickPasteLayout.horizontalPadding)
+        .padding(.vertical, QuickPasteLayout.verticalPadding)
+        .frame(width: QuickPasteLayout.contentWidth, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(.regularMaterial)
@@ -95,14 +117,20 @@ struct QuickPasteView: View {
 /// user's own text field.
 ///
 /// The one difference from `ToastWindow`: `ignoresMouseEvents = true`. The panel takes no
-/// part in hit-testing and cannot be clicked even deliberately.
+/// part in hit-testing and cannot be clicked even deliberately. Which row is highlighted
+/// therefore comes from `QuickPasteLayout.highlightedIndex` applied to the global mouse
+/// position, and the window's own size and origin come from the same file — one geometry,
+/// used by both the drawing and the choosing.
 @MainActor
 final class QuickPastePanel: NSPanel {
     private var hostingView: NSHostingView<QuickPasteView>!
+    private var content: QuickPasteContent
 
     init(content: QuickPasteContent) {
+        self.content = content
+        let size = QuickPasteLayout.panelSize(entryCount: content.entries.count)
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: QuickPasteView.contentWidth, height: 48),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -133,34 +161,24 @@ final class QuickPastePanel: NSPanel {
         contentView = container
         self.hostingView = hosting
 
-        sizeToFitContent()
+        // Sized from the layout rather than from `fittingSize`: the hit test derives row
+        // bands from these same numbers, so the window must be exactly that tall.
+        setContentSize(size)
     }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    private func sizeToFitContent() {
-        hostingView.layoutSubtreeIfNeeded()
-        let fitting = hostingView.fittingSize
-        setContentSize(NSSize(width: QuickPasteView.contentWidth, height: max(40, fitting.height)))
+    /// Repaints the highlight. Display only — what is actually chosen is resolved from a
+    /// fresh mouse reading when the key comes up, never from this.
+    func setHighlightedIndex(_ index: Int?) {
+        guard content.highlightedIndex != index else { return }
+        content.highlightedIndex = index
+        hostingView.rootView = QuickPasteView(content: content)
     }
 
-    /// Screen-space origin for a panel of `size` shown under `cursor`, kept whole inside
-    /// `visibleFrame`. Screen coordinates, so y grows upwards and "under the cursor"
-    /// means a *lower* y.
-    static func origin(cursor: NSPoint, size: NSSize, visibleFrame: NSRect) -> NSPoint {
-        let gap: CGFloat = 10
-        let x = min(max(cursor.x - 16, visibleFrame.minX), visibleFrame.maxX - size.width)
-        let y = min(max(cursor.y - size.height - gap, visibleFrame.minY), visibleFrame.maxY - size.height)
-        return NSPoint(x: x, y: y)
-    }
-
-    func show(at cursor: NSPoint) {
-        let screen = NSScreen.screens.first { NSMouseInRect(cursor, $0.frame, false) }
-            ?? NSScreen.main
-        if let visible = screen?.visibleFrame {
-            setFrameOrigin(Self.origin(cursor: cursor, size: frame.size, visibleFrame: visible))
-        }
+    func show(at origin: NSPoint) {
+        setFrameOrigin(origin)
         orderFrontRegardless()
     }
 }
