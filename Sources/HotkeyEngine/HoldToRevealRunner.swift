@@ -2,44 +2,39 @@
 import Foundation
 import CoreGraphics
 import ApplicationServices
-import os
 
-/// Drives a `HotkeyStateMachine` from a `CGEventTap` listening at the session level.
+/// Turns a session-level `CGEventTap` into `HoldToRevealStateMachine.Event` values.
 ///
-/// The tap is listen-only; events are never consumed. The runner re-arms the tap if macOS
-/// disables it (e.g. on timeout or after losing accessibility privileges).
-public final class HotkeyEngineRunner: @unchecked Sendable {
-    public typealias OutputHandler = @Sendable (HotkeyOutput) -> Void
-    // kVK_Escape.
-    private static let escapeVirtualKeyCode: Int64 = 53
+/// Deliberately thin: it owns no state machine, no timer and no panel. The hold timer
+/// belongs with whoever owns the panel, and the state machine is pure so it can be proved
+/// in tests — neither of which is true of anything in this file, which is why nothing but
+/// event translation lives here.
+///
+/// The tap is listen-only; events are never consumed. Callbacks arrive on the main run
+/// loop, the same as `HotkeyEngineRunner`.
+public final class HoldToRevealRunner: @unchecked Sendable {
+    public typealias EventHandler = @Sendable (HoldToRevealStateMachine.Event) -> Void
 
-    private let queue = DispatchQueue(label: "WhisperKey.HotkeyEngineRunner")
-    private let log = Logger(subsystem: "WhisperKey", category: "HotkeyEngineRunner")
-    private var stateMachine: HotkeyStateMachine
-    private var handler: OutputHandler?
-    private var lastLoggedSuppressionCount: UInt = 0
+    private let queue = DispatchQueue(label: "WhisperKey.HoldToRevealRunner")
+    private var trigger: TriggerKey
+    private var handler: EventHandler?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
-    public init(config: HotkeyConfig = HotkeyConfig()) {
-        self.stateMachine = HotkeyStateMachine(config: config)
+    public init(trigger: TriggerKey) {
+        self.trigger = trigger
     }
 
-    public func setOutputHandler(_ handler: @escaping OutputHandler) {
+    public func setEventHandler(_ handler: @escaping EventHandler) {
         queue.sync { self.handler = handler }
     }
 
-    public func setConfig(_ config: HotkeyConfig) {
-        queue.sync { self.stateMachine.setConfig(config) }
+    public func setTrigger(_ trigger: TriggerKey) {
+        queue.sync { self.trigger = trigger }
     }
 
-    public func setAppState(_ state: HotkeyStateMachine.AppState) {
-        queue.sync { self.stateMachine.setAppState(state) }
-    }
-
-    /// Starts the system-wide event tap. Requires Accessibility permission. Returns
-    /// `true` if the tap was created successfully, `false` otherwise.
+    /// Starts the tap. Requires Accessibility permission. Returns `true` on success.
     @discardableResult
     public func start() -> Bool {
         var success = false
@@ -49,6 +44,10 @@ public final class HotkeyEngineRunner: @unchecked Sendable {
 
     public func stop() {
         queue.sync { stopLocked() }
+    }
+
+    public var isRunning: Bool {
+        queue.sync { eventTap != nil }
     }
 
     private func startLocked() -> Bool {
@@ -64,7 +63,7 @@ public final class HotkeyEngineRunner: @unchecked Sendable {
             place: .headInsertEventTap,
             options: .listenOnly,
             eventsOfInterest: mask,
-            callback: HotkeyEngineRunner.tapCallback,
+            callback: HoldToRevealRunner.tapCallback,
             userInfo: runnerPtr
         ) else {
             return false
@@ -99,44 +98,38 @@ public final class HotkeyEngineRunner: @unchecked Sendable {
         }
 
         let now = CFAbsoluteTimeGetCurrent()
-        let trigger = stateMachine.config.trigger
+        let trigger = self.trigger
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        let rawFlags = event.flags.rawValue
 
-        let smEvent: HotkeyStateMachine.Event?
+        let translated: HoldToRevealStateMachine.Event?
         switch type {
         case .flagsChanged:
             if keyCode == trigger.virtualKeyCode {
-                let transition = trigger.transition(rawFlags: event.flags.rawValue)
-                smEvent = transition == .pressed ? .triggerDown(at: now) : .triggerUp(at: now)
+                translated = trigger.transition(rawFlags: rawFlags) == .pressed
+                    ? .triggerDown(at: now)
+                    : .triggerUp(at: now)
             } else {
-                smEvent = .otherKeyDown(at: now)
+                // A foreign modifier coming *up* is not a keystroke and must not cancel.
+                translated = ModifierKey.transition(keyCode: keyCode, rawFlags: rawFlags) == .pressed
+                    ? .otherKeyDown(at: now)
+                    : .otherModifierUp(at: now)
             }
         case .keyDown:
-            smEvent = keyCode == Self.escapeVirtualKeyCode
-                ? .escapeDown(at: now)
-                : .otherKeyDown(at: now)
+            translated = .otherKeyDown(at: now)
         default:
-            smEvent = nil
+            translated = nil
         }
 
-        guard let inputEvent = smEvent else { return }
-        let output = stateMachine.process(inputEvent)
-
-        if stateMachine.transcribingSuppressionCount > lastLoggedSuppressionCount {
-            lastLoggedSuppressionCount = stateMachine.transcribingSuppressionCount
-            log.info("hotkey suppressed: transcription in flight (count=\(self.lastLoggedSuppressionCount, privacy: .public))")
-        }
-
-        if let output {
-            handler?(output)
-        }
+        guard let translated else { return }
+        handler?(translated)
     }
 
     private static let tapCallback: CGEventTapCallBack = { _, type, event, refcon in
         guard let refcon else {
             return Unmanaged.passUnretained(event)
         }
-        let runner = Unmanaged<HotkeyEngineRunner>.fromOpaque(refcon).takeUnretainedValue()
+        let runner = Unmanaged<HoldToRevealRunner>.fromOpaque(refcon).takeUnretainedValue()
         runner.handleSystemEvent(event, type: type)
         return Unmanaged.passUnretained(event)
     }

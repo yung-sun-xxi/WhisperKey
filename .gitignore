@@ -39,6 +39,9 @@ release.local.env
 # Claude Code runtime state (lock files, cached transcripts)
 .claude/
 
+# Agent working files (briefs, scratch, handoffs) — see ~/PersonalProjects/AGENTS.md
+.agent/
+
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However
