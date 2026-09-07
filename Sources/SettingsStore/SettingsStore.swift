@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import HotkeyEngine
 import KeychainStore
+import QuickPaste
 import TranscriptionProvider
 import UsageStatsStore
 
@@ -60,10 +61,24 @@ public final class SettingsStore: ObservableObject {
         static let pendingInstallWelcomeID = "WhisperKey.settings.pendingInstallWelcomeID"
         static let presentedInstallWelcomeID = "WhisperKey.settings.presentedInstallWelcomeID"
         static let usageStatsRange = "WhisperKey.settings.usageStatsRange"
+        // The enabled key is the one #79 wrote by hand as a hidden flag, kept so anyone
+        // who turned it on that way keeps the feature on.
+        static let quickPasteEnabled = "WhisperKey.settings.quickPasteEnabled"
+        static let quickPasteTriggerKey = "WhisperKey.settings.quickPasteTriggerKey"
+        static let quickPasteHoldDuration = "WhisperKey.settings.quickPasteHoldDuration"
+        static let quickPasteEntryCount = "WhisperKey.settings.quickPasteEntryCount"
     }
 
     public static let defaultHistoryMaxEntries = 30
     public static let historyMaxEntriesRange: ClosedRange<Int> = 0...1000
+
+    public static let defaultQuickPasteTriggerKey = QuickPasteConfiguration.defaultTrigger
+    public static let defaultQuickPasteHoldDuration = QuickPasteConfiguration.defaultHoldDuration
+    /// Below 200 ms the popup starts appearing during ordinary chords; above two seconds
+    /// nobody would wait for it.
+    public static let quickPasteHoldDurationRange: ClosedRange<TimeInterval> = 0.2...2.0
+    public static let defaultQuickPasteEntryCount = QuickPasteConfiguration.defaultVisibleEntryCount
+    public static let quickPasteEntryCountRange: ClosedRange<Int> = 1...10
 
     private let keychain: KeychainStorage
     private let defaults: UserDefaults
@@ -86,8 +101,21 @@ public final class SettingsStore: ObservableObject {
         didSet { if !loading { defaults.set(language.rawValue, forKey: DefaultsKey.language) } }
     }
 
+    /// The recording trigger.
+    ///
+    /// Validated against the quick-paste trigger in the same re-entrant `didSet` shape
+    /// `historyMaxEntries` uses: an unacceptable value puts the old one straight back, so
+    /// the rejection is visible in the property itself rather than in whoever set it.
+    /// This is the direction that is easy to forget — moving *recording* onto the key the
+    /// popup already holds is as much a collision as the other way round.
     @Published public var triggerKey: TriggerKey {
-        didSet { if !loading { defaults.set(triggerKey.rawValue, forKey: DefaultsKey.triggerKey) } }
+        didSet {
+            if triggerKey == quickPasteTriggerKey {
+                triggerKey = oldValue
+                return
+            }
+            if !loading { defaults.set(triggerKey.rawValue, forKey: DefaultsKey.triggerKey) }
+        }
     }
 
     @Published public var triggerMode: TriggerMode {
@@ -138,6 +166,55 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
+    /// The whole quick-paste popup, behind one switch. Default off.
+    @Published public var quickPasteEnabled: Bool {
+        didSet {
+            if !loading { defaults.set(quickPasteEnabled, forKey: DefaultsKey.quickPasteEnabled) }
+        }
+    }
+
+    /// The key that opens the popup. Rejects the key recording holds — the other half of
+    /// the validation on `triggerKey`.
+    @Published public var quickPasteTriggerKey: TriggerKey {
+        didSet {
+            if quickPasteTriggerKey == triggerKey {
+                quickPasteTriggerKey = oldValue
+                return
+            }
+            if !loading {
+                defaults.set(quickPasteTriggerKey.rawValue, forKey: DefaultsKey.quickPasteTriggerKey)
+            }
+        }
+    }
+
+    /// How long the trigger has to be held before the popup appears, in seconds.
+    @Published public var quickPasteHoldDuration: TimeInterval {
+        didSet {
+            let clamped = Self.clampQuickPasteHoldDuration(quickPasteHoldDuration)
+            if clamped != quickPasteHoldDuration {
+                quickPasteHoldDuration = clamped
+                return
+            }
+            if !loading {
+                defaults.set(quickPasteHoldDuration, forKey: DefaultsKey.quickPasteHoldDuration)
+            }
+        }
+    }
+
+    /// How many clipboard entries the popup lists.
+    @Published public var quickPasteEntryCount: Int {
+        didSet {
+            let clamped = Self.clampQuickPasteEntryCount(quickPasteEntryCount)
+            if clamped != quickPasteEntryCount {
+                quickPasteEntryCount = clamped
+                return
+            }
+            if !loading {
+                defaults.set(quickPasteEntryCount, forKey: DefaultsKey.quickPasteEntryCount)
+            }
+        }
+    }
+
     @Published public var historyMaxEntries: Int {
         didSet {
             let clamped = Self.clampHistoryMax(historyMaxEntries)
@@ -172,7 +249,17 @@ public final class SettingsStore: ObservableObject {
         self.openAIModel = (defaults.string(forKey: DefaultsKey.openAIModel).flatMap(OpenAIProvider.Model.init(rawValue:))) ?? .whisper1
         self.groqModel = (defaults.string(forKey: DefaultsKey.groqModel).flatMap(GroqProvider.Model.init(rawValue:))) ?? .whisperLargeV3Turbo
         self.language = (defaults.string(forKey: DefaultsKey.language).flatMap(TranscriptionLanguage.init(rawValue:))) ?? .auto
-        self.triggerKey = (defaults.string(forKey: DefaultsKey.triggerKey).flatMap(TriggerKey.init(rawValue:))) ?? .rightOption
+        let recordingTrigger = (defaults.string(forKey: DefaultsKey.triggerKey).flatMap(TriggerKey.init(rawValue:))) ?? .rightOption
+        self.triggerKey = recordingTrigger
+        // A stored pair can only collide if it was written before this validation
+        // existed. Recording keeps its key and the popup moves to a free one, so the app
+        // never comes up in a configuration it would refuse to be put into by hand.
+        let storedQuickPasteTrigger = (defaults.string(forKey: DefaultsKey.quickPasteTriggerKey)
+            .flatMap(TriggerKey.init(rawValue:))) ?? Self.defaultQuickPasteTriggerKey
+        self.quickPasteTriggerKey = Self.resolveQuickPasteTrigger(
+            storedQuickPasteTrigger,
+            recordingTrigger: recordingTrigger
+        )
         self.triggerMode = (defaults.string(forKey: DefaultsKey.triggerMode).flatMap(TriggerMode.init(rawValue:))) ?? .tap
         self.soundEffectsEnabled = (defaults.object(forKey: DefaultsKey.soundEffectsEnabled) as? Bool) ?? true
         self.saveTranscriptionToClipboard = (defaults.object(forKey: DefaultsKey.saveTranscriptionToClipboard) as? Bool) ?? true
@@ -182,6 +269,13 @@ public final class SettingsStore: ObservableObject {
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.usageStatsRange = (defaults.string(forKey: DefaultsKey.usageStatsRange).flatMap(UsageStatsRange.init(rawValue:))) ?? .today
+        self.quickPasteEnabled = (defaults.object(forKey: DefaultsKey.quickPasteEnabled) as? Bool) ?? false
+        let storedHoldDuration = (defaults.object(forKey: DefaultsKey.quickPasteHoldDuration) as? Double)
+            ?? Self.defaultQuickPasteHoldDuration
+        self.quickPasteHoldDuration = Self.clampQuickPasteHoldDuration(storedHoldDuration)
+        let storedEntryCount = (defaults.object(forKey: DefaultsKey.quickPasteEntryCount) as? Int)
+            ?? Self.defaultQuickPasteEntryCount
+        self.quickPasteEntryCount = Self.clampQuickPasteEntryCount(storedEntryCount)
         self.openAIAPIKey = Self.loadAPIKey(for: .openai, keychain: keychain)
         self.groqAPIKey = Self.loadAPIKey(for: .groq, keychain: keychain)
 
@@ -190,6 +284,33 @@ public final class SettingsStore: ObservableObject {
 
     private static func clampHistoryMax(_ value: Int) -> Int {
         min(max(value, historyMaxEntriesRange.lowerBound), historyMaxEntriesRange.upperBound)
+    }
+
+    private static func clampQuickPasteHoldDuration(_ value: TimeInterval) -> TimeInterval {
+        min(max(value, quickPasteHoldDurationRange.lowerBound), quickPasteHoldDurationRange.upperBound)
+    }
+
+    private static func clampQuickPasteEntryCount(_ value: Int) -> Int {
+        min(max(value, quickPasteEntryCountRange.lowerBound), quickPasteEntryCountRange.upperBound)
+    }
+
+    /// The load-time half of the trigger-pair rule. Recording wins, because it is the
+    /// setting that existed first and the one the user has been using.
+    static func resolveQuickPasteTrigger(
+        _ candidate: TriggerKey,
+        recordingTrigger: TriggerKey
+    ) -> TriggerKey {
+        guard candidate == recordingTrigger else { return candidate }
+        return TriggerKey.allCases.first { $0 != recordingTrigger } ?? candidate
+    }
+
+    public var quickPasteConfiguration: QuickPasteConfiguration {
+        QuickPasteConfiguration(
+            isEnabled: quickPasteEnabled,
+            trigger: quickPasteTriggerKey,
+            holdDuration: quickPasteHoldDuration,
+            visibleEntryCount: quickPasteEntryCount
+        )
     }
 
     public var hotkeyConfig: HotkeyConfig {

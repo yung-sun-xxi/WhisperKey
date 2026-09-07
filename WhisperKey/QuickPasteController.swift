@@ -10,10 +10,11 @@ import os
 /// cursor listing the most recent clipboard entries, point at one, release, and it is
 /// pasted where the caret still is. Releasing over none of them cancels.
 ///
-/// Everything here is behind a stored boolean, default off, with no UI. `AppCoordinator`
-/// consults `isEnabled` before it builds the store, the monitor or this controller, so
-/// with the feature disabled nothing is constructed, no watcher polls the pasteboard, no
-/// event tap exists and no key is intercepted for it.
+/// Whether any of it runs is not decided here. `QuickPasteActivation` owns that, from the
+/// settings and the Accessibility permission, and calls `start()` and `stop()` — which is
+/// what makes "off means off" provable in `swift test` instead of by eye. With the
+/// feature off this object still exists, but its event tap does not: `stop()` tears the
+/// tap down, so no key is intercepted for it.
 ///
 /// This file is deliberately thin, because the application target has no test bundle: the
 /// gesture is in `HoldToRevealStateMachine`, the event translation in `HoldToRevealRunner`,
@@ -21,22 +22,7 @@ import os
 /// `QuickPasteLayout`. What is left here is the parts that only exist against a live
 /// system: a timer, an `NSPanel`, `NSEvent.mouseLocation` and `NSWorkspace`.
 @MainActor
-final class QuickPasteController {
-    /// Hidden flag. Absent reads as `false`, so the feature is off until it is written.
-    static let defaultsKey = "WhisperKey.settings.quickPasteEnabled"
-
-    /// Hardcoded for the tracer bullet. Must differ from the recording trigger, which
-    /// defaults to right Option.
-    static let trigger: TriggerKey = .rightCommand
-    static let holdThreshold: TimeInterval = 0.5
-
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: defaultsKey)
-    }
-
-    /// How many entries the panel lists. Hardcoded until the settings UI exists.
-    static let visibleEntryCount = 5
-
+final class QuickPasteController: QuickPasteGestureControlling {
     /// How often the highlight is repainted while the panel is open. Display only — a
     /// coarser interval would show a stale highlight, never paste the wrong entry.
     private static let highlightInterval: TimeInterval = 1.0 / 60.0
@@ -56,6 +42,8 @@ final class QuickPasteController {
     private let runner: HoldToRevealRunner
     private let outputRouter = TranscriptionOutputRouter()
     private var machine: HoldToRevealStateMachine
+    /// The trigger, the hold and the entry count, as the settings currently have them.
+    private var configuration: QuickPasteConfiguration
     private var panel: QuickPastePanel?
     private var holdTimer: Timer?
     private var highlightTimer: Timer?
@@ -70,11 +58,16 @@ final class QuickPasteController {
     /// of the clipboard never lands in the history it displays.
     private let monitor: ClipboardMonitor
 
-    init(store: ClipboardHistoryStore, monitor: ClipboardMonitor) {
+    init(
+        store: ClipboardHistoryStore,
+        monitor: ClipboardMonitor,
+        configuration: QuickPasteConfiguration = QuickPasteConfiguration()
+    ) {
         self.store = store
         self.monitor = monitor
-        self.runner = HoldToRevealRunner(trigger: Self.trigger)
-        self.machine = HoldToRevealStateMachine(holdThreshold: Self.holdThreshold)
+        self.configuration = configuration
+        self.runner = HoldToRevealRunner(trigger: configuration.trigger)
+        self.machine = HoldToRevealStateMachine(holdThreshold: configuration.holdDuration)
 
         runner.setEventHandler { [weak self] event in
             // The tap source lives on the main run loop, so this is already the main
@@ -87,6 +80,8 @@ final class QuickPasteController {
             }
         }
     }
+
+    var isRunning: Bool { started }
 
     /// Starts the event tap. Requires Accessibility permission.
     func start() {
@@ -102,6 +97,25 @@ final class QuickPasteController {
         cancelHoldTimer()
         hidePanel()
         runner.stop()
+    }
+
+    /// Takes a new trigger, hold duration and entry count while the app is running.
+    ///
+    /// The state machine's threshold is a `let`, so a changed hold duration rebuilds it —
+    /// carrying the application state across, because a machine that forgot a recording
+    /// was in flight would let the panel open on top of it. Any gesture in progress is
+    /// abandoned, which is the right answer while the user is in Settings anyway.
+    func apply(configuration: QuickPasteConfiguration) {
+        guard configuration != self.configuration else { return }
+        let appState = machine.appState
+        self.configuration = configuration
+        runner.setTrigger(configuration.trigger)
+        cancelHoldTimer()
+        hidePanel()
+        machine = HoldToRevealStateMachine(
+            holdThreshold: configuration.holdDuration,
+            appState: appState
+        )
     }
 
     func setAppState(_ state: HotkeyStateMachine.AppState) {
@@ -125,13 +139,14 @@ final class QuickPasteController {
 
     private func scheduleHoldTimer(pressedAt: TimeInterval) {
         cancelHoldTimer()
-        let timer = Timer(timeInterval: Self.holdThreshold, repeats: false) { [weak self] _ in
+        let threshold = configuration.holdDuration
+        let timer = Timer(timeInterval: threshold, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.holdTimer = nil
                 self.apply(
                     self.machine.process(
-                        .holdThresholdElapsed(at: pressedAt + Self.holdThreshold)
+                        .holdThresholdElapsed(at: pressedAt + threshold)
                     )
                 )
             }
@@ -164,7 +179,7 @@ final class QuickPasteController {
     private func revealPanel() {
         hidePanel()
 
-        let entries = Array(store.entries.prefix(Self.visibleEntryCount))
+        let entries = Array(store.entries.prefix(configuration.visibleEntryCount))
         let cursor = NSEvent.mouseLocation
         let size = QuickPasteLayout.panelSize(entryCount: entries.count)
         let placement = QuickPasteLayout.placement(
