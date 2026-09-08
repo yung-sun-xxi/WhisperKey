@@ -20,7 +20,7 @@ It supports OpenAI and Groq Whisper-compatible transcription APIs.
 - API key validation and storage in the macOS Keychain.
 - Optional clipboard output and auto-paste.
 - Local transcription history with configurable retention.
-- Optional quick-paste popup: hold a key to pick from recent clipboard entries and paste without leaving the field. Off by default.
+- Optional quick-paste popup: hold a key to pick from recent clipboard entries — with the pointer or with the up and down arrows — and paste without leaving the field. Off by default.
 - Local usage counters by provider and model.
 - Optional sound effects and launch-at-login support.
 

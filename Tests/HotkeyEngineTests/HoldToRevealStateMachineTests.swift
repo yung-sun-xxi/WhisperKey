@@ -185,6 +185,86 @@ final class HoldToRevealStateMachineTests: XCTestCase {
         XCTAssertEqual(sm.process(.holdThresholdElapsed(at: 1.5)), .reveal)
     }
 
+    // MARK: - Arrow keys steer the selection instead of abandoning the gesture
+
+    func testArrowKeyWhileRevealedMovesTheSelectionAndLeavesThePanelUp() {
+        var sm = HoldToRevealStateMachine()
+        _ = sm.process(.triggerDown(at: 0.0))
+        _ = sm.process(.holdThresholdElapsed(at: 0.5))
+
+        XCTAssertEqual(
+            sm.process(.arrowKeyDown(direction: .down, at: 0.6)),
+            .moveSelection(.down)
+        )
+        XCTAssertTrue(sm.isRevealed)
+
+        XCTAssertEqual(
+            sm.process(.arrowKeyDown(direction: .up, at: 0.7)),
+            .moveSelection(.up)
+        )
+        XCTAssertTrue(sm.isRevealed)
+    }
+
+    func testReleaseAfterAnArrowStillCommits() {
+        var sm = HoldToRevealStateMachine()
+        _ = sm.process(.triggerDown(at: 0.0))
+        _ = sm.process(.holdThresholdElapsed(at: 0.5))
+        _ = sm.process(.arrowKeyDown(direction: .down, at: 0.6))
+
+        XCTAssertEqual(sm.process(.triggerUp(at: 0.8)), .commit)
+        XCTAssertFalse(sm.isRevealed)
+    }
+
+    func testHeldArrowRepeatsKeepTheGestureAlive() {
+        var sm = HoldToRevealStateMachine()
+        _ = sm.process(.triggerDown(at: 0.0))
+        _ = sm.process(.holdThresholdElapsed(at: 0.5))
+
+        for step in 1...20 {
+            XCTAssertEqual(
+                sm.process(.arrowKeyDown(direction: .down, at: 0.5 + Double(step) * 0.03)),
+                .moveSelection(.down)
+            )
+        }
+        XCTAssertTrue(sm.isRevealed)
+    }
+
+    func testArrowKeyBeforeTheThresholdCancelsTheGestureLikeAnyOtherKey() {
+        // The panel is not up yet, so the arrow belongs to whatever the user is typing in.
+        var sm = HoldToRevealStateMachine()
+        _ = sm.process(.triggerDown(at: 0.0))
+
+        XCTAssertNil(sm.process(.arrowKeyDown(direction: .down, at: 0.2)))
+        XCTAssertNil(sm.process(.holdThresholdElapsed(at: 0.5)))
+        XCTAssertFalse(sm.isRevealed)
+    }
+
+    func testArrowKeyWithNothingInFlightProducesNothing() {
+        var sm = HoldToRevealStateMachine()
+
+        XCTAssertNil(sm.process(.arrowKeyDown(direction: .up, at: 1.0)))
+        XCTAssertFalse(sm.isRevealed)
+    }
+
+    func testArrowKeyAfterADismissalProducesNothing() {
+        var sm = HoldToRevealStateMachine()
+        _ = sm.process(.triggerDown(at: 0.0))
+        _ = sm.process(.holdThresholdElapsed(at: 0.5))
+        XCTAssertEqual(sm.process(.otherKeyDown(at: 0.6)), .dismiss)
+
+        XCTAssertNil(sm.process(.arrowKeyDown(direction: .down, at: 0.7)))
+        XCTAssertNil(sm.process(.triggerUp(at: 0.8)))
+    }
+
+    func testRecordingStartingWhileRevealedStopsArrowsFromMovingAnything() {
+        var sm = HoldToRevealStateMachine()
+        _ = sm.process(.triggerDown(at: 0.0))
+        _ = sm.process(.holdThresholdElapsed(at: 0.5))
+        XCTAssertEqual(sm.setAppState(.recording), .dismiss)
+
+        XCTAssertNil(sm.process(.arrowKeyDown(direction: .down, at: 0.6)))
+    }
+
     // MARK: - The default threshold is the documented 500 ms
 
     func testDefaultHoldThresholdIs500ms() {

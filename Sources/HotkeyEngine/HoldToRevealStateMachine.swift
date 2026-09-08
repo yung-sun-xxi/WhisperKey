@@ -1,5 +1,14 @@
 import Foundation
 
+/// Which way along the screen an arrow key asks the selection to move. A *screen*
+/// direction, not a step through an array: a panel that opened above the cursor draws its
+/// rows bottom-up, and "down" is then the other way through the entries. Turning one into
+/// the other is the caller's job, not this machine's.
+public enum HoldToRevealArrowDirection: Sendable, Equatable {
+    case up
+    case down
+}
+
 public enum HoldToRevealOutput: Sendable, Equatable {
     /// Show the panel.
     case reveal
@@ -7,6 +16,8 @@ public enum HoldToRevealOutput: Sendable, Equatable {
     case dismiss
     /// Take the panel away and act on what it was showing.
     case commit
+    /// Move the highlight one row the way the arrow points. The panel stays up.
+    case moveSelection(HoldToRevealArrowDirection)
 }
 
 /// Pure state machine for the hold-to-reveal gesture. Has no system dependencies and is
@@ -30,6 +41,10 @@ public struct HoldToRevealStateMachine: Sendable {
         /// A foreign modifier being *released*. Letting go of Shift must not take the
         /// panel away, so this is explicitly not `otherKeyDown`.
         case otherModifierUp(at: TimeInterval)
+        /// An up or down arrow going down. Its own event rather than an `otherKeyDown`,
+        /// because while the panel is up it steers the selection instead of abandoning
+        /// the gesture. Before the panel is up it is still just another key.
+        case arrowKeyDown(direction: HoldToRevealArrowDirection, at: TimeInterval)
         case holdThresholdElapsed(at: TimeInterval)
     }
 
@@ -100,6 +115,21 @@ public struct HoldToRevealStateMachine: Sendable {
             let wasRevealed = phase == .revealed
             phase = .idle
             return wasRevealed ? .commit : nil
+
+        case .arrowKeyDown(let direction, _):
+            switch phase {
+            case .revealed:
+                // The one key that does not abandon the gesture. The panel stays exactly
+                // where it is and the highlight moves.
+                return .moveSelection(direction)
+            case .armed:
+                // No panel yet, so there is nothing to steer and the arrow belongs to
+                // whatever the user is typing in. Same answer as any other key.
+                phase = .cancelled
+                return nil
+            case .idle, .cancelled:
+                return nil
+            }
 
         case .otherKeyDown:
             switch phase {

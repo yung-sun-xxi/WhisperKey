@@ -17,10 +17,12 @@ import os
 /// tap down, so no key is intercepted for it.
 ///
 /// This file is deliberately thin, because the application target has no test bundle: the
-/// gesture is in `HoldToRevealStateMachine`, the event translation in `HoldToRevealRunner`,
-/// and every piece of geometry — panel size, placement, which row a point is in — in
-/// `QuickPasteLayout`. What is left here is the parts that only exist against a live
-/// system: a timer, an `NSPanel`, `NSEvent.mouseLocation` and `NSWorkspace`.
+/// gesture is in `HoldToRevealStateMachine`, the event translation and the decision to
+/// swallow an arrow in `HoldToRevealRunner`, every piece of geometry — panel size,
+/// placement, which row a point is in — in `QuickPasteLayout`, and which row the pointer
+/// and the arrow keys between them have chosen in `QuickPasteSelection`. What is left
+/// here is the parts that only exist against a live system: a timer, an `NSPanel`,
+/// `NSEvent.mouseLocation` and `NSWorkspace`.
 @MainActor
 final class QuickPasteController: QuickPasteGestureControlling {
     /// How often the highlight is repainted while the panel is open. Display only — a
@@ -32,6 +34,9 @@ final class QuickPasteController: QuickPasteGestureControlling {
         let entryCount: Int
         let frame: CGRect
         let isFlipped: Bool
+        /// Which row is chosen and which input chose it. The pointer and the arrow keys
+        /// both write here, and `QuickPasteSelection` is what decides which of them wins.
+        var selection: QuickPasteSelection
         /// The application that was in front when the threshold fired. Anything else in
         /// front at release time means the text would land somewhere the user was not
         /// looking when the gesture began.
@@ -138,7 +143,7 @@ final class QuickPasteController: QuickPasteGestureControlling {
             scheduleHoldTimer(pressedAt: now)
         case .triggerUp, .otherKeyDown:
             cancelHoldTimer()
-        case .otherModifierUp, .holdThresholdElapsed:
+        case .otherModifierUp, .holdThresholdElapsed, .arrowKeyDown:
             break
         }
 
@@ -179,6 +184,8 @@ final class QuickPasteController: QuickPasteGestureControlling {
             hidePanel()
         case .commit:
             commit()
+        case .moveSelection(let direction):
+            moveSelection(direction)
         }
     }
 
@@ -205,9 +212,21 @@ final class QuickPasteController: QuickPasteGestureControlling {
             entryCount: entries.count,
             frame: CGRect(origin: placement.origin, size: size),
             isFlipped: placement.isFlipped,
+            selection: QuickPasteSelection(
+                entryCount: entries.count,
+                isFlipped: placement.isFlipped
+            ),
             targetProcessIdentifier: NSWorkspace.shared.frontmostApplication?.processIdentifier
         )
 
+        // From here on the tap swallows arrow keys instead of letting them through to the
+        // application. Set before the first repaint, and cleared in `hidePanel`, so the
+        // flag is never true with nothing on screen.
+        runner.setRevealed(true)
+        // The first reading, taken with the panel: it paints the row under the cursor
+        // straight away, and it gives the selection a baseline to compare later readings
+        // against, so an arrow pressed before the timer's first tick is not undone by it.
+        repaintHighlight()
         startHighlightTimer()
     }
 
@@ -231,9 +250,32 @@ final class QuickPasteController: QuickPasteGestureControlling {
         highlightTimer = timer
     }
 
+    /// Reads the mouse and offers it to the selection, which ignores it if the pointer
+    /// has not actually moved since the last reading and the keyboard is steering.
+    /// Returns whatever is selected afterwards.
+    @discardableResult
+    private func samplePointer() -> Int? {
+        guard var reveal = self.reveal else { return nil }
+        let mouse = NSEvent.mouseLocation
+        let index = reveal.selection.pointerSampled(
+            at: mouse,
+            hitting: Self.index(at: mouse, in: reveal)
+        )
+        self.reveal = reveal
+        return index
+    }
+
     private func repaintHighlight() {
-        guard let reveal, let panel else { return }
-        panel.setHighlightedIndex(Self.index(at: NSEvent.mouseLocation, in: reveal))
+        panel?.setHighlightedIndex(samplePointer())
+    }
+
+    /// An arrow key arrived while the panel is up. The panel stays where it is; only the
+    /// highlight moves, and the keyboard takes the selection over from the pointer.
+    private func moveSelection(_ direction: HoldToRevealArrowDirection) {
+        guard var reveal = self.reveal else { return }
+        let index = reveal.selection.arrowPressed(direction)
+        self.reveal = reveal
+        panel?.setHighlightedIndex(index)
     }
 
     private static func index(at mouse: NSPoint, in reveal: Reveal) -> Int? {
@@ -246,6 +288,8 @@ final class QuickPasteController: QuickPasteGestureControlling {
     }
 
     private func hidePanel() {
+        // Arrow keys go back to the application the moment the panel is gone.
+        runner.setRevealed(false)
         highlightTimer?.invalidate()
         highlightTimer = nil
         panel?.orderOut(nil)
@@ -257,18 +301,22 @@ final class QuickPasteController: QuickPasteGestureControlling {
 
     // MARK: - Choosing
 
-    /// Resolves the chosen entry from a mouse position read *now*, at the moment the key
-    /// release arrived — not from whatever the highlight timer last sampled. A fast move
-    /// followed by a release would otherwise commit the neighbouring row, or none.
+    /// Resolves the chosen entry at the moment the key release arrived, not from whatever
+    /// the highlight timer last painted.
+    ///
+    /// The mouse is read *now* and offered to the selection, so a fast move followed by a
+    /// release still commits the row the pointer ended on rather than its neighbour. The
+    /// selection ignores that reading when the pointer has not moved and the arrow keys
+    /// are steering — which is what makes "release commits the row the keyboard chose".
     private func commit() {
-        guard let reveal else {
+        guard let open = reveal else {
             hidePanel()
             return
         }
 
-        let index = Self.index(at: NSEvent.mouseLocation, in: reveal)
+        let target = open.targetProcessIdentifier
+        let index = samplePointer()
         let entries = revealedEntries
-        let target = reveal.targetProcessIdentifier
 
         hidePanel()
 

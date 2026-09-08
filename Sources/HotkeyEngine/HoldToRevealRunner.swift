@@ -10,14 +10,25 @@ import ApplicationServices
 /// in tests — neither of which is true of anything in this file, which is why nothing but
 /// event translation lives here.
 ///
-/// The tap is listen-only; events are never consumed. Callbacks arrive on the main run
+/// The tap swallows exactly one thing — an arrow key while the panel is up — and passes
+/// everything else through, including the trigger itself. Callbacks arrive on the main run
 /// loop, the same as `HotkeyEngineRunner`.
+///
+/// The swallow decision cannot wait for the state machine. The handler hops to
+/// `DispatchQueue.main`, and by the time that hop runs the event has already been
+/// delivered to the focused application — an Option-Down in the user's document. So the
+/// tap answers from `setRevealed`, a flag the panel's owner sets when it puts the panel on
+/// screen and clears when it takes it away, read synchronously inside the callback.
 public final class HoldToRevealRunner: @unchecked Sendable {
     public typealias EventHandler = @Sendable (HoldToRevealStateMachine.Event) -> Void
 
     private let queue = DispatchQueue(label: "WhisperKey.HoldToRevealRunner")
     private var trigger: TriggerKey
     private var handler: EventHandler?
+    /// Whether the panel is on screen right now. Written from the main thread by whoever
+    /// owns the panel, and read on the main run loop where the tap delivers — the same
+    /// thread the tap callback runs on, which is why the read needs no hop of its own.
+    private var revealed = false
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -34,6 +45,15 @@ public final class HoldToRevealRunner: @unchecked Sendable {
         queue.sync { self.trigger = trigger }
     }
 
+    /// Tells the tap whether the panel is currently on screen, and therefore whether an
+    /// arrow key belongs to the popup or to the application underneath.
+    ///
+    /// Must be called on the main thread, from the same place that shows and hides the
+    /// panel, so that the flag can never say "up" while nothing is drawn.
+    public func setRevealed(_ revealed: Bool) {
+        self.revealed = revealed
+    }
+
     /// Starts the tap. Requires Accessibility permission. Returns `true` on success.
     @discardableResult
     public func start() -> Bool {
@@ -43,6 +63,9 @@ public final class HoldToRevealRunner: @unchecked Sendable {
     }
 
     public func stop() {
+        // A tap that is gone swallows nothing; leaving the flag set would make a restart
+        // begin by eating arrows with no panel on screen.
+        revealed = false
         queue.sync { stopLocked() }
     }
 
@@ -58,10 +81,14 @@ public final class HoldToRevealRunner: @unchecked Sendable {
 
         let runnerPtr = Unmanaged.passUnretained(self).toOpaque()
 
+        // Not `.listenOnly`: an arrow pressed while the panel is up has to be swallowed,
+        // or it reaches the focused text field as Option-Down or Shift-Down — the trigger
+        // is a modifier, so the arrow never arrives bare. Everything else the callback
+        // sees is passed straight back out.
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            options: .listenOnly,
+            options: .defaultTap,
             eventsOfInterest: mask,
             callback: HoldToRevealRunner.tapCallback,
             userInfo: runnerPtr
@@ -89,12 +116,13 @@ public final class HoldToRevealRunner: @unchecked Sendable {
         runLoopSource = nil
     }
 
-    fileprivate func handleSystemEvent(_ event: CGEvent, type: CGEventType) {
+    /// Returns `true` when the event must not be passed on.
+    fileprivate func handleSystemEvent(_ event: CGEvent, type: CGEventType) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap = eventTap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
-            return
+            return false
         }
 
         let translated = Self.translate(
@@ -105,8 +133,14 @@ public final class HoldToRevealRunner: @unchecked Sendable {
             now: CFAbsoluteTimeGetCurrent()
         )
 
-        guard let translated else { return }
-        handler?(translated)
+        // Decided here, before the handler's hop to the main queue: by the time that hop
+        // runs the event would already be in the user's document.
+        let consume = Self.consumes(translated, isRevealed: revealed)
+
+        if let translated {
+            handler?(translated)
+        }
+        return consume
     }
 
     /// The whole of the tap's decision-making, with the tap taken out of it.
@@ -136,9 +170,41 @@ public final class HoldToRevealRunner: @unchecked Sendable {
                 ? .otherKeyDown(at: now)
                 : .otherModifierUp(at: now)
         case .keyDown:
+            if let direction = ArrowKey.direction(keyCode: keyCode) {
+                return .arrowKeyDown(direction: direction, at: now)
+            }
             return .otherKeyDown(at: now)
         default:
             return nil
+        }
+    }
+
+    /// Whether the tap must swallow the event it has just translated.
+    ///
+    /// Exactly one thing is swallowed, and only while the panel is up: an arrow the popup
+    /// is about to act on. Everything else — every other key, the trigger, and every arrow
+    /// pressed with no panel on screen — is passed through untouched, which is what keeps
+    /// the arrow keys ordinary the rest of the time.
+    static func consumes(_ event: HoldToRevealStateMachine.Event?, isRevealed: Bool) -> Bool {
+        guard isRevealed else { return false }
+        if case .arrowKeyDown = event { return true }
+        return false
+    }
+
+    /// The two arrows the popup understands, by virtual key code.
+    ///
+    /// Left and right are deliberately absent: there is nothing sideways to move to, so
+    /// they stay ordinary keys that cancel the gesture and reach the application.
+    enum ArrowKey {
+        static let up: Int64 = 126     // kVK_UpArrow
+        static let down: Int64 = 125   // kVK_DownArrow
+
+        static func direction(keyCode: Int64) -> HoldToRevealArrowDirection? {
+            switch keyCode {
+            case up: return .up
+            case down: return .down
+            default: return nil
+            }
         }
     }
 
@@ -147,8 +213,8 @@ public final class HoldToRevealRunner: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
         let runner = Unmanaged<HoldToRevealRunner>.fromOpaque(refcon).takeUnretainedValue()
-        runner.handleSystemEvent(event, type: type)
-        return Unmanaged.passUnretained(event)
+        let consume = runner.handleSystemEvent(event, type: type)
+        return consume ? nil : Unmanaged.passUnretained(event)
     }
 }
 #endif
