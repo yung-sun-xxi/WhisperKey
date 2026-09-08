@@ -24,6 +24,10 @@ private enum KeyCode {
     static let leftControl: Int64 = 59
     static let capsLock: Int64 = 57
     static let letterA: Int64 = 0
+    static let arrowUp: Int64 = 126
+    static let arrowDown: Int64 = 125
+    static let arrowLeft: Int64 = 123
+    static let arrowRight: Int64 = 124
 }
 
 /// What the event tap makes of the events macOS hands it. The tap itself is not exercised
@@ -135,6 +139,66 @@ final class HoldToRevealRunnerTests: XCTestCase {
 
     func testAnUninterestingEventTypeTranslatesToNothing() {
         XCTAssertNil(translate(.keyUp, keyCode: KeyCode.letterA, rawFlags: Bits.noise))
+    }
+
+    // MARK: - Arrow keys are their own event
+
+    func testArrowDownBecomesADownwardArrowEvent() {
+        XCTAssertEqual(
+            translate(.keyDown, keyCode: KeyCode.arrowDown, rawFlags: Bits.sharedCommand),
+            .arrowKeyDown(direction: .down, at: 7.0)
+        )
+    }
+
+    func testArrowUpBecomesAnUpwardArrowEvent() {
+        XCTAssertEqual(
+            translate(.keyDown, keyCode: KeyCode.arrowUp, rawFlags: Bits.sharedCommand),
+            .arrowKeyDown(direction: .up, at: 7.0)
+        )
+    }
+
+    func testHorizontalArrowsAreOrdinaryKeysAndStillCancel() {
+        // Only up and down steer the list. Left and right have nothing to move, so they
+        // keep the old behaviour exactly: cancel the gesture, reach the application.
+        XCTAssertEqual(
+            translate(.keyDown, keyCode: KeyCode.arrowLeft, rawFlags: Bits.noise),
+            .otherKeyDown(at: 7.0)
+        )
+        XCTAssertEqual(
+            translate(.keyDown, keyCode: KeyCode.arrowRight, rawFlags: Bits.noise),
+            .otherKeyDown(at: 7.0)
+        )
+    }
+
+    func testAKeyUpForAnArrowIsStillNothing() {
+        XCTAssertNil(translate(.keyUp, keyCode: KeyCode.arrowDown, rawFlags: Bits.noise))
+    }
+
+    // MARK: - What the tap swallows
+
+    func testAnArrowIsSwallowedOnlyWhileThePanelIsUp() {
+        let arrow = HoldToRevealStateMachine.Event.arrowKeyDown(direction: .down, at: 7.0)
+
+        XCTAssertTrue(HoldToRevealRunner.consumes(arrow, isRevealed: true))
+        XCTAssertFalse(HoldToRevealRunner.consumes(arrow, isRevealed: false))
+    }
+
+    func testNothingElseIsEverSwallowed() {
+        // The tap stopped being listen-only for the arrows alone. Everything the user
+        // types, including the trigger itself, must still reach the application.
+        let others: [HoldToRevealStateMachine.Event?] = [
+            .triggerDown(at: 7.0),
+            .triggerUp(at: 7.0),
+            .otherKeyDown(at: 7.0),
+            .otherModifierUp(at: 7.0),
+            .holdThresholdElapsed(at: 7.0),
+            nil,
+        ]
+        for event in others {
+            XCTAssertFalse(HoldToRevealRunner.consumes(event, isRevealed: true),
+                           "\(String(describing: event)) must not be swallowed")
+            XCTAssertFalse(HoldToRevealRunner.consumes(event, isRevealed: false))
+        }
     }
 
     // MARK: - The trigger is whichever key was configured
