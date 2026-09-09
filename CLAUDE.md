@@ -34,6 +34,13 @@ same check the pull request gets.
 5. **Anything touching the microphone, Accessibility, global hotkeys, auto-paste
    or launch behaviour has to run as the installed app**, not from the build
    directory. That is what the `WhisperKey Dev Installed` scheme is for.
+6. **The local package is referenced as `relativePath = .`, and has to stay that
+   way.** A reference that spells out the folder name — `../WhisperKey` — resolves
+   only in a checkout whose directory carries that name. In a git worktree named
+   anything else, `xcodebuild` fails with `Could not resolve package dependencies`
+   while `swift build` and `swift test` still pass, so the package graph looks
+   healthy right up to the app build. Keep every local package path relative to the
+   project itself, never to the name of the folder it sits in.
 
 ## Releases
 
