@@ -224,7 +224,7 @@
 			mainGroup = CFBE7F7B2FAE5606006A3BF0;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				CF0C8A872FAE5AA20057B58F /* XCLocalSwiftPackageReference "../WhisperKey" */,
+				CF0C8A872FAE5AA20057B58F /* XCLocalSwiftPackageReference "." */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CFBE7F852FAE5606006A3BF0 /* Products */;
@@ -674,9 +674,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		CF0C8A872FAE5AA20057B58F /* XCLocalSwiftPackageReference "../WhisperKey" */ = {
+		CF0C8A872FAE5AA20057B58F /* XCLocalSwiftPackageReference "." */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../WhisperKey;
+			relativePath = .;
 		};
 /* End XCLocalSwiftPackageReference section */
 
