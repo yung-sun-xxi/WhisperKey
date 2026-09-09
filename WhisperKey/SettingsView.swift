@@ -18,6 +18,7 @@ private enum SettingsWindowLayout {
     static let settingsRowLabelWidth: CGFloat = 136
     static let settingsRowContentWidth: CGFloat = 276
     static let backgroundColor = NSColor.controlBackgroundColor
+    static let windowTitle = "WhisperKey Settings"
 }
 
 @MainActor
@@ -77,7 +78,7 @@ enum SettingsWindowController {
 
         let window = SettingsWindow(contentViewController: contentController)
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.title = "WhisperKey Settings"
+        window.title = SettingsWindowLayout.windowTitle
         window.toolbarStyle = .preference
         window.setContentSize(contentController.windowContentSize)
         window.isReleasedWhenClosed = false
@@ -186,6 +187,10 @@ private final class SettingsContentViewController: NSTabViewController {
             // Reports the SwiftUI content height back as the pane's preferred size, which
             // is what drives the window resize below.
             paneController.sizingOptions = [.preferredContentSize]
+            // A toolbar-style NSTabViewController takes the window title from the selected
+            // pane's controller, and shows "Untitled" when it has none. The toolbar already
+            // says which pane is showing, so every pane carries the window's own name.
+            paneController.title = SettingsWindowLayout.windowTitle
 
             let item = NSTabViewItem(viewController: paneController)
             item.identifier = tab.identifier
