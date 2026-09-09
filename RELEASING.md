@@ -174,17 +174,18 @@ workflow reads it from `vars`.
 
 ### Owner-local secret storage
 
-On the maintainer machine, release-only local secrets live outside the
-repository in:
+On the maintainer machine, release-only local secrets live inside the working
+tree, in a directory `.gitignore` excludes:
 
 ```text
-/Users/a.stepanenkov/PersonalProjects/WhisperKey.local-secrets/
+/Users/a.stepanenkov/PersonalProjects/WhisperKey/.local-secrets/
 ```
 
 `whisperkey-ci-password.txt` must contain the same keychain password as the
-GitHub repository secret `SIGNING_KEYCHAIN_PASSWORD`. Keep this file outside
-git and update the GitHub secret whenever the dedicated CI keychain password is
-rotated.
+GitHub repository secret `SIGNING_KEYCHAIN_PASSWORD`. The `.local-secrets/`
+rule in `.gitignore` is what keeps it out of git — never commit it, never
+`git add -f` it, and update the GitHub secret whenever the dedicated CI
+keychain password is rotated.
 
 The Apple app-specific password is stored by `notarytool` in the
 `WhisperKey-Notary` profile inside the dedicated signing keychain. Do not store
