@@ -29,6 +29,10 @@ enum SettingsWindowController {
         window
     }
 
+    /// Posted when the settings window is torn down, so a pane can cancel work that
+    /// would otherwise outlive it. Switching tabs does not post this.
+    static let willCloseNotification = Notification.Name("WhisperKeySettingsWindowWillClose")
+
     static func prepare(coordinator: AppCoordinator) {
         guard window == nil else { return }
 
@@ -43,6 +47,7 @@ enum SettingsWindowController {
 
         // Close instead of ordering out so SwiftUI-owned transient state is rebuilt next time.
         window = nil
+        NotificationCenter.default.post(name: willCloseNotification, object: closingWindow)
         UsageResetWindowController.hide()
         dismissModalUI(attachedTo: closingWindow)
         closingWindow.close()
@@ -63,20 +68,17 @@ enum SettingsWindowController {
         if window === closedWindow {
             TransientWindowStack.shared.unregister(id: "settings")
             window = nil
+            NotificationCenter.default.post(name: willCloseNotification, object: closedWindow)
         }
     }
 
     private static func makeWindow(coordinator: AppCoordinator) -> NSWindow {
-        let contentController = SettingsContentViewController(
-            rootView: AnyView(
-                SettingsWindowContent(coordinator: coordinator)
-                .environmentObject(coordinator)
-            )
-        )
+        let contentController = SettingsContentViewController(coordinator: coordinator)
 
         let window = SettingsWindow(contentViewController: contentController)
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.title = "WhisperKey Settings"
+        window.toolbarStyle = .preference
         window.setContentSize(contentController.windowContentSize)
         window.isReleasedWhenClosed = false
         window.level = .floating
@@ -160,15 +162,39 @@ private final class SettingsWindowDelegate: NSObject, NSWindowDelegate {
     }
 }
 
-private final class SettingsContentViewController: NSViewController {
+/// One toolbar tab per pane, the way System Settings does it. Each pane is its own
+/// hosting controller, so the state a pane owns — the API key draft above all — is not
+/// rebuilt when the selection changes.
+private final class SettingsContentViewController: NSTabViewController {
     let focusParkingView = FirstResponderParkingView(frame: .zero)
 
-    private let hostingController: NSHostingController<AnyView>
+    private var isResizingWindow = false
 
-    init(rootView: AnyView) {
-        self.hostingController = NSHostingController(rootView: rootView)
-
+    init(coordinator: AppCoordinator) {
         super.init(nibName: nil, bundle: nil)
+
+        tabStyle = .toolbar
+        transitionOptions = []
+
+        for tab in SettingsTab.allCases {
+            let paneController = NSHostingController(
+                rootView: AnyView(
+                    SettingsPane(tab: tab, settings: coordinator.settings)
+                        .environmentObject(coordinator)
+                )
+            )
+            // Reports the SwiftUI content height back as the pane's preferred size, which
+            // is what drives the window resize below.
+            paneController.sizingOptions = [.preferredContentSize]
+
+            let item = NSTabViewItem(viewController: paneController)
+            item.identifier = tab.identifier
+            item.label = tab.title
+            item.image = NSImage(systemSymbolName: tab.symbolName, accessibilityDescription: tab.title)
+            addTabViewItem(item)
+        }
+
+        selectedTabViewItemIndex = 0
     }
 
     @available(*, unavailable)
@@ -176,27 +202,13 @@ private final class SettingsContentViewController: NSViewController {
         nil
     }
 
-    override func loadView() {
-        view = NSView()
-    }
-
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        addChild(hostingController)
-
-        let hostedView = hostingController.view
-        hostedView.translatesAutoresizingMaskIntoConstraints = false
         focusParkingView.translatesAutoresizingMaskIntoConstraints = false
-
-        view.addSubview(hostedView)
         view.addSubview(focusParkingView)
 
         NSLayoutConstraint.activate([
-            hostedView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            hostedView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            hostedView.topAnchor.constraint(equalTo: view.topAnchor),
-            hostedView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             focusParkingView.widthAnchor.constraint(equalToConstant: 0),
             focusParkingView.heightAnchor.constraint(equalToConstant: 0),
             focusParkingView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -204,15 +216,66 @@ private final class SettingsContentViewController: NSViewController {
         ])
     }
 
-    var windowContentSize: NSSize {
-        view.layoutSubtreeIfNeeded()
-        hostingController.view.layoutSubtreeIfNeeded()
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
 
-        let fittingSize = hostingController.view.fittingSize
-        return NSSize(
-            width: SettingsWindowLayout.contentWidth,
-            height: ceil(fittingSize.height)
-        )
+        resizeWindowToSelectedPane()
+    }
+
+    override func preferredContentSizeDidChange(for viewController: NSViewController) {
+        super.preferredContentSizeDidChange(for: viewController)
+
+        guard viewController === selectedPaneController else { return }
+
+        resizeWindowToSelectedPane()
+    }
+
+    var windowContentSize: NSSize {
+        loadViewIfNeeded()
+        return contentSize(for: selectedPaneController)
+    }
+
+    private var selectedPaneController: NSViewController? {
+        let index = selectedTabViewItemIndex
+        guard index >= 0, index < tabViewItems.count else { return nil }
+
+        return tabViewItems[index].viewController
+    }
+
+    private func contentSize(for paneController: NSViewController?) -> NSSize {
+        guard let paneController else {
+            return NSSize(width: SettingsWindowLayout.contentWidth, height: 1)
+        }
+
+        paneController.loadViewIfNeeded()
+        let paneView = paneController.view
+        paneView.layoutSubtreeIfNeeded()
+
+        let preferredHeight = paneController.preferredContentSize.height
+        let height = preferredHeight > 1 ? preferredHeight : paneView.fittingSize.height
+
+        return NSSize(width: SettingsWindowLayout.contentWidth, height: ceil(height))
+    }
+
+    /// Keeps the window's top-left corner where it is: resizing from the bottom-left
+    /// would walk the window up the screen on every tab switch.
+    private func resizeWindowToSelectedPane() {
+        guard !isResizingWindow, let window = view.window else { return }
+
+        let size = contentSize(for: selectedPaneController)
+        guard size.height > 1 else { return }
+
+        isResizingWindow = true
+        defer { isResizingWindow = false }
+
+        let top = window.frame.maxY
+        window.setContentSize(size)
+
+        var frame = window.frame
+        guard abs(frame.maxY - top) > 0.5 else { return }
+
+        frame.origin.y = top - frame.height
+        window.setFrame(frame, display: true)
     }
 }
 
@@ -658,51 +721,166 @@ enum UsageLineFormatter {
     }
 }
 
-private struct SettingsWindowContent: View {
-    @ObservedObject var coordinator: AppCoordinator
+/// One pane per toolbar tab, in the order the toolbar shows them.
+private enum SettingsTab: CaseIterable {
+    case transcription
+    case recording
+    case quickPaste
+    case general
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Settings")
-                .font(.title2.weight(.semibold))
-            SettingsForm(settings: coordinator.settings, isRecording: coordinator.state == .starting || coordinator.state == .recording)
+    var title: String {
+        switch self {
+        case .transcription:
+            return "Transcription"
+        case .recording:
+            return "Recording"
+        case .quickPaste:
+            return "Quick paste"
+        case .general:
+            return "General"
         }
-        .padding(SettingsWindowLayout.contentPadding)
-        .frame(width: SettingsWindowLayout.contentWidth, alignment: .topLeading)
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Color(nsColor: SettingsWindowLayout.backgroundColor))
+    }
+
+    var symbolName: String {
+        switch self {
+        case .transcription:
+            return "waveform"
+        case .recording:
+            return "mic"
+        case .quickPaste:
+            return "list.clipboard"
+        case .general:
+            return "gearshape"
+        }
+    }
+
+    var identifier: String {
+        switch self {
+        case .transcription:
+            return "transcription"
+        case .recording:
+            return "recording"
+        case .quickPaste:
+            return "quickPaste"
+        case .general:
+            return "general"
+        }
     }
 }
 
-private struct SettingsForm: View {
+/// The chrome every pane shares: one width for all four, so the toolbar tabs do not
+/// shift horizontally when the selection changes.
+private struct SettingsPane: View {
+    let tab: SettingsTab
     @ObservedObject var settings: SettingsStore
-    @EnvironmentObject private var coordinator: AppCoordinator
-    let isRecording: Bool
+
+    var body: some View {
+        paneContent
+            .padding(SettingsWindowLayout.contentPadding)
+            .frame(width: SettingsWindowLayout.contentWidth, alignment: .topLeading)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(Color(nsColor: SettingsWindowLayout.backgroundColor))
+    }
+
+    @ViewBuilder private var paneContent: some View {
+        switch tab {
+        case .transcription:
+            TranscriptionSettingsPane(settings: settings)
+        case .recording:
+            RecordingSettingsPane(settings: settings)
+        case .quickPaste:
+            QuickPasteSettingsPane(settings: settings)
+        case .general:
+            GeneralSettingsPane(settings: settings)
+        }
+    }
+}
+
+private struct SettingsPaneStack<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SettingsWindowLayout.settingsRowSpacing) {
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct TranscriptionSettingsPane: View {
+    @ObservedObject var settings: SettingsStore
     @State private var ownerWindow: NSWindow?
     @State private var apiKeyDraft = ""
     @State private var apiKeyValidationState = APIKeyValidationState.idle
     @State private var apiKeyValidationTask: Task<Void, Never>?
     @State private var apiKeyValidationNotice: APIKeyValidationNotice?
+    /// The draft and its validation must survive a tab switch, so the first-appearance
+    /// reset runs once per window rather than once per appearance.
+    @State private var hasPreparedAPIKeyInput = false
     @FocusState private var apiKeyFieldFocused: Bool
 
-    /// Stated because it is invisible from the settings screen otherwise: dictated text
-    /// only reaches the popup by way of the clipboard.
-    static let quickPasteHelp = """
-        Hold the popup trigger to pick from the last few things on the clipboard and paste \
-        without leaving the field you are typing in. Dictated text reaches the popup only \
-        while Clipboard is on: with Clipboard off and Auto-paste on, transcriptions never \
-        touch the clipboard and so never appear here.
-        """
+    var body: some View {
+        SettingsPaneStack {
+            SettingsRow("Provider") {
+                Picker("", selection: $settings.provider) {
+                    ForEach(TranscriptionProviderID.allCases, id: \.self) { id in
+                        Text(id.displayName).tag(id)
+                    }
+                }
+                .labelsHidden()
+                .settingsControlFrame()
+            }
+            SettingsRow("Model") {
+                modelPicker
+            }
+            SettingsRow("API Key") {
+                apiKeyField
+            }
+            SettingsRow("Language") {
+                Picker("", selection: $settings.language) {
+                    ForEach(TranscriptionLanguage.allCases, id: \.self) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+                .labelsHidden()
+                .settingsControlFrame()
+            }
+        }
+        .background {
+            WindowAccessor { window in
+                ownerWindow = window
+            }
+        }
+        .alert(item: $apiKeyValidationNotice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .onAppear {
+            guard !hasPreparedAPIKeyInput else { return }
 
-    /// Held in milliseconds because that is the unit the setting is stated in; the store
-    /// keeps seconds, and it is the store that clamps.
-    static let holdMillisecondsRange: ClosedRange<Int> = Int((SettingsStore.quickPasteHoldDurationRange.lowerBound * 1000).rounded())...Int((SettingsStore.quickPasteHoldDurationRange.upperBound * 1000).rounded())
-
-    private var holdMilliseconds: Binding<Int> {
-        Binding(
-            get: { Int((settings.quickPasteHoldDuration * 1000).rounded()) },
-            set: { settings.quickPasteHoldDuration = Double($0) / 1000 }
-        )
+            hasPreparedAPIKeyInput = true
+            resetAPIKeyInput(resetState: true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SettingsWindowController.willCloseNotification)) { _ in
+            // Tied to the window going away rather than to the view disappearing: a tab
+            // switch takes this pane out of the window and must not cancel a validation.
+            apiKeyValidationTask?.cancel()
+            apiKeyValidationTask = nil
+        }
+        .onChange(of: settings.provider) {
+            resetAPIKeyInput(resetState: true)
+        }
+        .onChange(of: currentAPIKey) {
+            guard apiKeyValidationState != .checking else { return }
+            resetAPIKeyInput(resetState: false)
+        }
     }
 
     @ViewBuilder private var modelPicker: some View {
@@ -796,229 +974,6 @@ private struct SettingsForm: View {
             return "sk-…"
         case .groq:
             return "gsk_…"
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SettingsWindowLayout.settingsRowSpacing) {
-            SettingsRow("Provider") {
-                Picker("", selection: $settings.provider) {
-                    ForEach(TranscriptionProviderID.allCases, id: \.self) { id in
-                        Text(id.displayName).tag(id)
-                    }
-                }
-                .labelsHidden()
-                .settingsControlFrame()
-            }
-            SettingsRow("Model") {
-                modelPicker
-            }
-            SettingsRow("API Key") {
-                apiKeyField
-            }
-            SettingsRow("Language") {
-                Picker("", selection: $settings.language) {
-                    ForEach(TranscriptionLanguage.allCases, id: \.self) { language in
-                        Text(language.displayName).tag(language)
-                    }
-                }
-                .labelsHidden()
-                .settingsControlFrame()
-            }
-            SettingsRow("Trigger") {
-                Picker("", selection: $settings.triggerKey) {
-                    ForEach(TriggerKey.allCases, id: \.self) { trigger in
-                        Text(trigger.displayName).tag(trigger)
-                    }
-                }
-                .labelsHidden()
-                .settingsControlFrame()
-                .disabled(isRecording)
-                .help(isRecording ? "Stop recording to change." : "")
-            }
-            SettingsRow("Mode") {
-                Picker("", selection: $settings.triggerMode) {
-                    ForEach(TriggerMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .settingsControlFrame()
-                .disabled(isRecording)
-                .help(isRecording ? "Stop recording to change." : "")
-            }
-            SettingsRow("Esc to cancel record") {
-                Toggle("", isOn: $settings.escapeToCancelRecording)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
-                    .disabled(isRecording)
-                    .help(isRecording ? "Stop recording to change." : "")
-            }
-            SettingsRow("Sound effects") {
-                Toggle("", isOn: $settings.soundEffectsEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
-            }
-            SettingsRow("Pause Apple Music while recording") {
-                Toggle("", isOn: $settings.pauseAppleMusicWhileRecording)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
-                    .help("Pauses Apple Music at the start of a recording and resumes it when the microphone stops.")
-            }
-            SettingsRow("Launch at login") {
-                LaunchAtLoginToggle()
-            }
-            SettingsRow("History size") {
-                HStack(spacing: 6) {
-                    TextField("", value: $settings.historyMaxEntries, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 64)
-                        .settingsControlFrame()
-                    Stepper("",
-                            value: $settings.historyMaxEntries,
-                            in: SettingsStore.historyMaxEntriesRange,
-                            step: 1)
-                        .labelsHidden()
-                        .settingsControlFrame()
-                    Text("entries")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                }
-                .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-            }
-            SettingsRow("Quick paste popup") {
-                Toggle("", isOn: $settings.quickPasteEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
-                    .help(Self.quickPasteHelp)
-            }
-            // Shown whether or not the feature is on, and merely disabled while it is
-            // off. The settings window's size is measured once, when it is built, and it
-            // is not resizable — rows appearing later would fall off the bottom.
-            Group {
-                SettingsRow("Popup trigger") {
-                    Picker("", selection: $settings.quickPasteTriggerKey) {
-                        ForEach(TriggerKey.allCases, id: \.self) { trigger in
-                            Text(trigger.displayName)
-                                .tag(trigger)
-                        }
-                    }
-                    .labelsHidden()
-                    .settingsControlFrame()
-                    .disabled(isRecording)
-                    .help(
-                        isRecording
-                            ? "Stop recording to change."
-                            : "The recording trigger cannot be reused here."
-                    )
-                }
-                SettingsRow("Popup hold") {
-                    HStack(spacing: 6) {
-                        TextField("", value: holdMilliseconds, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 64)
-                            .settingsControlFrame()
-                        Stepper("",
-                                value: holdMilliseconds,
-                                in: Self.holdMillisecondsRange,
-                                step: 50)
-                            .labelsHidden()
-                            .settingsControlFrame()
-                        Text("ms")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                    }
-                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                }
-                SettingsRow("Popup entries") {
-                    HStack(spacing: 6) {
-                        TextField("", value: $settings.quickPasteEntryCount, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 64)
-                            .settingsControlFrame()
-                        Stepper("",
-                                value: $settings.quickPasteEntryCount,
-                                in: SettingsStore.quickPasteEntryCountRange,
-                                step: 1)
-                            .labelsHidden()
-                            .settingsControlFrame()
-                        Text("entries")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                    }
-                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                }
-                SettingsRow("Clipboard history") {
-                    HStack {
-                        Spacer(minLength: 0)
-                        Button("Clear history") {
-                            coordinator.clearClipboardHistory()
-                        }
-                        .controlSize(.small)
-                        .help("Empties the list the popup shows. The clipboard itself is left alone.")
-                    }
-                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                }
-            }
-            .disabled(!settings.quickPasteEnabled)
-            Text(Self.quickPasteHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            SettingsRow("Usage stats") {
-                HStack {
-                    Spacer(minLength: 0)
-                    Button("Reset usage") {
-                        UsageResetWindowController.show(
-                            currentKey: ProviderModelKey(
-                                providerID: settings.provider.rawValue,
-                                modelID: coordinator.currentTranscriptionModelID
-                            ),
-                            parent: ownerWindow,
-                            onReset: { keys in
-                                coordinator.usageStats.resetCounters(for: keys)
-                            }
-                        )
-                    }
-                    .controlSize(.small)
-                }
-                .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-            }
-        }
-        .background {
-            WindowAccessor { window in
-                ownerWindow = window
-            }
-        }
-        .alert(item: $apiKeyValidationNotice) { notice in
-            Alert(
-                title: Text(notice.title),
-                message: Text(notice.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
-        .onAppear {
-            resetAPIKeyInput(resetState: true)
-        }
-        .onDisappear {
-            apiKeyValidationTask?.cancel()
-            apiKeyValidationTask = nil
-        }
-        .onChange(of: settings.provider) {
-            resetAPIKeyInput(resetState: true)
-        }
-        .onChange(of: currentAPIKey) {
-            guard apiKeyValidationState != .checking else { return }
-            resetAPIKeyInput(resetState: false)
         }
     }
 
@@ -1126,6 +1081,236 @@ private struct SettingsForm: View {
         apiKeyDraft = ""
         if resetState {
             apiKeyValidationState = currentAPIKey.isEmpty ? .idle : .accepted("API key saved")
+        }
+    }
+}
+
+private struct RecordingSettingsPane: View {
+    @ObservedObject var settings: SettingsStore
+    @EnvironmentObject private var coordinator: AppCoordinator
+
+    private var isRecording: Bool {
+        coordinator.state == .starting || coordinator.state == .recording
+    }
+
+    var body: some View {
+        SettingsPaneStack {
+            SettingsRow("Trigger") {
+                Picker("", selection: $settings.triggerKey) {
+                    ForEach(TriggerKey.allCases, id: \.self) { trigger in
+                        Text(trigger.displayName).tag(trigger)
+                    }
+                }
+                .labelsHidden()
+                .settingsControlFrame()
+                .disabled(isRecording)
+                .help(isRecording ? "Stop recording to change." : "")
+            }
+            SettingsRow("Mode") {
+                Picker("", selection: $settings.triggerMode) {
+                    ForEach(TriggerMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .settingsControlFrame()
+                .disabled(isRecording)
+                .help(isRecording ? "Stop recording to change." : "")
+            }
+            SettingsRow("Esc to cancel record") {
+                Toggle("", isOn: $settings.escapeToCancelRecording)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .settingsControlFrame()
+                    .disabled(isRecording)
+                    .help(isRecording ? "Stop recording to change." : "")
+            }
+            SettingsRow("Sound effects") {
+                Toggle("", isOn: $settings.soundEffectsEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .settingsControlFrame()
+            }
+            SettingsRow("Pause Apple Music while recording") {
+                Toggle("", isOn: $settings.pauseAppleMusicWhileRecording)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .settingsControlFrame()
+                    .help("Pauses Apple Music at the start of a recording and resumes it when the microphone stops.")
+            }
+        }
+    }
+}
+
+private struct QuickPasteSettingsPane: View {
+    @ObservedObject var settings: SettingsStore
+    @EnvironmentObject private var coordinator: AppCoordinator
+
+    /// Stated because it is invisible from the settings screen otherwise: dictated text
+    /// only reaches the popup by way of the clipboard.
+    static let quickPasteHelp = """
+        Hold the popup trigger to pick from the last few things on the clipboard and paste \
+        without leaving the field you are typing in. Dictated text reaches the popup only \
+        while Clipboard is on: with Clipboard off and Auto-paste on, transcriptions never \
+        touch the clipboard and so never appear here.
+        """
+
+    /// Held in milliseconds because that is the unit the setting is stated in; the store
+    /// keeps seconds, and it is the store that clamps.
+    static let holdMillisecondsRange: ClosedRange<Int> = Int((SettingsStore.quickPasteHoldDurationRange.lowerBound * 1000).rounded())...Int((SettingsStore.quickPasteHoldDurationRange.upperBound * 1000).rounded())
+
+    private var isRecording: Bool {
+        coordinator.state == .starting || coordinator.state == .recording
+    }
+
+    private var holdMilliseconds: Binding<Int> {
+        Binding(
+            get: { Int((settings.quickPasteHoldDuration * 1000).rounded()) },
+            set: { settings.quickPasteHoldDuration = Double($0) / 1000 }
+        )
+    }
+
+    var body: some View {
+        SettingsPaneStack {
+            SettingsRow("Quick paste popup") {
+                Toggle("", isOn: $settings.quickPasteEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .settingsControlFrame()
+                    .help(Self.quickPasteHelp)
+            }
+            // Hidden rather than disabled while the feature is off: the window now
+            // follows the height of the selected pane, so a row appearing later no
+            // longer falls off the bottom edge.
+            if settings.quickPasteEnabled {
+                SettingsRow("Popup trigger") {
+                    Picker("", selection: $settings.quickPasteTriggerKey) {
+                        ForEach(TriggerKey.allCases, id: \.self) { trigger in
+                            Text(trigger.displayName)
+                                .tag(trigger)
+                        }
+                    }
+                    .labelsHidden()
+                    .settingsControlFrame()
+                    .disabled(isRecording)
+                    .help(
+                        isRecording
+                            ? "Stop recording to change."
+                            : "The recording trigger cannot be reused here."
+                    )
+                }
+                SettingsRow("Popup hold") {
+                    HStack(spacing: 6) {
+                        TextField("", value: holdMilliseconds, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 64)
+                            .settingsControlFrame()
+                        Stepper("",
+                                value: holdMilliseconds,
+                                in: Self.holdMillisecondsRange,
+                                step: 50)
+                            .labelsHidden()
+                            .settingsControlFrame()
+                        Text("ms")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                    }
+                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                }
+                SettingsRow("Popup entries") {
+                    HStack(spacing: 6) {
+                        TextField("", value: $settings.quickPasteEntryCount, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 64)
+                            .settingsControlFrame()
+                        Stepper("",
+                                value: $settings.quickPasteEntryCount,
+                                in: SettingsStore.quickPasteEntryCountRange,
+                                step: 1)
+                            .labelsHidden()
+                            .settingsControlFrame()
+                        Text("entries")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                    }
+                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                }
+                SettingsRow("Clipboard history") {
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button("Clear history") {
+                            coordinator.clearClipboardHistory()
+                        }
+                        .controlSize(.small)
+                        .help("Empties the list the popup shows. The clipboard itself is left alone.")
+                    }
+                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                }
+            }
+            Text(Self.quickPasteHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct GeneralSettingsPane: View {
+    @ObservedObject var settings: SettingsStore
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @State private var ownerWindow: NSWindow?
+
+    var body: some View {
+        SettingsPaneStack {
+            SettingsRow("Launch at login") {
+                LaunchAtLoginToggle()
+            }
+            SettingsRow("History size") {
+                HStack(spacing: 6) {
+                    TextField("", value: $settings.historyMaxEntries, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 64)
+                        .settingsControlFrame()
+                    Stepper("",
+                            value: $settings.historyMaxEntries,
+                            in: SettingsStore.historyMaxEntriesRange,
+                            step: 1)
+                        .labelsHidden()
+                        .settingsControlFrame()
+                    Text("entries")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                }
+                .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+            }
+            SettingsRow("Usage stats") {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button("Reset usage") {
+                        UsageResetWindowController.show(
+                            currentKey: ProviderModelKey(
+                                providerID: settings.provider.rawValue,
+                                modelID: coordinator.currentTranscriptionModelID
+                            ),
+                            parent: ownerWindow ?? SettingsWindowController.relatedWindow,
+                            onReset: { keys in
+                                coordinator.usageStats.resetCounters(for: keys)
+                            }
+                        )
+                    }
+                    .controlSize(.small)
+                }
+                .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+            }
+        }
+        .background {
+            WindowAccessor { window in
+                ownerWindow = window
+            }
         }
     }
 }
