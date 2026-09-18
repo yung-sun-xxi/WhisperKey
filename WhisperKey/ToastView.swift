@@ -3,27 +3,56 @@ import ErrorToast
 
 struct ToastView: View {
     static let contentWidth: CGFloat = 380
+    /// Transparent room around the card for the close button, which overhangs the
+    /// card's top-left corner the way the system's notification banners' does. The
+    /// window is this much larger than the card on every side.
+    static let margin: CGFloat = 10
+    static let frameWidth: CGFloat = contentWidth + margin * 2
+    private static let closeButtonDiameter: CGFloat = 20
 
     let content: ToastContent
-    let pointerCenterX: CGFloat?
     let onAction: () -> Void
     let onDismiss: () -> Void
     var showsDismissButton = true
 
-    var body: some View {
-        VStack(spacing: -1) {
-            if let pointerCenterX {
-                ZStack(alignment: .leading) {
-                    ToastPointer()
-                        .frame(width: 20, height: 9)
-                        .offset(x: pointerCenterX - 10)
-                }
-                .frame(width: Self.contentWidth, height: 9)
-            }
+    @State private var isHovered = false
 
-            card
+    var body: some View {
+        card
+            .overlay(alignment: .topLeading) {
+                if showsDismissButton {
+                    closeButton
+                        .offset(x: -Self.closeButtonDiameter / 2, y: -Self.closeButtonDiameter / 2)
+                        .opacity(isHovered ? 1 : 0)
+                        .animation(.easeOut(duration: 0.12), value: isHovered)
+                }
+            }
+            .padding(Self.margin)
+            .frame(width: Self.frameWidth, alignment: .leading)
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
+    }
+
+    /// The system banner's close control: a small grey disc on the corner, shown only
+    /// while the pointer is over the banner.
+    private var closeButton: some View {
+        Button(action: onDismiss) {
+            ZStack {
+                Circle()
+                    .fill(Color(nsColor: .windowBackgroundColor))
+                Circle()
+                    .strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.5)
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: Self.closeButtonDiameter, height: Self.closeButtonDiameter)
+            .shadow(color: .black.opacity(0.18), radius: 1.5, y: 0.5)
+            .contentShape(Circle())
         }
-        .frame(width: Self.contentWidth, alignment: .leading)
+        .buttonStyle(.plain)
+        .help("Dismiss")
+        .accessibilityLabel("Dismiss")
     }
 
     private var card: some View {
@@ -53,18 +82,6 @@ struct ToastView: View {
             }
 
             Spacer(minLength: 4)
-
-            if showsDismissButton {
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18, height: 18)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .help("Dismiss")
-            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -77,6 +94,7 @@ struct ToastView: View {
                 .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
     }
 
     private var actionTitle: String? {
@@ -111,35 +129,5 @@ struct ToastView: View {
         case .information:
             .secondary
         }
-    }
-}
-
-private struct ToastPointer: View {
-    var body: some View {
-        ToastPointerShape()
-            .fill(.clear)
-            .background {
-                VisualEffectBackground()
-            }
-            .clipShape(ToastPointerShape())
-    }
-}
-
-private struct ToastPointerShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addCurve(
-            to: CGPoint(x: rect.midX, y: rect.minY),
-            control1: CGPoint(x: rect.minX + 4, y: rect.maxY),
-            control2: CGPoint(x: rect.midX - 4, y: rect.minY + 2)
-        )
-        path.addCurve(
-            to: CGPoint(x: rect.maxX, y: rect.maxY),
-            control1: CGPoint(x: rect.midX + 4, y: rect.minY + 2),
-            control2: CGPoint(x: rect.maxX - 4, y: rect.maxY)
-        )
-        path.closeSubpath()
-        return path
     }
 }

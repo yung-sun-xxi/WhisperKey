@@ -998,10 +998,6 @@ final class AppCoordinator: ObservableObject {
         openMenuBarPopoverHandler?()
     }
 
-    func setToastAnchorProvider(_ provider: @escaping () -> NSRect?) {
-        toastPresenter.setAnchorProvider(provider)
-    }
-
     private func beginProcessing(operationID: UUID) {
         processingTask?.cancel()
         processingTimeoutTask?.cancel()
@@ -1268,11 +1264,13 @@ final class AppCoordinator: ObservableObject {
     /// is silent by contract — nothing on open, on choose or on cancel — and a refused
     /// paste is a *choice* the user made, not a transcription that failed.
     ///
-    /// No action button either: there is nothing for the user to press.
+    /// No action button either: there is nothing for the user to press. And `.transient`
+    /// despite the warning icon: a refused paste is not a lost recording — the entry is
+    /// still in the clipboard history — so the banner need not wait to be closed.
     private func showQuickPasteNotice(_ notice: QuickPasteNotice) {
         log.info("quick-paste toast notice=\(String(describing: notice), privacy: .public)")
         toastPresenter.show(
-            content: ToastContent(message: notice.message, action: .none, style: .warning),
+            content: ToastContent(message: notice.message, action: .none, style: .warning, lifetime: .transient),
             onAction: {}
         )
     }

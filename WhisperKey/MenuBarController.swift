@@ -54,10 +54,6 @@ final class MenuBarController: NSObject {
         coordinator.closeMenuBarPopoverHandler = { [weak self] in
             self?.closePopover()
         }
-        coordinator.setToastAnchorProvider { [weak self] in
-            self?.statusIconScreenFrame()
-        }
-
         prewarmSettingsWindow()
         coordinator.scheduleWelcomePresentationAfterLaunch()
     }
@@ -257,16 +253,6 @@ final class MenuBarController: NSObject {
         else { return nil }
 
         return buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-    }
-
-    private func statusIconScreenFrame() -> NSRect? {
-        guard let button = statusItem.button,
-              let buttonWindow = button.window
-        else { return nil }
-
-        button.layoutSubtreeIfNeeded()
-        let iconFrameInWindow = statusIconView.convert(statusIconView.bounds, to: nil)
-        return buttonWindow.convertToScreen(iconFrameInWindow)
     }
 
     private func observeCoordinator() {
