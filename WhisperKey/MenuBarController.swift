@@ -62,10 +62,6 @@ final class MenuBarController: NSObject {
         coordinator.closeMenuBarPopoverHandler = { [weak self] in
             self?.closePopover()
         }
-        coordinator.setToastAnchorProvider { [weak self] in
-            self?.statusIconScreenFrame()
-        }
-
         prewarmSettingsWindow()
         coordinator.scheduleWelcomePresentationAfterLaunch()
     }

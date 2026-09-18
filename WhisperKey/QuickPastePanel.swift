@@ -196,8 +196,7 @@ final class QuickPastePanel: NSPanel {
     }
 
     /// Long enough to read as an appearance rather than a flash, short enough that the
-    /// panel is fully there before a deliberate hold has finished settling. The same
-    /// `fadeInOrderingFront` the toast uses.
+    /// panel is fully there before a deliberate hold has finished settling.
     static let fadeDuration: TimeInterval = 0.12
 
     func show(at origin: NSPoint) {
