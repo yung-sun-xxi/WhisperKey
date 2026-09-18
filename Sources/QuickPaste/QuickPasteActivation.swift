@@ -33,9 +33,10 @@ public struct QuickPasteConfiguration: Equatable, Sendable {
     }
 
     /// The one-line shortcut hint the settings pane shows under the trigger picker: which
-    /// key to hold, how to choose, and that releasing pastes.
+    /// key to hold, how to choose, and that releasing pastes. Markdown, with the key's
+    /// display name — the same words the picker shows — in bold.
     public static func usageHint(for trigger: TriggerKey) -> String {
-        "Hold \(trigger.keycapSymbol) (right)  ·  ↑↓ or pointer to choose  ·  release to paste"
+        "Hold **\(trigger.displayName)**  ·  ↑↓ or pointer to choose  ·  release to paste"
     }
 }
 
