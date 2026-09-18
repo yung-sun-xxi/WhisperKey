@@ -155,3 +155,17 @@ final class QuickPasteConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.visibleEntryCount, 5)
     }
 }
+
+final class QuickPasteUsageHintTests: XCTestCase {
+    func testUsageHintForRightCommandIsTheOneLineShortcutHint() {
+        XCTAssertEqual(
+            QuickPasteConfiguration.usageHint(for: .rightCommand),
+            "Hold ⌘ (right)  ·  ↑↓ or pointer to choose  ·  release to paste"
+        )
+    }
+
+    func testUsageHintFollowsTheTriggerGlyph() {
+        XCTAssertTrue(QuickPasteConfiguration.usageHint(for: .rightOption).contains("⌥"))
+        XCTAssertFalse(QuickPasteConfiguration.usageHint(for: .rightOption).contains("⌘"))
+    }
+}

@@ -276,3 +276,11 @@ final class HotkeyEngineStateMachineTests: XCTestCase {
         XCTAssertNil(sm.process(.triggerDown(at: 1.0)))
     }
 }
+
+final class TriggerKeyTests: XCTestCase {
+    func testKeycapSymbolIsTheMenuBarGlyphOfEachModifier() {
+        XCTAssertEqual(TriggerKey.rightOption.keycapSymbol, "⌥")
+        XCTAssertEqual(TriggerKey.rightCommand.keycapSymbol, "⌘")
+        XCTAssertEqual(TriggerKey.rightShift.keycapSymbol, "⇧")
+    }
+}
