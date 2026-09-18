@@ -1176,6 +1176,13 @@ private struct QuickPasteSettingsPane: View {
         )
     }
 
+    /// Parsed so the bold key name renders; falls back to the plain string rather than
+    /// showing nothing if the Markdown ever fails to parse.
+    private var quickPasteUsageHint: AttributedString {
+        let hint = QuickPasteConfiguration.usageHint(for: settings.quickPasteTriggerKey)
+        return (try? AttributedString(markdown: hint)) ?? AttributedString(hint)
+    }
+
     var body: some View {
         SettingsPaneStack {
             SettingsRow("Quick paste popup") {
@@ -1205,7 +1212,7 @@ private struct QuickPasteSettingsPane: View {
                             : "The recording trigger cannot be reused here."
                     )
                 }
-                Text(QuickPasteConfiguration.usageHint(for: settings.quickPasteTriggerKey))
+                Text(quickPasteUsageHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
