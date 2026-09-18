@@ -13,6 +13,15 @@ public enum TriggerKey: String, CaseIterable, Codable, Sendable, Equatable {
         }
     }
 
+    /// The keycap glyph macOS itself prints for the modifier, for shortcut-style hints.
+    public var keycapSymbol: String {
+        switch self {
+        case .rightOption: return "⌥"
+        case .rightCommand: return "⌘"
+        case .rightShift: return "⇧"
+        }
+    }
+
     public var virtualKeyCode: Int64 {
         switch self {
         case .rightOption: return 61   // kVK_RightOption

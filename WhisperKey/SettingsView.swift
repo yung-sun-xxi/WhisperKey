@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import SwiftUI
 import HotkeyEngine
+import QuickPaste
 import SettingsStore
 import TranscriptionProvider
 import HistoryStore
@@ -728,10 +729,10 @@ enum UsageLineFormatter {
 
 /// One pane per toolbar tab, in the order the toolbar shows them.
 private enum SettingsTab: CaseIterable {
-    case transcription
-    case recording
-    case quickPaste
     case general
+    case recording
+    case transcription
+    case quickPaste
 
     var title: String {
         switch self {
@@ -1204,6 +1205,11 @@ private struct QuickPasteSettingsPane: View {
                             : "The recording trigger cannot be reused here."
                     )
                 }
+                Text(QuickPasteConfiguration.usageHint(for: settings.quickPasteTriggerKey))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 SettingsRow("Popup hold") {
                     HStack(spacing: 6) {
                         TextField("", value: holdMilliseconds, format: .number)
@@ -1254,11 +1260,6 @@ private struct QuickPasteSettingsPane: View {
                     .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
                 }
             }
-            Text(Self.quickPasteHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -1292,25 +1293,25 @@ private struct GeneralSettingsPane: View {
                 }
                 .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
             }
-            SettingsRow("Usage stats") {
-                HStack {
-                    Spacer(minLength: 0)
-                    Button("Reset usage") {
-                        UsageResetWindowController.show(
-                            currentKey: ProviderModelKey(
-                                providerID: settings.provider.rawValue,
-                                modelID: coordinator.currentTranscriptionModelID
-                            ),
-                            parent: ownerWindow ?? SettingsWindowController.relatedWindow,
-                            onReset: { keys in
-                                coordinator.usageStats.resetCounters(for: keys)
-                            }
-                        )
-                    }
-                    .controlSize(.small)
+            HStack {
+                Button("Reset usage…", role: .destructive) {
+                    UsageResetWindowController.show(
+                        currentKey: ProviderModelKey(
+                            providerID: settings.provider.rawValue,
+                            modelID: coordinator.currentTranscriptionModelID
+                        ),
+                        parent: ownerWindow ?? SettingsWindowController.relatedWindow,
+                        onReset: { keys in
+                            coordinator.usageStats.resetCounters(for: keys)
+                        }
+                    )
                 }
-                .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                .buttonStyle(.bordered)
+                .foregroundStyle(.red)
+                .controlSize(.small)
+                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background {
             WindowAccessor { window in
