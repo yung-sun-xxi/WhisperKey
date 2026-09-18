@@ -55,31 +55,63 @@ jobs:
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "Using $MODE distribution mode"
 
-      - name: Unlock signing keychain
+      - name: Create signing keychain
         if: steps.mode.outputs.mode == 'developer-id'
         env:
-          SIGNING_KEYCHAIN_PASSWORD: ${{ secrets.SIGNING_KEYCHAIN_PASSWORD }}
+          SIGNING_CERTIFICATE_P12_BASE64: ${{ secrets.SIGNING_CERTIFICATE_P12_BASE64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_APP_SPECIFIC_PASSWORD: ${{ secrets.NOTARY_APP_SPECIFIC_PASSWORD }}
+          WHISPERKEY_TEAM_ID: ${{ vars.WHISPERKEY_TEAM_ID }}
+        shell: bash
         run: |
-          if [ -z "$SIGNING_KEYCHAIN_PASSWORD" ]; then
-            echo "::error::SIGNING_KEYCHAIN_PASSWORD secret is not set." \
-                 "Create the dedicated signing keychain on the runner (see RELEASING.md) and add the secret."
-            exit 1
-          fi
-          KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
-          if [ ! -f "$KEYCHAIN" ]; then
-            echo "::error::Signing keychain not found at $KEYCHAIN." \
-                 "Run the one-time setup from RELEASING.md on this runner."
-            exit 1
-          fi
-          security unlock-keychain -p "$SIGNING_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          for v in SIGNING_CERTIFICATE_P12_BASE64 SIGNING_CERTIFICATE_PASSWORD NOTARY_APPLE_ID NOTARY_APP_SPECIFIC_PASSWORD WHISPERKEY_TEAM_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::$v is not set (see RELEASING.md, Automated Releases)."
+              exit 1
+            fi
+          done
+
+          # The runner is a LaunchAgent in the owner's desktop session, so the
+          # user keychain search list is his live one. Remember it verbatim,
+          # minus any signing keychain a killed job may have left behind, so
+          # the post-step can put it back exactly.
+          SAVED_LIST="$RUNNER_TEMP/keychain-search-list.txt"
+          security list-keychains -d user \
+            | sed 's/^[[:space:]]*"//;s/"[[:space:]]*$//' \
+            | grep -v '/whisperkey-sign-' > "$SAVED_LIST" || true
+          echo "KEYCHAIN_SEARCH_LIST_FILE=$SAVED_LIST" >> "$GITHUB_ENV"
+
+          # A keychain that exists only for this job, with a password nobody
+          # knows. It never lives in ~/Library/Keychains.
+          KEYCHAIN="$RUNNER_TEMP/whisperkey-sign-$GITHUB_RUN_ID.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
+          echo "WHISPERKEY_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-keychain-settings "$KEYCHAIN"
-          # Allow codesign/notarytool to use items in this keychain without a UI prompt.
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          P12="$RUNNER_TEMP/signing.p12"
+          printf %s "$SIGNING_CERTIFICATE_P12_BASE64" | base64 -d > "$P12"
+          security import "$P12" -k "$KEYCHAIN" -P "$SIGNING_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/productsign >/dev/null
+          rm -f "$P12"
+          # Allow codesign to use the key without a UI prompt.
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
-            -s -k "$SIGNING_KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-          # Make it searchable for this session, alongside the existing keychains.
-          EXISTING=$(security list-keychains -d user | sed 's/[[:space:]]*"//;s/"[[:space:]]*$//')
-          security list-keychains -d user -s "$KEYCHAIN" $EXISTING
-          echo "Signing keychain unlocked and added to the search list."
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+
+          xcrun notarytool store-credentials WhisperKey-Notary \
+            --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$WHISPERKEY_TEAM_ID" \
+            --password "$NOTARY_APP_SPECIFIC_PASSWORD" \
+            --keychain "$KEYCHAIN" >/dev/null
+
+          # xcodebuild resolves CODE_SIGN_IDENTITY through the search list only
+          # (OTHER_CODE_SIGN_FLAGS=--keychain does not help), so the keychain
+          # has to be on the list for the duration of the job. The post-step
+          # below restores the saved list unconditionally.
+          security list-keychains -d user -s "$KEYCHAIN" $(cat "$SAVED_LIST")
+          security find-identity -v -p codesigning "$KEYCHAIN"
 
       - name: Build, sign, notarize, package
         env:
@@ -88,10 +120,20 @@ jobs:
           WHISPERKEY_SKIP_INSTALL: '1'
           WHISPERKEY_RELEASE_MODE: ${{ steps.mode.outputs.mode }}
         run: |
-          if [ "$WHISPERKEY_RELEASE_MODE" = "developer-id" ]; then
-            export WHISPERKEY_KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
-          fi
           ./scripts/release.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Remove signing keychain
+        if: always() && steps.mode.outputs.mode == 'developer-id'
+        shell: bash
+        run: |
+          if [ -n "${KEYCHAIN_SEARCH_LIST_FILE:-}" ] && [ -f "$KEYCHAIN_SEARCH_LIST_FILE" ]; then
+            security list-keychains -d user -s $(cat "$KEYCHAIN_SEARCH_LIST_FILE")
+          fi
+          if [ -n "${WHISPERKEY_KEYCHAIN:-}" ] && [ -f "$WHISPERKEY_KEYCHAIN" ]; then
+            security delete-keychain "$WHISPERKEY_KEYCHAIN"
+          fi
+          echo "Search list restored:"
+          security list-keychains -d user
 
       - name: Publish GitHub Release
         env:

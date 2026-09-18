@@ -126,70 +126,49 @@ self-hosted macOS runner when a `v*` tag is pushed (or via manual
 `workflow_dispatch` with a version input), then publishes/updates the GitHub
 Release with the DMG.
 
-The runner runs as a headless service, so the login keychain is locked and
-unavailable for signing. To sign without depending on a GUI login session, the
-release job uses a dedicated, isolated signing keychain whose password is the
-only stored secret. That secret unlocks just this keychain (one certificate plus
-the notary profile) rather than the whole login keychain.
+The runner is a LaunchAgent in the owner's desktop session, so the login
+keychain is his live one and the job never writes to it. Instead the release job
+builds a keychain of its own under `$RUNNER_TEMP`, with a password generated
+inside the job, imports the Developer ID identity and the notarytool profile
+into it from repository secrets, signs and notarizes, and deletes it in a
+post-step that also restores the user keychain search list. Nothing persists on
+the runner between runs, and the owner has no second keychain password to know.
 
-### One-time runner setup
+### Repository secrets and variables
 
-Run once on the runner machine, in a logged-in session (where the login keychain
-is unlocked). Pick a strong password for the dedicated keychain and keep it.
+| Name | Kind | Value |
+|------|------|-------|
+| `SIGNING_CERTIFICATE_P12_BASE64` | secret | The `Developer ID Application` identity (certificate + private key) as a base64-encoded `.p12`, legacy PKCS#12 encryption |
+| `SIGNING_CERTIFICATE_PASSWORD` | secret | Password of that `.p12` |
+| `NOTARY_APPLE_ID` | secret | Apple ID used for notarization |
+| `NOTARY_APP_SPECIFIC_PASSWORD` | secret | App-specific password for that Apple ID |
+| `WHISPERKEY_TEAM_ID` | variable | Team ID |
 
-```sh
-CIPASS='<choose-a-strong-password>'
-KEYCHAIN="$HOME/Library/Keychains/whisperkey-ci.keychain-db"
-
-# 1. Create the dedicated keychain (no auto-lock timeout).
-security create-keychain -p "$CIPASS" "$KEYCHAIN"
-security set-keychain-settings "$KEYCHAIN"
-
-# 2. Import the Developer ID Application identity (cert + private key).
-#    Export it first from Keychain Access: right-click the
-#    "Developer ID Application: ..." identity -> Export -> .p12 (set P12PASS).
-security import /path/to/DeveloperID.p12 -k "$KEYCHAIN" -P '<P12PASS>' \
-    -T /usr/bin/codesign -T /usr/bin/productsign
-
-# 3. Allow codesign to use the key non-interactively.
-security set-key-partition-list -S apple-tool:,apple:,codesign: \
-    -s -k "$CIPASS" "$KEYCHAIN"
-
-# 4. Store the notarytool profile INTO this keychain.
-xcrun notarytool store-credentials WhisperKey-Notary \
-    --apple-id "<your-apple-id>" \
-    --team-id "$WHISPERKEY_TEAM_ID" \
-    --password "<app-specific-password>" \
-    --keychain "$KEYCHAIN"
-```
-
-Then add the keychain password as a repository secret:
+To regenerate the certificate secret after the identity is reissued, export it
+from the login keychain and re-encode. `security export` writes every identity in
+the keychain, so filter to the one certificate first:
 
 ```sh
-gh secret set SIGNING_KEYCHAIN_PASSWORD --body "$CIPASS"
+P12PASS=$(openssl rand -hex 24)
+security export -k ~/Library/Keychains/login.keychain-db -t identities -f pkcs12 \
+    -P "$P12PASS" -o all.p12
+openssl pkcs12 -legacy -in all.p12 -passin pass:"$P12PASS" -nodes -out all.pem
+# keep only the "Developer ID Application" key and certificate from all.pem
+openssl pkcs12 -export -legacy -inkey devid.key -in devid.crt \
+    -name "Developer ID Application: ALEXANDER STEPANENKOV (UGLRY9ACZ6)" \
+    -passout pass:"$P12PASS" -out devid.p12
+base64 < devid.p12 | gh secret set SIGNING_CERTIFICATE_P12_BASE64
+printf %s "$P12PASS" | gh secret set SIGNING_CERTIFICATE_PASSWORD
+rm all.p12 all.pem devid.key devid.crt devid.p12
 ```
 
-`WHISPERKEY_TEAM_ID` is provided as a repository variable (already set); the
-workflow reads it from `vars`.
+`-legacy` matters: `security import` rejects the AES-encrypted PKCS#12 that
+OpenSSL 3 writes by default ("MAC verification failed").
 
-### Owner-local secret storage
-
-On the maintainer machine, release-only local secrets live inside the working
-tree, in a directory `.gitignore` excludes:
-
-```text
-/Users/a.stepanenkov/PersonalProjects/WhisperKey/.local-secrets/
-```
-
-`whisperkey-ci-password.txt` must contain the same keychain password as the
-GitHub repository secret `SIGNING_KEYCHAIN_PASSWORD`. The `.local-secrets/`
-rule in `.gitignore` is what keeps it out of git — never commit it, never
-`git add -f` it, and update the GitHub secret whenever the dedicated CI
-keychain password is rotated.
-
-The Apple app-specific password is stored by `notarytool` in the
-`WhisperKey-Notary` profile inside the dedicated signing keychain. Do not store
-it in plaintext files, commit it, or paste it into issue/PR/release notes.
+The Apple app-specific password lives only in the repository secret and, on the
+maintainer machine, in the login keychain as the `WhisperKey-Notary` notarytool
+profile. Do not store it in plaintext files, commit it, or paste it into
+issue/PR/release notes.
 
 ### Cutting an automated release
 
@@ -201,9 +180,9 @@ git tag v1.2.0 && git push origin v1.2.0
 gh workflow run release.yml -f version=1.2.0
 ```
 
-The job unlocks the dedicated keychain, builds/signs/notarizes via
+The job creates its temporary signing keychain, builds/signs/notarizes via
 `release.sh` (with `WHISPERKEY_SKIP_INSTALL=1`, so it does not touch
-`/Applications`), and attaches the DMG to the release.
+`/Applications`), removes the keychain, and attaches the DMG to the release.
 
 A tag build uses `developer-id` mode and notarizes through Apple. Dispatching
 manually accepts either mode through the `release_mode` input; `ad-hoc` is a
