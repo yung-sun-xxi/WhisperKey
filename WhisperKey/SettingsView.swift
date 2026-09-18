@@ -1177,10 +1177,12 @@ private struct QuickPasteSettingsPane: View {
     }
 
     /// Parsed so the bold key name renders; falls back to the plain string rather than
-    /// showing nothing if the Markdown ever fails to parse.
+    /// showing nothing if the Markdown ever fails to parse. Inline-only, whitespace kept:
+    /// full-document parsing would collapse the double spaces around the separators.
     private var quickPasteUsageHint: AttributedString {
         let hint = QuickPasteConfiguration.usageHint(for: settings.quickPasteTriggerKey)
-        return (try? AttributedString(markdown: hint)) ?? AttributedString(hint)
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: hint, options: options)) ?? AttributedString(hint)
     }
 
     var body: some View {
