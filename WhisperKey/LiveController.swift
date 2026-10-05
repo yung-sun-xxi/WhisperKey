@@ -1,3 +1,4 @@
+import AppKit
 import AudioRecorder
 import Foundation
 import HotkeyEngine
@@ -92,7 +93,7 @@ final class LiveController {
         } else {
             islandHideTask?.cancel()
             islandHideTask = nil
-            islandWindow?.hide()
+            dismissIsland()
         }
     }
 
@@ -338,19 +339,35 @@ final class LiveController {
     private func showIsland(_ command: LiveIsland) {
         islandHideTask?.cancel()
         islandHideTask = nil
+        guard case .shown(let state, _) = command else {
+            dismissIsland()
+            return
+        }
+
+        // A window of its own per session, as the toast and the quick-paste panel do. One
+        // panel kept for the life of the app was ordered front and never reached the screen
+        // after the displays were reconfigured (mirroring switched) while it existed.
         let window = islandWindow ?? LiveIslandWindow()
         islandWindow = window
         window.apply(command)
+        log.info("Live island \(Self.describe(state), privacy: .public) frame=\(NSStringFromRect(window.frame), privacy: .public) visible=\(window.isVisible, privacy: .public) activeSpace=\(window.isOnActiveSpace, privacy: .public)")
 
         // The red island outlives the session by a few seconds, then goes. Any later island
         // command — a new session opening — cancels this.
-        if case .shown(.error, _) = command {
+        if case .error = state {
             islandHideTask = Task { [weak self] in
                 try? await Task.sleep(for: Self.errorIslandDuration)
                 guard !Task.isCancelled, let self else { return }
-                self.islandWindow?.hide()
+                self.dismissIsland()
             }
         }
+    }
+
+    /// Takes the island off screen and lets the window go; the next session builds a new one.
+    private func dismissIsland() {
+        islandWindow?.hide()
+        islandWindow?.close()
+        islandWindow = nil
     }
 
     // MARK: - Logging
