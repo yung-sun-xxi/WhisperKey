@@ -1093,8 +1093,15 @@ public actor AudioRecorder {
         let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
         let streamedBytes = pipeline?.streamedBytes ?? 0
         let streamedDuration = Self.streamFormat.duration(byteCount: streamedBytes)
-        recorderLog.info(
-            "stopStreaming: captureID=\(self.activeCaptureID ?? 0, privacy: .public) elapsed=\(elapsed, privacy: .public) streamedBytes=\(streamedBytes, privacy: .public) expectedBytes=\(Self.streamFormat.byteCount(duration: elapsed), privacy: .public) streamedDuration=\(streamedDuration, privacy: .public) inputDevice=\(self.activeInputDevice?.logDescription ?? "nil", privacy: .public)"
+        // Notice, not info, so the line survives in `log show` after the fact.
+        // The counters tell where missing audio went: a tap that delivered
+        // fewer seconds than elapsed (or stopped: lastTapAgo), tap buffers
+        // the append gate dropped, or conversions that produced nothing.
+        let counters = diagnostics.snapshot()
+        let tapSeconds = counters.inputSampleRate.map { $0 > 0 ? Double(counters.tapInputFrames) / $0 : 0 } ?? 0
+        let lastTapAgo = counters.lastTapAt.map { Date().timeIntervalSince($0) } ?? -1
+        recorderLog.notice(
+            "stopStreaming: captureID=\(self.activeCaptureID ?? 0, privacy: .public) elapsed=\(elapsed, privacy: .public) streamedBytes=\(streamedBytes, privacy: .public) expectedBytes=\(Self.streamFormat.byteCount(duration: elapsed), privacy: .public) streamedDuration=\(streamedDuration, privacy: .public) inputDevice=\(self.activeInputDevice?.logDescription ?? "nil", privacy: .public) tapBuffers=\(counters.tapBuffersReceived, privacy: .public) tapSeconds=\(tapSeconds, privacy: .public) lastTapAgo=\(lastTapAgo, privacy: .public) appendTasksScheduled=\(counters.appendTasksScheduled, privacy: .public) appendTasksDropped=\(counters.appendTasksDropped, privacy: .public) appendedBuffers=\(counters.appendedBuffers, privacy: .public) emptyOutputBuffers=\(counters.emptyOutputBuffers, privacy: .public) converterFailures=\(counters.converterFailures, privacy: .public) maxAppendNanos=\(counters.maxAppendNanos, privacy: .public)"
         )
         diagnostics.recordStopFinished(
             returnedBuffer: false,
