@@ -367,6 +367,91 @@ final class SettingsStoreTests: XCTestCase {
             )
         )
     }
+
+    // MARK: - Live
+
+    func testLiveIsOffWhenTheKeyIsAbsent() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertFalse(store.liveEnabled)
+        XCTAssertFalse(store.hotkeyConfig.liveEnabled)
+    }
+
+    func testLiveEnabledPersistsAcrossInstances() {
+        let first = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        first.liveEnabled = true
+        XCTAssertEqual(defaults.object(forKey: "WhisperKey.settings.liveEnabled") as? Bool, true)
+
+        let second = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertTrue(second.liveEnabled)
+
+        second.liveEnabled = false
+        let third = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertFalse(third.liveEnabled)
+    }
+
+    func testLiveIsAvailableWithTheSettingOnAKeyAndANonShiftTrigger() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.openAIAPIKey = "sk-live"
+        store.liveEnabled = true
+
+        XCTAssertEqual(store.liveAvailability, .available)
+        XCTAssertEqual(
+            store.hotkeyConfig,
+            HotkeyConfig(trigger: .rightOption, mode: .tap, liveEnabled: true)
+        )
+    }
+
+    func testLiveSettingOffKeepsTheChordOff() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.openAIAPIKey = "sk-live"
+        store.liveEnabled = false
+
+        XCTAssertEqual(store.liveAvailability, .off)
+        XCTAssertFalse(store.hotkeyConfig.liveEnabled)
+    }
+
+    func testLiveWithoutAnOpenAIKeyKeepsTheChordOff() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.liveEnabled = true
+
+        XCTAssertEqual(store.liveAvailability, .needsOpenAIKey)
+        XCTAssertFalse(store.hotkeyConfig.liveEnabled)
+    }
+
+    /// The Groq key does not count: Live talks to OpenAI only.
+    func testAGroqKeyAloneDoesNotMakeLiveAvailable() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.provider = .groq
+        store.groqAPIKey = "gsk-live"
+        store.liveEnabled = true
+
+        XCTAssertEqual(store.liveAvailability, .needsOpenAIKey)
+        XCTAssertFalse(store.hotkeyConfig.liveEnabled)
+    }
+
+    func testLiveWithTheRightShiftTriggerKeepsTheChordOff() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.openAIAPIKey = "sk-live"
+        store.triggerKey = .rightShift
+        store.liveEnabled = true
+
+        XCTAssertEqual(store.liveAvailability, .unavailableWithTrigger)
+        XCTAssertFalse(store.hotkeyConfig.liveEnabled)
+    }
+
+    /// Deleting the key turns the chord off without touching the stored setting, so adding
+    /// a key again brings Live back as the user left it.
+    func testDeletingTheOpenAIKeyTurnsTheChordOffAndKeepsTheSetting() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.openAIAPIKey = "sk-live"
+        store.liveEnabled = true
+        XCTAssertTrue(store.hotkeyConfig.liveEnabled)
+
+        store.deleteAPIKey(for: .openai)
+
+        XCTAssertFalse(store.hotkeyConfig.liveEnabled)
+        XCTAssertTrue(store.liveEnabled)
+    }
 }
 
 final class TranscriptionLanguageTests: XCTestCase {

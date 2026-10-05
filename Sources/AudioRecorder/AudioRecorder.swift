@@ -66,6 +66,10 @@ final class CapturePipeline: @unchecked Sendable {
     private let diagnostics: AudioRecorderDiagnosticsState
     private var acceptsInput = true
     private var pcmData = Data()
+    /// Set once for a stream. From then on each converted chunk goes to the
+    /// sink instead of `pcmData`, and nothing is accumulated.
+    private var chunkSink: (@Sendable (Data) -> Void)?
+    private var streamedByteCount = 0
 
     init(
         captureID: UInt64,
@@ -106,6 +110,39 @@ final class CapturePipeline: @unchecked Sendable {
                 enqueuedAtNanos: enqueuedAtNanos
             )
         }
+    }
+
+    /// Turns this capture into a stream: every chunk converted from now on is
+    /// handed to `sink`, in order, on the pipeline's serial conversion queue.
+    ///
+    /// The switch itself runs on that queue, so anything converted between
+    /// the engine starting and this call is flushed to the sink first and
+    /// cannot overtake or trail a later chunk. The sink runs inside the append
+    /// gate: while it is busy the next tap buffer is dropped, so it must hand
+    /// the data off rather than do slow work.
+    func attachChunkSink(_ sink: @escaping @Sendable (Data) -> Void) {
+        conversionQueue.async { [self] in
+            lock.lock()
+            guard acceptsInput else {
+                lock.unlock()
+                return
+            }
+            let pending = pcmData
+            pcmData = Data()
+            chunkSink = sink
+            streamedByteCount += pending.count
+            lock.unlock()
+            if !pending.isEmpty {
+                sink(pending)
+            }
+        }
+    }
+
+    /// Bytes handed to the chunk sink so far.
+    var streamedBytes: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return streamedByteCount
     }
 
     /// Retires the pipeline without waiting for a conversion already executing
@@ -185,6 +222,18 @@ final class CapturePipeline: @unchecked Sendable {
         guard acceptsInput else {
             lock.unlock()
             diagnostics.recordAppendIgnored()
+            return
+        }
+        if let sink = chunkSink {
+            streamedByteCount += converted.count
+            let streamedTotal = streamedByteCount
+            lock.unlock()
+            sink(converted)
+            diagnostics.recordAppendSuccess(
+                outputFrameLength: outputBuffer.frameLength,
+                appendNanos: audioRecorderNowNanos() - startedAtNanos,
+                pcmBytes: streamedTotal
+            )
             return
         }
         pcmData.append(converted)
@@ -603,6 +652,34 @@ public struct AudioBuffer: Sendable, Equatable {
     }
 }
 
+/// Arithmetic for 16-bit signed little-endian interleaved PCM: how many bytes
+/// a stretch of audio takes and how long a number of bytes plays.
+public struct PCM16Format: Equatable, Sendable {
+    public let sampleRate: Double
+    public let channelCount: UInt32
+
+    public init(sampleRate: Double, channelCount: UInt32) {
+        self.sampleRate = sampleRate
+        self.channelCount = channelCount
+    }
+
+    public var bytesPerFrame: Int { MemoryLayout<Int16>.size * Int(channelCount) }
+
+    public var bytesPerSecond: Double { sampleRate * Double(bytesPerFrame) }
+
+    public func duration(byteCount: Int) -> TimeInterval {
+        guard sampleRate > 0, bytesPerFrame > 0, byteCount > 0 else { return 0 }
+        return Double(byteCount / bytesPerFrame) / sampleRate
+    }
+
+    /// Bytes for `duration`, rounded to whole frames so a chunk never splits a sample.
+    public func byteCount(duration: TimeInterval) -> Int {
+        guard duration > 0, sampleRate > 0 else { return 0 }
+        let frames = (duration * sampleRate).rounded()
+        return Int(frames) * bytesPerFrame
+    }
+}
+
 public enum AudioRecorderError: Error, Equatable, Sendable {
     case microphonePermissionDenied
     case engineFailedToStart(String)
@@ -864,9 +941,16 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
 /// - When `maxDuration` is reached, fires the handler registered via
 ///   `setOnMaxDurationReached`. The handler is expected to drive the same
 ///   stop/transcribe path as a manual stop.
+///
+/// It is the single owner of the microphone. Besides dictation
+/// (`start()`/`stop()`) it offers a stream (`startStreaming`/`stopStreaming`)
+/// that hands out PCM16 24 kHz mono chunks as they are converted, accumulates
+/// nothing, and has no maximum duration. Only one of the two runs at a time.
 public actor AudioRecorder {
     public static let minDuration: TimeInterval = 0.3
     public static let defaultMaxDuration: TimeInterval = 10 * 60
+    /// What `startStreaming` delivers: 16-bit signed little-endian, 24 kHz, mono.
+    public static let streamFormat = PCM16Format(sampleRate: 24_000, channelCount: 1)
     /// How long `start()` waits for the audio engine before giving up. A
     /// wedged `coreaudiod` can make the first CoreAudio call of a capture
     /// never return; the user gets an error instead of a dead recorder.
@@ -890,9 +974,26 @@ public actor AudioRecorder {
         return format
     }()
 
+    private let streamOutputFormat: AVAudioFormat = {
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: AudioRecorder.streamFormat.sampleRate,
+            channels: AudioRecorder.streamFormat.channelCount,
+            interleaved: true
+        ) else {
+            fatalError("Failed to create 24 kHz mono Int16 AVAudioFormat")
+        }
+        return format
+    }()
+
     private var activePipeline: CapturePipeline?
     private var activeHost: CaptureEngineHosting?
     private var isRecording = false
+    private var isStreaming = false
+    /// True while a start of that kind waits on its engine host. The other
+    /// kind is refused meanwhile, so the two can never both own the input.
+    private var dictationStartsInFlight = 0
+    private var isStreamStarting = false
     private var startTime: Date?
     private var activeCaptureID: UInt64?
     private var nextCaptureID: UInt64 = 1
@@ -941,9 +1042,78 @@ public actor AudioRecorder {
     }
 
     public func start() async throws {
-        guard !isRecording else { throw AudioRecorderError.alreadyRecording }
+        guard !isRecording, !isStreaming, !isStreamStarting else {
+            throw AudioRecorderError.alreadyRecording
+        }
+        dictationStartsInFlight += 1
+        defer { dictationStartsInFlight -= 1 }
         try await ensureMicrophonePermission()
 
+        let (host, started, captureID) = try await beginCapture(outputFormat: outputFormat)
+        activate(host: host, started: started, captureID: captureID)
+        isRecording = true
+        scheduleMaxDurationTask()
+    }
+
+    /// Opens the microphone as a live stream. Each converted chunk of PCM16
+    /// little-endian, 24 kHz, mono (`AudioRecorder.streamFormat`) is passed to
+    /// `onChunk` in capture order, on a private serial queue. `onChunk` must
+    /// return quickly: while it runs, the next microphone buffer is dropped.
+    ///
+    /// Nothing is accumulated and no maximum duration applies; the caller ends
+    /// the stream with `stopStreaming()`. Throws `.alreadyRecording` while
+    /// dictation or another stream holds the microphone, and the same
+    /// permission, engine and start-timeout errors as `start()`.
+    public func startStreaming(onChunk: @escaping @Sendable (Data) -> Void) async throws {
+        guard !isRecording, !isStreaming, !isStreamStarting, dictationStartsInFlight == 0 else {
+            throw AudioRecorderError.alreadyRecording
+        }
+        isStreamStarting = true
+        defer { isStreamStarting = false }
+        try await ensureMicrophonePermission()
+
+        let (host, started, captureID) = try await beginCapture(outputFormat: streamOutputFormat)
+        activate(host: host, started: started, captureID: captureID)
+        isStreaming = true
+        started.pipeline.attachChunkSink(onChunk)
+    }
+
+    /// Ends the stream and releases the microphone. A no-op when no stream
+    /// runs, so it never touches a dictation. A chunk whose conversion was
+    /// already executing may still reach the sink once after this returns;
+    /// audio captured after it never does.
+    public func stopStreaming() {
+        guard isStreaming else { return }
+        isStreaming = false
+        diagnostics.recordStopEntered()
+
+        let pipeline = activePipeline
+        _ = pipeline?.retireAndSnapshot()
+        activeHost?.retire()
+        let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
+        let streamedBytes = pipeline?.streamedBytes ?? 0
+        let streamedDuration = Self.streamFormat.duration(byteCount: streamedBytes)
+        recorderLog.info(
+            "stopStreaming: captureID=\(self.activeCaptureID ?? 0, privacy: .public) elapsed=\(elapsed, privacy: .public) streamedBytes=\(streamedBytes, privacy: .public) expectedBytes=\(Self.streamFormat.byteCount(duration: elapsed), privacy: .public) streamedDuration=\(streamedDuration, privacy: .public) inputDevice=\(self.activeInputDevice?.logDescription ?? "nil", privacy: .public)"
+        )
+        diagnostics.recordStopFinished(
+            returnedBuffer: false,
+            pcmBytes: streamedBytes,
+            elapsed: elapsed,
+            capturedDuration: streamedDuration
+        )
+        startTime = nil
+        activePipeline = nil
+        activeHost = nil
+        activeCaptureID = nil
+        activeInputDevice = nil
+    }
+
+    /// Starts one engine host for `outputFormat` and waits for it, at most
+    /// `startTimeout`. A failed or timed-out host is retired before throwing.
+    private func beginCapture(
+        outputFormat: AVAudioFormat
+    ) async throws -> (CaptureEngineHosting, CaptureStartResult, UInt64) {
         let captureID = nextCaptureID
         nextCaptureID += 1
         let hostID = nextEngineHostID
@@ -973,15 +1143,7 @@ public actor AudioRecorder {
 
         switch outcome {
         case .success(let started):
-            activeHost = host
-            activePipeline = started.pipeline
-            isRecording = true
-            startTime = Date()
-            activeCaptureID = captureID
-            activeInputDevice = started.inputDevice
-            lastInputDevice = started.inputDevice
-            diagnostics.recordEngineStarted()
-            scheduleMaxDurationTask()
+            return (host, started, captureID)
         case .failure(let error):
             host.retire()
             if case .engineStartTimedOut(let seconds) = error {
@@ -992,6 +1154,16 @@ public actor AudioRecorder {
             }
             throw error
         }
+    }
+
+    private func activate(host: CaptureEngineHosting, started: CaptureStartResult, captureID: UInt64) {
+        activeHost = host
+        activePipeline = started.pipeline
+        startTime = Date()
+        activeCaptureID = captureID
+        activeInputDevice = started.inputDevice
+        lastInputDevice = started.inputDevice
+        diagnostics.recordEngineStarted()
     }
 
     public func stop() -> AudioBuffer? {

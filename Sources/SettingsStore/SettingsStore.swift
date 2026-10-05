@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import HotkeyEngine
 import KeychainStore
+import Live
 import QuickPaste
 import TranscriptionProvider
 import UsageStatsStore
@@ -67,6 +68,7 @@ public final class SettingsStore: ObservableObject {
         static let quickPasteTriggerKey = "WhisperKey.settings.quickPasteTriggerKey"
         static let quickPasteHoldDuration = "WhisperKey.settings.quickPasteHoldDuration"
         static let quickPasteEntryCount = "WhisperKey.settings.quickPasteEntryCount"
+        static let liveEnabled = "WhisperKey.settings.liveEnabled"
     }
 
     public static let defaultHistoryMaxEntries = 30
@@ -215,6 +217,12 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
+    /// The user's Live switch. Whether Live can actually run is `liveAvailability`, which
+    /// also needs an OpenAI key and a trigger other than Right Shift. Default off.
+    @Published public var liveEnabled: Bool {
+        didSet { if !loading { defaults.set(liveEnabled, forKey: DefaultsKey.liveEnabled) } }
+    }
+
     @Published public var historyMaxEntries: Int {
         didSet {
             let clamped = Self.clampHistoryMax(historyMaxEntries)
@@ -276,6 +284,7 @@ public final class SettingsStore: ObservableObject {
         let storedEntryCount = (defaults.object(forKey: DefaultsKey.quickPasteEntryCount) as? Int)
             ?? Self.defaultQuickPasteEntryCount
         self.quickPasteEntryCount = Self.clampQuickPasteEntryCount(storedEntryCount)
+        self.liveEnabled = (defaults.object(forKey: DefaultsKey.liveEnabled) as? Bool) ?? false
         self.openAIAPIKey = Self.loadAPIKey(for: .openai, keychain: keychain)
         self.groqAPIKey = Self.loadAPIKey(for: .groq, keychain: keychain)
 
@@ -313,11 +322,24 @@ public final class SettingsStore: ObservableObject {
         )
     }
 
+    /// Live always uses the OpenAI key, whichever provider dictation uses — see
+    /// `LiveAvailability` for why.
+    public var liveAvailability: LiveAvailability {
+        LiveAvailability.evaluate(
+            liveEnabled: liveEnabled,
+            hasOpenAIKey: !openAIAPIKey.isEmpty,
+            trigger: triggerKey
+        )
+    }
+
+    /// The chord, and the active tap that comes with it, exist only while Live is available:
+    /// the setting alone is not enough.
     public var hotkeyConfig: HotkeyConfig {
         HotkeyConfig(
             trigger: triggerKey,
             mode: triggerMode,
-            escapeToCancelRecording: escapeToCancelRecording
+            escapeToCancelRecording: escapeToCancelRecording,
+            liveEnabled: liveAvailability.isAvailable
         )
     }
 

@@ -38,15 +38,24 @@ public struct HotkeyConfig: Sendable, Equatable {
     public var trigger: TriggerKey
     public var mode: TriggerMode
     public var escapeToCancelRecording: Bool
+    /// Whether the trigger plus `liveChordKeyCode` opens Live. Off, the chord key is an
+    /// ordinary key and every output is what it was before Live existed.
+    public var liveEnabled: Bool
+    /// Virtual key code of the second key of the Live chord. 44 is `kVK_ANSI_Slash`.
+    public var liveChordKeyCode: Int64
 
     public init(
         trigger: TriggerKey = .rightOption,
         mode: TriggerMode = .tap,
-        escapeToCancelRecording: Bool = true
+        escapeToCancelRecording: Bool = true,
+        liveEnabled: Bool = false,
+        liveChordKeyCode: Int64 = 44
     ) {
         self.trigger = trigger
         self.mode = mode
         self.escapeToCancelRecording = escapeToCancelRecording
+        self.liveEnabled = liveEnabled
+        self.liveChordKeyCode = liveChordKeyCode
     }
 }
 
@@ -54,6 +63,8 @@ public enum HotkeyOutput: Sendable, Equatable {
     case recordingShouldStart
     case recordingShouldStop
     case recordingShouldCancel
+    /// The Live chord was pressed: open Live if it is closed, close it if it is open.
+    case liveShouldToggle
 }
 
 /// Pure state machine for hotkey detection. Has no system dependencies and is fully testable.
@@ -73,6 +84,11 @@ public struct HotkeyStateMachine: Sendable {
         case triggerUp(at: TimeInterval)
         case otherKeyDown(at: TimeInterval)
         case escapeDown(at: TimeInterval)
+        /// The Live chord key went down while the trigger was held. Only produced while
+        /// Live is enabled; otherwise the same keystroke is `otherKeyDown`.
+        case chordKeyDown(at: TimeInterval)
+        /// An auto-repeat of the chord key (`keyboardEventAutorepeat`). Never toggles Live.
+        case chordKeyRepeat(at: TimeInterval)
     }
 
     public static let tapMaxDuration: TimeInterval = 0.4
@@ -81,6 +97,9 @@ public struct HotkeyStateMachine: Sendable {
     public private(set) var config: HotkeyConfig
     public private(set) var appState: AppState
     public private(set) var transcribingSuppressionCount: UInt = 0
+    /// Whether a Live session is open, as told by the app. Live and dictation never share
+    /// the microphone, so while this is set the trigger alone starts nothing.
+    public private(set) var isLiveActive: Bool = false
 
     private var pressedAt: TimeInterval?
     private var otherKeySeen: Bool
@@ -111,6 +130,12 @@ public struct HotkeyStateMachine: Sendable {
         }
     }
 
+    /// Tells the state machine whether a Live session is open. Kept apart from `AppState`
+    /// because Live is not a dictation state, and only consulted while Live is enabled.
+    public mutating func setLiveActive(_ active: Bool) {
+        isLiveActive = active
+    }
+
     public mutating func process(_ event: Event) -> HotkeyOutput? {
         switch config.mode {
         case .tap:
@@ -123,6 +148,14 @@ public struct HotkeyStateMachine: Sendable {
     private mutating func processTapMode(_ event: Event) -> HotkeyOutput? {
         if case .escapeDown(let t) = event, !config.escapeToCancelRecording {
             return processTapMode(.otherKeyDown(at: t))
+        }
+        if !config.liveEnabled {
+            switch event {
+            case .chordKeyDown(let t), .chordKeyRepeat(let t):
+                return processTapMode(.otherKeyDown(at: t))
+            default:
+                break
+            }
         }
 
         switch (appState, event) {
@@ -140,7 +173,35 @@ public struct HotkeyStateMachine: Sendable {
             return nil
 
         case (.idle, .triggerUp(let t)):
+            if config.liveEnabled && isLiveActive {
+                // Live has the microphone; only the chord does anything now.
+                resetHoldState()
+                return nil
+            }
             return finishHoldFromIdle(now: t)
+
+        case (.idle, .chordKeyDown):
+            // `pressedAt` is set only by a trigger-down seen in idle and cleared by any
+            // app-state change, so this is "the press began in idle and is still held".
+            guard pressedAt != nil else { return nil }
+            // The press belongs to Live now: its trigger-up must not start dictation.
+            otherKeySeen = true
+            return .liveShouldToggle
+
+        case (.idle, .chordKeyRepeat):
+            // Never a toggle, but still a key held during the press: not a clean tap.
+            if pressedAt != nil {
+                otherKeySeen = true
+            }
+            return nil
+
+        case (.recording, .chordKeyDown), (.recording, .chordKeyRepeat):
+            // While dictating, the chord is the plain trigger: the trigger-down already
+            // stopped the recording, and the chord key adds nothing.
+            return nil
+
+        case (.transcribing, .chordKeyDown), (.transcribing, .chordKeyRepeat):
+            return nil
 
         case (.idle, .otherKeyDown):
             if pressedAt != nil {
@@ -172,6 +233,13 @@ public struct HotkeyStateMachine: Sendable {
     private mutating func processHoldMode(_ event: Event) -> HotkeyOutput? {
         if case .escapeDown(let t) = event, !config.escapeToCancelRecording {
             return processHoldMode(.otherKeyDown(at: t))
+        }
+        // Hold-mode Live is not built yet: the chord key is an ordinary key, as today.
+        switch event {
+        case .chordKeyDown(let t), .chordKeyRepeat(let t):
+            return processHoldMode(.otherKeyDown(at: t))
+        default:
+            break
         }
 
         switch (appState, event) {
@@ -208,6 +276,9 @@ public struct HotkeyStateMachine: Sendable {
         case (.recording, .escapeDown):
             resetHoldState()
             return .recordingShouldCancel
+
+        case (_, .chordKeyDown), (_, .chordKeyRepeat):
+            return nil   // Unreachable: remapped above.
         }
     }
 
