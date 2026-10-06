@@ -56,7 +56,19 @@ if [ "$DO_TEST" = 1 ]; then
   START=$SECONDS
   swift test >"$PKG_LOG" 2>&1
   STATUS=$?
-  EXECUTED="$(grep -E "Executed [0-9]+ test" "$PKG_LOG" | tail -1)"
+  # Each test bundle prints its own "Executed N tests" total under its
+  # "Test Suite 'X.xctest'" line; the last one alone is a single bundle's
+  # count, so the totals are summed across bundles.
+  EXECUTED="$(awk '
+    /Test Suite .*\.xctest. (passed|failed)/ { bundle = 1; next }
+    bundle && /Executed [0-9]+ tests?, with [0-9]+ failures?/ {
+      match($0, /Executed [0-9]+/); tests += substr($0, RSTART + 9, RLENGTH - 9)
+      match($0, /with [0-9]+/); failures += substr($0, RSTART + 5, RLENGTH - 5)
+      bundles++
+    }
+    { bundle = 0 }
+    END { if (bundles) printf "%d tests, %d failures, %d bundles", tests, failures, bundles }
+  ' "$PKG_LOG")"
   echo "swift test  $((SECONDS - START))s — ${EXECUTED:-no test summary found}"
   if [ "$STATUS" != 0 ]; then
     echo "FAILURES:"
