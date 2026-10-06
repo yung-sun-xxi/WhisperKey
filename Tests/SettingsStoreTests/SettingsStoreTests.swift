@@ -161,6 +161,36 @@ final class SettingsStoreTests: XCTestCase {
         )
     }
 
+    func testCurrentTranscriptionIDsFollowProviderAndModelChanges() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        store.provider = .openai
+        store.openAIModel = .gptTranscribe
+        store.groqModel = .whisperLargeV3Turbo
+        XCTAssertEqual(store.currentTranscriptionProviderID, "openai")
+        XCTAssertEqual(store.currentTranscriptionModelID, "gpt-transcribe")
+
+        store.openAIModel = .gpt4oMiniTranscribe
+        XCTAssertEqual(store.currentTranscriptionModelID, "gpt-4o-mini-transcribe")
+
+        // The model of the provider that is not selected does not leak into the current one.
+        store.groqModel = .whisperLargeV3
+        XCTAssertEqual(store.currentTranscriptionModelID, "gpt-4o-mini-transcribe")
+
+        store.provider = .groq
+        XCTAssertEqual(store.currentTranscriptionProviderID, "groq")
+        XCTAssertEqual(store.currentTranscriptionModelID, "whisper-large-v3")
+
+        store.groqModel = .distilWhisperLargeV3EN
+        XCTAssertEqual(store.currentTranscriptionModelID, "distil-whisper-large-v3-en")
+
+        store.openAIModel = .gptTranscribe
+        XCTAssertEqual(store.currentTranscriptionModelID, "distil-whisper-large-v3-en")
+
+        store.provider = .openai
+        XCTAssertEqual(store.currentTranscriptionProviderID, "openai")
+        XCTAssertEqual(store.currentTranscriptionModelID, "gpt-transcribe")
+    }
+
     func testMakeProviderReturnsNilWhenKeyEmpty() {
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
         XCTAssertNil(store.makeTranscriptionProvider())

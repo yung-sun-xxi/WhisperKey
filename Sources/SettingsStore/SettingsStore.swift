@@ -313,6 +313,23 @@ public final class SettingsStore: ObservableObject {
         )
     }
 
+    /// The provider transcription runs on right now, as the id usage stats are keyed by.
+    public var currentTranscriptionProviderID: String {
+        provider.rawValue
+    }
+
+    /// The model of the selected provider. The one source for "which model is current":
+    /// the coordinator and the popover header both read it here, so a view that observes
+    /// this store re-renders with the new model the moment either setting changes.
+    public var currentTranscriptionModelID: String {
+        switch provider {
+        case .openai:
+            openAIModel.rawValue
+        case .groq:
+            groqModel.rawValue
+        }
+    }
+
     public var hotkeyConfig: HotkeyConfig {
         HotkeyConfig(
             trigger: triggerKey,
