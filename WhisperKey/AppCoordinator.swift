@@ -12,7 +12,6 @@ import ErrorToast
 import HistoryStore
 import ClipboardHistoryStore
 import QuickPaste
-import Live
 import LoginItem
 import UsageStatsStore
 
@@ -181,15 +180,6 @@ final class AppCoordinator: ObservableObject {
     private let appleMusic = AppleMusicRecordingController()
     private let outputRouter = TranscriptionOutputRouter()
     private let toastPresenter = ToastPresenter()
-    /// Live shares `recorder` with dictation — one microphone owner — and reports through
-    /// the same sounds and toast, but never through `state`: Live is not a dictation state.
-    private lazy var liveController = LiveController(
-        settings: settings,
-        recorder: recorder,
-        hotkey: hotkey,
-        playSound: { [weak self] event in self?.playSound(event) },
-        showError: { [weak self] message in self?.showLiveError(message) }
-    )
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
     private var cancellables = Set<AnyCancellable>()
     private var recordingStartedAt: Date?
@@ -303,8 +293,6 @@ final class AppCoordinator: ObservableObject {
             stopRecording()
         case .recordingShouldCancel:
             cancelRecording()
-        case .liveShouldToggle:
-            liveController.toggle()
         }
     }
 
@@ -1289,15 +1277,6 @@ final class AppCoordinator: ObservableObject {
         )
     }
 
-    /// Live's errors: the ordinary toast and nothing else. Not `handleTranscriptionFailure`,
-    /// which would paint the menu bar with a dictation error; Live has its own red island.
-    private func showLiveError(_ message: String) {
-        toastPresenter.show(
-            content: ToastContent(message: message, action: .none, style: .warning),
-            onAction: {}
-        )
-    }
-
     private func playSound(_ event: SoundPlayer.Event) {
         guard settings.soundEffectsEnabled else { return }
         sounds.play(event)
@@ -1324,35 +1303,19 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func observeSettings() {
-        // Built from the emitted values rather than `settings.hotkeyConfig`: `@Published`
-        // emits before the property changes, so reading the store here would see the old
-        // value. The Live part mirrors `SettingsStore.liveAvailability`.
         settings.$triggerKey
-            .combineLatest(settings.$triggerMode, settings.$escapeToCancelRecording, settings.$liveEnabled)
-            .combineLatest(settings.$openAIAPIKey.map { !$0.isEmpty })
-            .map { values, hasOpenAIKey in
-                let (trigger, mode, escapeToCancelRecording, liveEnabled) = values
-                let liveAvailability = LiveAvailability.evaluate(
-                    liveEnabled: liveEnabled,
-                    hasOpenAIKey: hasOpenAIKey,
-                    trigger: trigger
-                )
-                return HotkeyConfig(
-                    trigger: trigger,
-                    mode: mode,
-                    escapeToCancelRecording: escapeToCancelRecording,
-                    liveEnabled: liveAvailability.isAvailable
+            .combineLatest(settings.$triggerMode)
+            .combineLatest(settings.$escapeToCancelRecording)
+            .map { triggerAndMode, escapeToCancelRecording in
+                HotkeyConfig(
+                    trigger: triggerAndMode.0,
+                    mode: triggerAndMode.1,
+                    escapeToCancelRecording: escapeToCancelRecording
                 )
             }
             .removeDuplicates()
             .sink { [weak self] config in
-                guard let self else { return }
-                // Live closes when it stops being available, and when the mode leaves tap:
-                // hold mode has no Live chord yet, so nothing could close the session.
-                if !config.liveEnabled || config.mode != .tap {
-                    self.liveController.shutDown()
-                }
-                self.hotkey.setConfig(config)
+                self?.hotkey.setConfig(config)
             }
             .store(in: &cancellables)
 
