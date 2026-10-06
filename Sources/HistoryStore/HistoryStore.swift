@@ -202,7 +202,10 @@ public enum TranscriptionCostEstimator {
     private static func estimateOpenAI(model: String, audioDurationSeconds: TimeInterval) -> TranscriptionCostEstimate? {
         let dollarsPerMinute: Double
         switch model {
+        case "gpt-transcribe":
+            dollarsPerMinute = 0.0045
         case "whisper-1":
+            // No longer offered; kept so older history entries still show a cost.
             dollarsPerMinute = 0.006
         case "gpt-4o-transcribe":
             dollarsPerMinute = 0.006

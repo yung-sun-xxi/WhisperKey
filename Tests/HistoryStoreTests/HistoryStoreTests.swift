@@ -498,6 +498,26 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(groq?.currency, "USD")
     }
 
+    func testGPTTranscribeCostIsFourAndAHalfTenthsOfACentPerMinute() {
+        let estimate = TranscriptionCostEstimator.estimate(
+            providerID: "openai",
+            model: "gpt-transcribe",
+            audioDurationSeconds: 60
+        )
+        XCTAssertEqual(estimate?.amount ?? 0, 0.0045, accuracy: 0.000001)
+        XCTAssertEqual(estimate?.currency, "USD")
+    }
+
+    func testLegacyWhisper1EntriesKeepTheirCost() {
+        let estimate = TranscriptionCostEstimator.estimate(
+            providerID: "openai",
+            model: "whisper-1",
+            audioDurationSeconds: 60
+        )
+        XCTAssertEqual(estimate?.amount ?? 0, 0.006, accuracy: 0.000001)
+        XCTAssertEqual(estimate?.currency, "USD")
+    }
+
     func testGroqCostEstimatorAppliesTenSecondMinimum() {
         let estimate = TranscriptionCostEstimator.estimate(
             providerID: "groq",

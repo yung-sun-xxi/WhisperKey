@@ -100,7 +100,7 @@ final class OpenAIProviderTests: XCTestCase {
         return URLSession(configuration: config)
     }
 
-    private func makeProvider(model: OpenAIProvider.Model = .whisper1, boundary: String = "BOUNDARY-FIXED") -> OpenAIProvider {
+    private func makeProvider(model: OpenAIProvider.Model = .gptTranscribe, boundary: String = "BOUNDARY-FIXED") -> OpenAIProvider {
         OpenAIProvider(
             apiKey: "sk-test-key",
             model: model,
@@ -157,9 +157,34 @@ final class OpenAIProviderTests: XCTestCase {
         XCTAssertTrue(body.contains(ascii: "name=\"file\"; filename=\"audio.wav\""))
         XCTAssertTrue(body.contains(ascii: "Content-Type: audio/wav"))
         XCTAssertTrue(body.contains(ascii: "name=\"model\""))
-        XCTAssertTrue(body.contains(ascii: "whisper-1"))
+        XCTAssertTrue(body.contains(ascii: "gpt-transcribe"))
         XCTAssertFalse(body.contains(ascii: "name=\"language\""), "no language hint should be sent when nil")
         XCTAssertTrue(body.contains(bytes: [0xDE, 0xAD, 0xBE, 0xEF]), "audio payload bytes preserved verbatim")
+    }
+
+    func testModelListIsGPTTranscribeThenMini() {
+        XCTAssertEqual(
+            OpenAIProvider.Model.allCases.map(\.rawValue),
+            ["gpt-transcribe", "gpt-4o-mini-transcribe"]
+        )
+    }
+
+    func testDefaultModelIsGPTTranscribe() {
+        XCTAssertEqual(OpenAIProvider(apiKey: "sk-test-key").model.rawValue, "gpt-transcribe")
+    }
+
+    func testGPTTranscribeResponseWithExtraKeysReturnsText() async throws {
+        StubURLProtocol.nextOutcome = .http(.init(
+            statusCode: 200,
+            body: #"{"text":"hello","languages":["en"],"usage":{"type":"duration","seconds":3}}"#.data(using: .utf8)!,
+            headers: ["Content-Type": "application/json"]
+        ))
+
+        let result = try await makeProvider().transcribe(audio: sampleAudio, language: nil)
+
+        XCTAssertEqual(result, "hello")
+        let body = try XCTUnwrap(StubURLProtocol.lastBody)
+        XCTAssertTrue(body.contains(ascii: "gpt-transcribe"))
     }
 
     func testLanguageParameterIsIncludedWhenProvided() async throws {
