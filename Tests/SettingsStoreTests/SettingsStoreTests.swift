@@ -27,7 +27,7 @@ final class SettingsStoreTests: XCTestCase {
         let keychain = InMemoryKeychain()
         let store = SettingsStore(keychain: keychain, defaults: defaults)
         XCTAssertEqual(store.provider, .openai)
-        XCTAssertEqual(store.openAIModel, .whisper1)
+        XCTAssertEqual(store.openAIModel, .gptTranscribe)
         XCTAssertEqual(store.language, .auto)
         XCTAssertEqual(store.triggerKey, .rightOption)
         XCTAssertEqual(store.triggerMode, .tap)
@@ -39,6 +39,17 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.pauseAppleMusicWhileRecording)
         XCTAssertFalse(store.hasPendingInstallWelcome)
         XCTAssertEqual(store.openAIAPIKey, "")
+    }
+
+    func testOpenAIModelDefaultsToGPTTranscribe() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(store.openAIModel.rawValue, "gpt-transcribe")
+    }
+
+    func testPersistedWhisper1ModelLoadsAsGPTTranscribe() {
+        defaults.set("whisper-1", forKey: "WhisperKey.settings.openAIModel")
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(store.openAIModel.rawValue, "gpt-transcribe")
     }
 
     func testValuesPersistAcrossInstances() {

@@ -1502,8 +1502,11 @@ private extension View {
 }
 
 private let allUsageResetKeys: [ProviderModelKey] = {
-    let openai = OpenAIProvider.Model.allCases.map {
-        ProviderModelKey(providerID: TranscriptionProviderID.openai.rawValue, modelID: $0.rawValue)
+    // "whisper-1" is no longer a selectable model, but counters recorded under it
+    // still exist and must stay resettable.
+    let openAIModelIDs = OpenAIProvider.Model.allCases.map(\.rawValue) + ["whisper-1"]
+    let openai = openAIModelIDs.map {
+        ProviderModelKey(providerID: TranscriptionProviderID.openai.rawValue, modelID: $0)
     }
     let groq = GroqProvider.Model.allCases.map {
         ProviderModelKey(providerID: TranscriptionProviderID.groq.rawValue, modelID: $0.rawValue)

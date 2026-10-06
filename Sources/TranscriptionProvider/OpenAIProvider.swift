@@ -7,7 +7,7 @@ private let openAIProviderLog = Logger(subsystem: "WhisperKey", category: "OpenA
 public struct OpenAIProvider: TranscriptionProvider {
 
     public enum Model: String, Sendable, Equatable, CaseIterable {
-        case whisper1 = "whisper-1"
+        case gptTranscribe = "gpt-transcribe"
         case gpt4oMiniTranscribe = "gpt-4o-mini-transcribe"
     }
 
@@ -24,7 +24,7 @@ public struct OpenAIProvider: TranscriptionProvider {
 
     public init(
         apiKey: String,
-        model: Model = .whisper1,
+        model: Model = .gptTranscribe,
         endpoint: URL = OpenAIProvider.defaultEndpoint,
         urlSession: URLSession = .shared,
         requestTimeout: TimeInterval = OpenAIProvider.defaultRequestTimeout,
