@@ -22,7 +22,6 @@ let package = Package(
         .library(name: "ErrorToast", targets: ["ErrorToast"]),
         .library(name: "LoginItem", targets: ["LoginItem"]),
         .library(name: "SingleInstance", targets: ["SingleInstance"]),
-        .library(name: "Live", targets: ["Live"]),
     ],
     targets: [
         .target(name: "HotkeyEngine"),
@@ -34,12 +33,11 @@ let package = Package(
         .target(name: "ClipboardHistoryStore"),
         .target(name: "QuickPaste", dependencies: ["HotkeyEngine", "ClipboardHistoryStore", "PasteEngine"]),
         .target(name: "KeychainStore"),
-        .target(name: "SettingsStore", dependencies: ["HotkeyEngine", "KeychainStore", "Live", "QuickPaste", "TranscriptionProvider", "UsageStatsStore"]),
+        .target(name: "SettingsStore", dependencies: ["HotkeyEngine", "KeychainStore", "QuickPaste", "TranscriptionProvider", "UsageStatsStore"]),
         .target(name: "UsageStatsStore"),
         .target(name: "ErrorToast", dependencies: ["TranscriptionProvider"]),
         .target(name: "LoginItem"),
         .target(name: "SingleInstance"),
-        .target(name: "Live", dependencies: ["HotkeyEngine"]),
         .target(
             name: "WhisperKeyKit",
             dependencies: [
@@ -57,7 +55,6 @@ let package = Package(
                 "ErrorToast",
                 "LoginItem",
                 "SingleInstance",
-                "Live",
             ]
         ),
 
@@ -75,6 +72,5 @@ let package = Package(
         .testTarget(name: "ErrorToastTests", dependencies: ["ErrorToast", "TranscriptionProvider"]),
         .testTarget(name: "LoginItemTests", dependencies: ["LoginItem"]),
         .testTarget(name: "SingleInstanceTests", dependencies: ["SingleInstance"]),
-        .testTarget(name: "LiveTests", dependencies: ["Live", "HotkeyEngine"]),
     ]
 )

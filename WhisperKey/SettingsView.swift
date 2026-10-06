@@ -2,7 +2,6 @@ import AppKit
 import AVFoundation
 import SwiftUI
 import HotkeyEngine
-import Live
 import QuickPaste
 import SettingsStore
 import TranscriptionProvider
@@ -734,12 +733,9 @@ private enum SettingsTab: CaseIterable {
     case recording
     case transcription
     case quickPaste
-    case live
 
     var title: String {
         switch self {
-        case .live:
-            return "Live"
         case .transcription:
             return "Transcription"
         case .recording:
@@ -753,8 +749,6 @@ private enum SettingsTab: CaseIterable {
 
     var symbolName: String {
         switch self {
-        case .live:
-            return "bubble.left.and.text.bubble.right"
         case .transcription:
             return "waveform"
         case .recording:
@@ -768,8 +762,6 @@ private enum SettingsTab: CaseIterable {
 
     var identifier: String {
         switch self {
-        case .live:
-            return "live"
         case .transcription:
             return "transcription"
         case .recording:
@@ -782,7 +774,7 @@ private enum SettingsTab: CaseIterable {
     }
 }
 
-/// The chrome every pane shares: one width for all of them, so the toolbar tabs do not
+/// The chrome every pane shares: one width for all four, so the toolbar tabs do not
 /// shift horizontally when the selection changes.
 private struct SettingsPane: View {
     let tab: SettingsTab
@@ -804,8 +796,6 @@ private struct SettingsPane: View {
             RecordingSettingsPane(settings: settings)
         case .quickPaste:
             QuickPasteSettingsPane(settings: settings)
-        case .live:
-            LiveSettingsPane(settings: settings)
         case .general:
             GeneralSettingsPane(settings: settings)
         }
@@ -1279,33 +1269,6 @@ private struct QuickPasteSettingsPane: View {
                     .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
                 }
             }
-        }
-    }
-}
-
-private struct LiveSettingsPane: View {
-    @ObservedObject var settings: SettingsStore
-
-    /// The chord's second key is fixed to `/` until the chord can be chosen in settings.
-    private var usageHint: String {
-        "Tap \(settings.triggerKey.displayName) + / to talk; tap again to stop."
-    }
-
-    var body: some View {
-        let availability = settings.liveAvailability
-        SettingsPaneStack {
-            SettingsRow("Live") {
-                Toggle("", isOn: $settings.liveEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
-                    .disabled(availability == .needsOpenAIKey || availability == .unavailableWithTrigger)
-            }
-            Text(availability.message ?? usageHint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

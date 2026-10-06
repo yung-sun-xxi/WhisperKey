@@ -21,7 +21,6 @@ It supports OpenAI and Groq Whisper-compatible transcription APIs.
 - Optional clipboard output and auto-paste.
 - Local transcription history with configurable retention.
 - Optional quick-paste popup: hold a key to pick from recent clipboard entries — with the pointer or with the up and down arrows — and paste without leaving the field. Off by default.
-- Optional Live mode (tap mode): the trigger plus `/` opens a spoken conversation with OpenAI's realtime model; press again, or stay silent for 30 seconds, to close it. Needs an OpenAI key. Off by default.
 - Local usage counters by provider and model.
 - Optional sound effects and launch-at-login support.
 
@@ -69,8 +68,6 @@ provider you configure.
 
 - Audio is recorded only while the configured hotkey starts capture.
 - Recorded audio is sent directly to the selected transcription provider.
-- While a Live session is open, microphone audio streams to OpenAI's Realtime API,
-  whichever provider dictation uses.
 - API keys are stored in the macOS Keychain.
 - Transcription history and usage counters are stored locally.
 - WhisperKey does not run an owner-controlled backend service.
