@@ -870,12 +870,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     var currentTranscriptionModelID: String {
-        switch settings.provider {
-        case .openai:
-            settings.openAIModel.rawValue
-        case .groq:
-            settings.groqModel.rawValue
-        }
+        settings.currentTranscriptionModelID
     }
 
     func openSettingsWindow() {

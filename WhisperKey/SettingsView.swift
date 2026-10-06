@@ -315,8 +315,6 @@ struct PopoverContent: View {
                 CommandCenterHeader(
                     settings: coordinator.settings,
                     usageStats: coordinator.usageStats,
-                    currentProviderID: coordinator.settings.provider.rawValue,
-                    currentModelID: coordinator.currentTranscriptionModelID,
                     appState: coordinator.state,
                     cancelAction: coordinator.cancelActiveOperation
                 )
@@ -395,8 +393,6 @@ private struct PermissionBanner: View {
 private struct CommandCenterHeader: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var usageStats: UsageStatsStore
-    let currentProviderID: String
-    let currentModelID: String
     let appState: AppCoordinator.AppState
     let cancelAction: () -> Void
 
@@ -433,13 +429,13 @@ private struct CommandCenterHeader: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(PopoverTypography.secondaryColor)
                     .frame(width: 14, height: 14, alignment: .center)
-                Text("\(settings.provider.displayName) · \(currentModelID)")
+                Text("\(settings.provider.displayName) · \(settings.currentTranscriptionModelID)")
                     .font(PopoverTypography.caption)
                     .foregroundColor(PopoverTypography.primaryColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            .help("\(settings.provider.displayName) · \(currentModelID)")
+            .help("\(settings.provider.displayName) · \(settings.currentTranscriptionModelID)")
 
             Spacer(minLength: 8)
 
@@ -466,8 +462,8 @@ private struct CommandCenterHeader: View {
 
     private var summary: UsageSummary {
         usageStats.summary(
-            providerID: currentProviderID,
-            modelID: currentModelID,
+            providerID: settings.currentTranscriptionProviderID,
+            modelID: settings.currentTranscriptionModelID,
             range: settings.usageStatsRange
         )
     }
