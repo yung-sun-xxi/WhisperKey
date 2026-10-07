@@ -12,23 +12,31 @@ final class MenuBarController: NSObject {
     private static let log = Logger(subsystem: "WhisperKey", category: "MenuBarController")
     private static let yellowThreshold: TimeInterval = 9 * 60 + 30
     private static let redThreshold: TimeInterval = 9 * 60 + 55
-    private static let statusIconWidth: CGFloat = 18
-    private static let processingIndicatorWidth: CGFloat = 14
-    private static let statusItemIconTrailingInset: CGFloat = max((NSStatusItem.squareLength - statusIconWidth) / 2, 0)
-    private static let statusItemLeadingInset: CGFloat = 5
-    private static let statusItemContentGap: CGFloat = 5
+    /// The icon is fitted into a square of this side, as the old 18x18 image view did.
+    private static let statusIconMaxSide: CGFloat = 18
+    private static let processingIndicatorSide: CGFloat = 14
+    private static let timerFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    private static let emptyTitle = NSAttributedString(string: "")
+    /// An invisible title as wide as the spinner. With `.imageTrailing` it makes the
+    /// button reserve a slot left of the icon, and the spinner is placed into that slot.
+    private static let processingIndicatorSlotTitle: NSAttributedString = {
+        let side = processingIndicatorSide
+        let attachment = NSTextAttachment()
+        attachment.image = NSImage(size: NSSize(width: side, height: 1), flipped: false) { _ in true }
+        attachment.bounds = NSRect(x: 0, y: 0, width: side, height: 1)
+        return NSAttributedString(attachment: attachment)
+    }()
 
     let coordinator: AppCoordinator
 
     private let statusItem: NSStatusItem
     private let panel: MenuBarPanel
     private let hostingView: TransparentHostingView
-    private let statusContentView = MouseTransparentView()
-    private let statusTimerLabel = NSTextField(labelWithString: "")
-    private let statusIconView = NSImageView()
-    private let processingIndicator = NSProgressIndicator(frame: .zero)
-    private var statusTimerHorizontalConstraints: [NSLayoutConstraint] = []
-    private var processingIndicatorHorizontalConstraints: [NSLayoutConstraint] = []
+    private let processingIndicator = MouseTransparentProgressIndicator(frame: .zero)
+    /// The title last handed to the button. `updateStatusItem()` runs on every
+    /// coordinator change, and every real assignment to the status button costs an
+    /// out-of-process menu bar snapshot, so only actual changes are applied.
+    private var appliedStatusTitle = MenuBarController.emptyTitle
     private var cancellables = Set<AnyCancellable>()
     private var blinkTimer: Timer?
     private var blinkOn = true
@@ -131,75 +139,34 @@ final class MenuBarController: NSObject {
         }
     }
 
+    // The status button holds no text field and no auto layout of its own. On macOS 27
+    // the menu bar draws the item out of process from snapshots, and before each one
+    // AppKit sets the appearance on the button's view tree. An NSTextField answers that
+    // by invalidating its intrinsic size, which schedules the next snapshot, and the
+    // item loops forever at 50-90% CPU even while the field is hidden. The timer is
+    // therefore the button's native title and the icon its native image.
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
 
-        button.image = nil
-        button.title = ""
-        button.attributedTitle = NSAttributedString(string: "")
+        button.image = Self.makeMenuBarImage()
+        button.imagePosition = .imageTrailing
+        button.attributedTitle = appliedStatusTitle
         button.target = self
         button.action = #selector(handleStatusItemClick)
         button.toolTip = "WhisperKey"
-        configureStatusContentView(in: button)
+        configureProcessingIndicator(in: button)
 
         updateStatusItem()
     }
 
-    private func configureStatusContentView(in button: NSStatusBarButton) {
-        statusContentView.translatesAutoresizingMaskIntoConstraints = false
-        statusContentView.userInterfaceLayoutDirection = .leftToRight
-
-        statusTimerLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        statusTimerLabel.textColor = .labelColor
-        statusTimerLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusTimerLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        statusTimerLabel.setContentHuggingPriority(.required, for: .horizontal)
-
+    private func configureProcessingIndicator(in button: NSStatusBarButton) {
         processingIndicator.style = .spinning
         processingIndicator.controlSize = .small
         processingIndicator.isIndeterminate = true
         processingIndicator.isDisplayedWhenStopped = false
-        processingIndicator.translatesAutoresizingMaskIntoConstraints = false
-
-        statusIconView.image = Self.makeMenuBarImage()
-        statusIconView.imageScaling = .scaleProportionallyDown
-        statusIconView.translatesAutoresizingMaskIntoConstraints = false
-
-        statusContentView.addSubview(statusTimerLabel)
-        statusContentView.addSubview(processingIndicator)
-        statusContentView.addSubview(statusIconView)
-        button.addSubview(statusContentView)
-
-        let statusTimerHorizontalConstraints = [
-            statusTimerLabel.trailingAnchor.constraint(equalTo: statusIconView.leadingAnchor, constant: -Self.statusItemContentGap),
-            statusTimerLabel.leadingAnchor.constraint(greaterThanOrEqualTo: statusContentView.leadingAnchor, constant: Self.statusItemLeadingInset),
-        ]
-        let processingIndicatorHorizontalConstraints = [
-            processingIndicator.trailingAnchor.constraint(equalTo: statusIconView.leadingAnchor, constant: -Self.statusItemContentGap),
-            processingIndicator.leadingAnchor.constraint(greaterThanOrEqualTo: statusContentView.leadingAnchor, constant: Self.statusItemLeadingInset),
-        ]
-
-        self.statusTimerHorizontalConstraints = statusTimerHorizontalConstraints
-        self.processingIndicatorHorizontalConstraints = processingIndicatorHorizontalConstraints
-
-        NSLayoutConstraint.activate([
-            statusContentView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
-            statusContentView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
-            statusContentView.topAnchor.constraint(equalTo: button.topAnchor),
-            statusContentView.bottomAnchor.constraint(equalTo: button.bottomAnchor),
-
-            statusIconView.trailingAnchor.constraint(equalTo: statusContentView.trailingAnchor, constant: -Self.statusItemIconTrailingInset),
-            statusIconView.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
-
-            statusTimerLabel.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
-
-            processingIndicator.centerYAnchor.constraint(equalTo: statusContentView.centerYAnchor),
-
-            processingIndicator.widthAnchor.constraint(equalToConstant: Self.processingIndicatorWidth),
-            processingIndicator.heightAnchor.constraint(equalToConstant: Self.processingIndicatorWidth),
-            statusIconView.widthAnchor.constraint(equalToConstant: Self.statusIconWidth),
-            statusIconView.heightAnchor.constraint(equalToConstant: Self.statusIconWidth),
-        ])
+        processingIndicator.isHidden = true
+        processingIndicator.autoresizingMask = [.minYMargin, .maxYMargin]
+        button.addSubview(processingIndicator)
     }
 
     private func configurePanel() {
@@ -232,8 +199,7 @@ final class MenuBarController: NSObject {
 
         let buttonFrameInWindow = button.convert(button.bounds, to: nil)
         let buttonFrameInScreen = buttonWindow.convertToScreen(buttonFrameInWindow)
-        let iconFrameInWindow = statusIconView.convert(statusIconView.bounds, to: nil)
-        let iconFrameInScreen = buttonWindow.convertToScreen(iconFrameInWindow)
+        let iconFrameInScreen = statusIconScreenFrame() ?? buttonFrameInScreen
         let visibleFrame = buttonWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
         let panelSize = panel.frame.size
 
@@ -248,7 +214,7 @@ final class MenuBarController: NSObject {
         let y = buttonFrameInScreen.minY - panelSize.height
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
-        Self.log.info("positionPanel buttonFrame=\(String(describing: buttonFrameInScreen), privacy: .public) visibleFrame=\(String(describing: visibleFrame), privacy: .public) panelSize=\(String(describing: panelSize), privacy: .public) origin=\(String(describing: NSPoint(x: x, y: y)), privacy: .public)")
+        Self.log.info("positionPanel buttonFrame=\(String(describing: buttonFrameInScreen), privacy: .public) iconFrame=\(String(describing: iconFrameInScreen), privacy: .public) visibleFrame=\(String(describing: visibleFrame), privacy: .public) panelSize=\(String(describing: panelSize), privacy: .public) origin=\(String(describing: NSPoint(x: x, y: y)), privacy: .public)")
     }
 
     private func statusItemScreenFrame() -> NSRect? {
@@ -259,14 +225,15 @@ final class MenuBarController: NSObject {
         return buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
     }
 
+    /// Where the button's cell draws the icon, in screen coordinates.
     private func statusIconScreenFrame() -> NSRect? {
         guard let button = statusItem.button,
-              let buttonWindow = button.window
+              let buttonWindow = button.window,
+              let cell = button.cell as? NSButtonCell
         else { return nil }
 
-        button.layoutSubtreeIfNeeded()
-        let iconFrameInWindow = statusIconView.convert(statusIconView.bounds, to: nil)
-        return buttonWindow.convertToScreen(iconFrameInWindow)
+        let iconRect = cell.imageRect(forBounds: button.bounds)
+        return buttonWindow.convertToScreen(button.convert(iconRect, to: nil))
     }
 
     private func observeCoordinator() {
@@ -297,77 +264,96 @@ final class MenuBarController: NSObject {
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
 
-        button.image = nil
-        button.title = ""
-        button.attributedTitle = NSAttributedString(string: "")
-        statusIconView.image = Self.makeMenuBarImage()
+        let title: NSAttributedString
+        let toolTip: String
+        let showsProcessingIndicator: Bool
 
         switch coordinator.state {
         case .starting:
-            hideProcessingIndicator()
-            statusTimerLabel.isHidden = true
-            button.toolTip = "Starting microphone..."
+            title = Self.emptyTitle
+            toolTip = "Starting microphone..."
+            showsProcessingIndicator = false
             stopBlinkTimer(resetBlink: true)
         case .recording:
-            hideProcessingIndicator()
-            statusTimerLabel.stringValue = coordinator.recordingTimerText
-            statusTimerLabel.textColor = timerColor
-            statusTimerLabel.isHidden = false
-            button.toolTip = "Recording \(coordinator.recordingTimerText)"
+            title = NSAttributedString(
+                string: coordinator.recordingTimerText,
+                attributes: [.font: Self.timerFont, .foregroundColor: timerColor]
+            )
+            toolTip = "Recording \(coordinator.recordingTimerText)"
+            showsProcessingIndicator = false
             updateBlinkTimer()
         case .transcribing:
             stopBlinkTimer(resetBlink: true)
-            statusTimerLabel.isHidden = true
-            button.toolTip = "Transcribing..."
-            showProcessingIndicator()
+            title = Self.processingIndicatorSlotTitle
+            toolTip = "Transcribing..."
+            showsProcessingIndicator = true
         case .idle, .error, .microphoneDenied, .accessibilityDenied:
-            hideProcessingIndicator()
-            statusTimerLabel.isHidden = true
-            button.toolTip = "WhisperKey"
+            title = Self.emptyTitle
+            toolTip = "WhisperKey"
+            showsProcessingIndicator = false
             stopBlinkTimer(resetBlink: true)
         }
 
-        updateStatusItemLength()
+        // Icon only: a square item, as before. With a title the item takes the
+        // button's natural width, title (or the spinner's slot) left of the icon.
+        let length = title.length == 0 ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        if statusItem.length != length {
+            statusItem.length = length
+        }
+        if !appliedStatusTitle.isEqual(to: title) {
+            button.attributedTitle = title
+            appliedStatusTitle = title
+        }
+        if button.toolTip != toolTip {
+            button.toolTip = toolTip
+        }
+        updateProcessingIndicator(visible: showsProcessingIndicator, in: button)
     }
 
     private static func makeMenuBarImage() -> NSImage? {
-        let image = NSImage(named: "MenuBarIcon")
-        image?.isTemplate = true
+        guard let asset = NSImage(named: "MenuBarIcon"),
+              let image = asset.copy() as? NSImage
+        else { return nil }
+
+        // The asset is 22x18 pt; the old image view showed it scaled down into an
+        // 18x18 box. Sizing a copy keeps that look without touching the shared asset.
+        let longestSide = max(image.size.width, image.size.height)
+        if longestSide > statusIconMaxSide {
+            let scale = statusIconMaxSide / longestSide
+            image.size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+        }
+        image.isTemplate = true
         return image
     }
 
-    private func showProcessingIndicator() {
-        processingIndicator.isHidden = false
-        processingIndicator.startAnimation(nil)
-    }
-
-    private func hideProcessingIndicator() {
-        processingIndicator.stopAnimation(nil)
-        processingIndicator.isHidden = true
-    }
-
-    private func updateStatusItemLength() {
-        let showsTimer = !statusTimerLabel.isHidden
-        let showsProcessingIndicator = !processingIndicator.isHidden
-
-        statusTimerHorizontalConstraints.forEach { $0.isActive = showsTimer }
-        processingIndicatorHorizontalConstraints.forEach { $0.isActive = showsProcessingIndicator }
-
-        guard showsTimer || showsProcessingIndicator else {
-            statusItem.length = NSStatusItem.squareLength
-            statusItem.button?.layoutSubtreeIfNeeded()
+    /// Puts the spinner into the slot the button reserved for the invisible title,
+    /// which `.imageTrailing` lays out left of the icon.
+    private func updateProcessingIndicator(visible: Bool, in button: NSStatusBarButton) {
+        guard visible else {
+            if !processingIndicator.isHidden {
+                processingIndicator.stopAnimation(nil)
+                processingIndicator.isHidden = true
+            }
             return
         }
 
-        var length = Self.statusItemLeadingInset + Self.statusIconWidth + Self.statusItemIconTrailingInset
-        if showsTimer {
-            length += Self.statusItemContentGap + ceil(statusTimerLabel.intrinsicContentSize.width)
-        } else if showsProcessingIndicator {
-            length += Self.statusItemContentGap + Self.processingIndicatorWidth
+        if let cell = button.cell as? NSButtonCell {
+            let slot = cell.titleRect(forBounds: button.bounds)
+            let side = Self.processingIndicatorSide
+            let frame = NSRect(
+                x: slot.minX,
+                y: ((button.bounds.height - side) / 2).rounded(),
+                width: side,
+                height: side
+            )
+            if processingIndicator.frame != frame {
+                processingIndicator.frame = frame
+            }
         }
-
-        statusItem.length = max(NSStatusItem.squareLength, length)
-        statusItem.button?.layoutSubtreeIfNeeded()
+        if processingIndicator.isHidden {
+            processingIndicator.isHidden = false
+            processingIndicator.startAnimation(nil)
+        }
     }
 
     private var timerColor: NSColor {
@@ -447,7 +433,8 @@ private final class MenuBarPanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
-private final class MouseTransparentView: NSView {
+/// Lets a click on the spinner reach the status button underneath it.
+private final class MouseTransparentProgressIndicator: NSProgressIndicator {
     override func hitTest(_ point: NSPoint) -> NSView? {
         nil
     }
