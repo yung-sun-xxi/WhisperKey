@@ -51,6 +51,9 @@ public struct HotkeyConfig: Sendable, Equatable {
 }
 
 public enum HotkeyOutput: Sendable, Equatable {
+    /// Tap mode only: the trigger went down while idle, so a recording may
+    /// start on its release. A hint to get ready; nothing has started.
+    case recordingMayStart
     case recordingShouldStart
     case recordingShouldStop
     case recordingShouldCancel
@@ -137,7 +140,7 @@ public struct HotkeyStateMachine: Sendable {
         case (.idle, .triggerDown(let t)):
             pressedAt = t
             otherKeySeen = false
-            return nil
+            return .recordingMayStart
 
         case (.idle, .triggerUp(let t)):
             return finishHoldFromIdle(now: t)

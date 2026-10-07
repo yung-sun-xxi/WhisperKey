@@ -40,6 +40,11 @@ extension AppCoordinator {
             forceShow: forceOnboarding && !shouldSuppressPermissionOnboardingForWelcome,
             zOrderState: permissionWindowZOrderState
         )
+
+        // At launch, and whenever the permissions become granted.
+        if snapshot.allGranted {
+            prewarmRecorder()
+        }
     }
 
     func requestMicrophonePermission() {

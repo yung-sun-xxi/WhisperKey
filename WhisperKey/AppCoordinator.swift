@@ -293,8 +293,18 @@ final class AppCoordinator: ObservableObject {
         quickPaste.setAppState(state)
     }
 
+    /// Builds the audio engine ahead of a likely start, so the start itself
+    /// is only `engine.start()`. Cheap when the engine is already warm; the
+    /// recorder does nothing without microphone access and never prompts.
+    func prewarmRecorder() {
+        guard permissions.allGranted, Self.canStartRecording(from: state) else { return }
+        Task { await recorder.prewarm() }
+    }
+
     private func handle(_ output: HotkeyOutput) {
         switch output {
+        case .recordingMayStart:
+            prewarmRecorder()
         case .recordingShouldStart:
             startRecording()
         case .recordingShouldStop:
