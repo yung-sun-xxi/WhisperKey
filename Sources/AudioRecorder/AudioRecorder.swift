@@ -324,6 +324,29 @@ public struct AudioRecorderDiagnosticsSnapshot: Codable, Equatable, Sendable {
     public let stopCapturedDurationSeconds: TimeInterval?
     public let captureStartTimeouts: UInt64
     public let lastCaptureStartTimeoutAt: Date?
+    // Start phases of the current capture, in milliseconds. A phase that did
+    // not run inside this capture's begin (the engine was already warm) is nil.
+    public let inputNodeMillis: Double?
+    public let installTapMillis: Double?
+    public let prepareMillis: Double?
+    public let engineStartMillis: Double?
+    /// Time spent inside the engine host's begin work, queue wait excluded.
+    public let beginTotalMillis: Double?
+    public let reusedEngine: Bool?
+}
+
+/// Per-capture start timings measured by the engine host.
+struct CaptureStartPhases: Sendable, Equatable {
+    var inputNodeMillis: Double?
+    var installTapMillis: Double?
+    var prepareMillis: Double?
+    var engineStartMillis: Double?
+    var beginTotalMillis: Double?
+    var reusedEngine: Bool?
+
+    static func millis(since startNanos: UInt64, until endNanos: UInt64 = audioRecorderNowNanos()) -> Double {
+        Double(endNanos &- startNanos) / 1_000_000
+    }
 }
 
 final class AudioRecorderDiagnosticsState: @unchecked Sendable {
@@ -372,6 +395,7 @@ final class AudioRecorderDiagnosticsState: @unchecked Sendable {
     private var stopCapturedDurationSeconds: TimeInterval?
     private var captureStartTimeouts: UInt64 = 0
     private var lastCaptureStartTimeoutAt: Date?
+    private var startPhases = CaptureStartPhases()
 
     func beginCapture(
         captureID: UInt64,
@@ -422,6 +446,13 @@ final class AudioRecorderDiagnosticsState: @unchecked Sendable {
         self.stopReturnedBuffer = nil
         self.stopElapsedSeconds = nil
         self.stopCapturedDurationSeconds = nil
+        self.startPhases = CaptureStartPhases()
+    }
+
+    func recordStartPhases(_ phases: CaptureStartPhases) {
+        lock.lock()
+        startPhases = phases
+        lock.unlock()
     }
 
     func recordCaptureStartTimeout() {
@@ -581,7 +612,13 @@ final class AudioRecorderDiagnosticsState: @unchecked Sendable {
             stopElapsedSeconds: stopElapsedSeconds,
             stopCapturedDurationSeconds: stopCapturedDurationSeconds,
             captureStartTimeouts: captureStartTimeouts,
-            lastCaptureStartTimeoutAt: lastCaptureStartTimeoutAt
+            lastCaptureStartTimeoutAt: lastCaptureStartTimeoutAt,
+            inputNodeMillis: startPhases.inputNodeMillis,
+            installTapMillis: startPhases.installTapMillis,
+            prepareMillis: startPhases.prepareMillis,
+            engineStartMillis: startPhases.engineStartMillis,
+            beginTotalMillis: startPhases.beginTotalMillis,
+            reusedEngine: startPhases.reusedEngine
         )
     }
 
@@ -841,6 +878,8 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?
     ) throws -> CaptureStartResult {
+        let beginStartedAt = audioRecorderNowNanos()
+        var phases = CaptureStartPhases(reusedEngine: false)
         let inputDevice = AudioInputDeviceSnapshot.currentDefault()
         let didInputDeviceChange = previousInputDevice.map { $0 != inputDevice } ?? false
 
@@ -853,7 +892,9 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         // caches the format from its first activation; reusing one across a
         // device switch makes installTap throw an Obj-C exception on format
         // mismatch, which crashes the app.
+        let inputNodeStartedAt = audioRecorderNowNanos()
         let input = engine.inputNode
+        phases.inputNodeMillis = CaptureStartPhases.millis(since: inputNodeStartedAt)
         let inputFormat = input.outputFormat(forBus: 0)
         diagnostics.beginCapture(
             captureID: captureID,
@@ -889,6 +930,7 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
 
         recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) installing input tap")
         var tapBufferSequence: UInt64 = 0
+        let installTapStartedAt = audioRecorderNowNanos()
         input.installTap(onBus: 0, bufferSize: 4_096, format: inputFormat) { buffer, _ in
             tapBufferSequence += 1
             let tapBufferID = tapBufferSequence
@@ -907,10 +949,14 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
             )
         }
         didInstallTap = true
+        phases.installTapMillis = CaptureStartPhases.millis(since: installTapStartedAt)
         recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) input tap installed")
 
+        let prepareStartedAt = audioRecorderNowNanos()
         engine.prepare()
+        phases.prepareMillis = CaptureStartPhases.millis(since: prepareStartedAt)
         recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) engine prepared; starting")
+        let engineStartStartedAt = audioRecorderNowNanos()
         do {
             try engine.start()
         } catch {
@@ -919,6 +965,9 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
             throw AudioRecorderError.engineFailedToStart(error.localizedDescription)
         }
 
+        phases.engineStartMillis = CaptureStartPhases.millis(since: engineStartStartedAt)
+        phases.beginTotalMillis = CaptureStartPhases.millis(since: beginStartedAt)
+        diagnostics.recordStartPhases(phases)
         recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) engine started")
         return CaptureStartResult(
             pipeline: pipeline,
