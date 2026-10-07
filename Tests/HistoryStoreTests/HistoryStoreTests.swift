@@ -518,6 +518,16 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(estimate?.currency, "USD")
     }
 
+    func testLegacyDistilWhisperEntriesKeepTheirCost() {
+        let estimate = TranscriptionCostEstimator.estimate(
+            providerID: "groq",
+            model: "distil-whisper-large-v3-en",
+            audioDurationSeconds: 3_600
+        )
+        XCTAssertEqual(estimate?.amount ?? 0, 0.02, accuracy: 0.000001)
+        XCTAssertEqual(estimate?.currency, "USD")
+    }
+
     func testGroqCostEstimatorAppliesTenSecondMinimum() {
         let estimate = TranscriptionCostEstimator.estimate(
             providerID: "groq",

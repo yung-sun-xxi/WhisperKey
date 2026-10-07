@@ -9,13 +9,11 @@ public struct GroqProvider: TranscriptionProvider {
     public enum Model: String, Sendable, Equatable, CaseIterable {
         case whisperLargeV3 = "whisper-large-v3"
         case whisperLargeV3Turbo = "whisper-large-v3-turbo"
-        case distilWhisperLargeV3EN = "distil-whisper-large-v3-en"
 
         public var displayName: String {
             switch self {
             case .whisperLargeV3: return "whisper-large-v3"
             case .whisperLargeV3Turbo: return "whisper-large-v3-turbo (faster)"
-            case .distilWhisperLargeV3EN: return "distil-whisper-large-v3-en (English-only)"
             }
         }
     }
