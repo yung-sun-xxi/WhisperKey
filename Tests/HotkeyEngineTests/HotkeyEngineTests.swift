@@ -8,10 +8,41 @@ final class HotkeyEngineStateMachineTests: XCTestCase {
     func testCleanTapStartsRecording() {
         var sm = HotkeyStateMachine()
 
-        XCTAssertNil(sm.process(.triggerDown(at: 0.0)))
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingMayStart)
         let output = sm.process(.triggerUp(at: 0.1))
 
         XCTAssertEqual(output, .recordingShouldStart)
+    }
+
+    // MARK: - Key-down while idle hints that a recording may start
+
+    func testTriggerDownWhileIdleInTapModeSaysRecordingMayStart() {
+        var sm = HotkeyStateMachine()
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingMayStart)
+        XCTAssertEqual(sm.appState, .idle, "the hint does not change the app state")
+    }
+
+    func testRecordingMayStartIsOnlyAHintTheTapFilterStillApplies() {
+        var sm = HotkeyStateMachine()
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 0.0)), .recordingMayStart)
+        _ = sm.process(.otherKeyDown(at: 0.05))
+        XCTAssertNil(sm.process(.triggerUp(at: 0.1)), "a dirty tap still does not start")
+
+        XCTAssertEqual(sm.process(.triggerDown(at: 1.0)), .recordingMayStart)
+        XCTAssertNil(sm.process(.triggerUp(at: 1.5)), "a long hold still does not start")
+    }
+
+    func testRecordingMayStartIsNotEmittedOutsideIdleTapMode() {
+        var recording = HotkeyStateMachine(appState: .recording)
+        XCTAssertEqual(recording.process(.triggerDown(at: 0.0)), .recordingShouldStop)
+
+        var transcribing = HotkeyStateMachine(appState: .transcribing)
+        XCTAssertNil(transcribing.process(.triggerDown(at: 0.0)))
+
+        var hold = HotkeyStateMachine(config: HotkeyConfig(mode: .hold))
+        XCTAssertEqual(hold.process(.triggerDown(at: 0.0)), .recordingShouldStart)
     }
 
     // MARK: - Modifier-as-modifier (e.g. ⌥e) does NOT start
