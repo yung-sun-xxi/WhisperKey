@@ -1,7 +1,7 @@
 # WhisperKey (macOS) — how to check the work
 
 The process lives in the `do-work` skill and the branch/commit/merge rules live in
-`~/PersonalProjects/AGENTS.md`. This file holds only what is specific to this
+`~/PersonalProjects/CLAUDE.md`. This file holds only what is specific to this
 repository.
 
 ## Checking the work
