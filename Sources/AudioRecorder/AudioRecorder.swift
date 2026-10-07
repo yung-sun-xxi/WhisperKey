@@ -51,16 +51,62 @@ private final class AudioAppendGate: @unchecked Sendable {
     }
 }
 
+/// Averages every channel of a Float32 buffer into a new mono Float32 buffer
+/// in `monoFormat`, at the same sample rate and frame count.
+func downmixToMono(_ buffer: AVAudioPCMBuffer, monoFormat: AVAudioFormat) -> AVAudioPCMBuffer? {
+    let channels = Int(buffer.format.channelCount)
+    guard
+        channels > 0,
+        let source = buffer.floatChannelData,
+        let mono = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: max(buffer.frameLength, 1)),
+        let destination = mono.floatChannelData?[0]
+    else {
+        return nil
+    }
+    mono.frameLength = buffer.frameLength
+    let frames = Int(buffer.frameLength)
+    let scale = 1 / Float(channels)
+    if buffer.format.isInterleaved {
+        let samples = source[0]
+        let stride = buffer.stride
+        for frame in 0..<frames {
+            var sum: Float = 0
+            for channel in 0..<channels {
+                sum += samples[frame * stride + channel]
+            }
+            destination[frame] = sum * scale
+        }
+    } else {
+        for frame in 0..<frames {
+            var sum: Float = 0
+            for channel in 0..<channels {
+                sum += source[channel][frame]
+            }
+            destination[frame] = sum * scale
+        }
+    }
+    return mono
+}
+
 /// Owns the conversion work for exactly one microphone capture.
 ///
 /// CoreAudio conversion is intentionally kept off `AudioRecorder`'s actor
 /// executor. A converter that stops returning may strand this pipeline, but it
 /// must not strand the controls for the current or a later recording.
+///
+/// The converter only ever sees mono input. A multichannel input is averaged
+/// to mono first: `AVAudioConverter` has no downmix for a discrete layout (the
+/// built-in mic turns into a 3-channel array while another app runs voice
+/// processing on it) and writes zeros while reporting success, and for stereo
+/// it keeps the first channel only.
 final class CapturePipeline: @unchecked Sendable {
     private let lock = NSLock()
     private let conversionQueue: DispatchQueue
     private let appendGate = AudioAppendGate()
     private let converter: AVAudioConverter
+    private let inputFormat: AVAudioFormat
+    /// Non-nil when the input has more than one channel.
+    private let downmixFormat: AVAudioFormat?
     private let outputFormat: AVAudioFormat
     private let captureID: UInt64
     private let diagnostics: AudioRecorderDiagnosticsState
@@ -69,20 +115,46 @@ final class CapturePipeline: @unchecked Sendable {
 
     init(
         captureID: UInt64,
-        converter: AVAudioConverter,
+        inputFormat: AVAudioFormat,
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState
-    ) {
+    ) throws {
+        let converterInputFormat: AVAudioFormat
+        if inputFormat.channelCount > 1 {
+            guard inputFormat.commonFormat == .pcmFormatFloat32 else {
+                throw AudioRecorderError.engineFailedToStart(
+                    "unsupported \(inputFormat.channelCount)-channel input format \(inputFormat)"
+                )
+            }
+            guard let mono = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: inputFormat.sampleRate,
+                channels: 1,
+                interleaved: false
+            ) else {
+                throw AudioRecorderError.engineFailedToStart("mono downmix format init failed")
+            }
+            downmixFormat = mono
+            converterInputFormat = mono
+        } else {
+            downmixFormat = nil
+            converterInputFormat = inputFormat
+        }
+        guard let converter = AVAudioConverter(from: converterInputFormat, to: outputFormat) else {
+            throw AudioRecorderError.engineFailedToStart("converter init failed")
+        }
         self.captureID = captureID
         self.converter = converter
+        self.inputFormat = inputFormat
         self.outputFormat = outputFormat
         self.diagnostics = diagnostics
         conversionQueue = DispatchQueue(label: "WhisperKey.AudioRecorder.capture.\(captureID)", qos: .userInitiated)
     }
 
+    var isDownmixing: Bool { downmixFormat != nil }
+
     func enqueue(
         buffer: AVAudioPCMBuffer,
-        inputFormat: AVAudioFormat,
         tapBufferID: UInt64,
         inputFrameLength: AVAudioFrameCount,
         enqueuedAtNanos: UInt64
@@ -100,7 +172,6 @@ final class CapturePipeline: @unchecked Sendable {
             defer { appendGate.release() }
             convert(
                 buffer: buffer,
-                inputFormat: inputFormat,
                 tapBufferID: tapBufferID,
                 inputFrameLength: inputFrameLength,
                 enqueuedAtNanos: enqueuedAtNanos
@@ -126,7 +197,6 @@ final class CapturePipeline: @unchecked Sendable {
 
     private func convert(
         buffer: AVAudioPCMBuffer,
-        inputFormat: AVAudioFormat,
         tapBufferID: UInt64,
         inputFrameLength: AVAudioFrameCount,
         enqueuedAtNanos: UInt64
@@ -150,6 +220,17 @@ final class CapturePipeline: @unchecked Sendable {
             return
         }
 
+        let converterInput: AVAudioPCMBuffer
+        if let downmixFormat {
+            guard let mono = downmixToMono(buffer, monoFormat: downmixFormat) else {
+                diagnostics.recordOutputAllocationFailure(appendNanos: audioRecorderNowNanos() - startedAtNanos)
+                return
+            }
+            converterInput = mono
+        } else {
+            converterInput = buffer
+        }
+
         var error: NSError?
         var didProvide = false
         let status = converter.convert(to: outputBuffer, error: &error) { _, inputStatus in
@@ -159,7 +240,7 @@ final class CapturePipeline: @unchecked Sendable {
             }
             didProvide = true
             inputStatus.pointee = .haveData
-            return buffer
+            return converterInput
         }
 
         guard status != .error, error == nil else {
@@ -789,17 +870,21 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
             throw AudioRecorderError.engineFailedToStart("invalid input format \(inputFormat)")
         }
 
-        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
-            recorderLog.error("beginCapture: captureID=\(captureID, privacy: .public) converter init failed")
-            throw AudioRecorderError.engineFailedToStart("converter init failed")
+        let pipeline: CapturePipeline
+        do {
+            pipeline = try CapturePipeline(
+                captureID: captureID,
+                inputFormat: inputFormat,
+                outputFormat: outputFormat,
+                diagnostics: diagnostics
+            )
+        } catch {
+            recorderLog.error("beginCapture: captureID=\(captureID, privacy: .public) pipeline init failed: \(String(describing: error), privacy: .public)")
+            throw error
         }
-
-        let pipeline = CapturePipeline(
-            captureID: captureID,
-            converter: converter,
-            outputFormat: outputFormat,
-            diagnostics: diagnostics
-        )
+        if pipeline.isDownmixing {
+            recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) downmixing \(inputFormat.channelCount, privacy: .public) input channels to mono")
+        }
         installedPipeline = pipeline
 
         recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) installing input tap")
@@ -816,7 +901,6 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
             }
             pipeline.enqueue(
                 buffer: copiedBuffer,
-                inputFormat: inputFormat,
                 tapBufferID: tapBufferID,
                 inputFrameLength: inputFrameLength,
                 enqueuedAtNanos: enqueuedAtNanos
