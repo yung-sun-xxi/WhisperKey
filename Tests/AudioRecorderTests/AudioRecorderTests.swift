@@ -171,7 +171,8 @@ final class AudioRecorderTests: XCTestCase {
         XCTAssertTrue(stuck.wasRetired, "the stuck host must have been retired")
 
         _ = await recorder.stop()
-        XCTAssertTrue(working.wasRetired, "stopping must retire the engine host off the actor")
+        XCTAssertEqual(working.endCaptureCount, 1, "stopping must end the capture off the actor")
+        XCTAssertFalse(working.wasRetired, "a normal stop keeps the host for the next start")
     }
 
     func testStartPropagatesEngineFailure() async {
@@ -193,6 +194,176 @@ final class AudioRecorderTests: XCTestCase {
         }
 
         XCTAssertEqual(recorder.diagnosticsSnapshot().captureStartTimeouts, 0)
+    }
+
+    // MARK: - Engine reuse
+
+    func testSecondStartReusesTheHostAfterANormalStop() async throws {
+        let host = SucceedingEngineHost(hostID: 1)
+        let factory = CountingHostFactory(hosts: [host])
+        let recorder = makeRecorder(factory: factory)
+
+        try await recorder.start()
+        _ = await recorder.stop()
+        try await recorder.start()
+
+        XCTAssertEqual(factory.created, 1, "the second start must not build a new host")
+        XCTAssertEqual(host.beginCount, 2)
+        XCTAssertEqual(host.endCaptureCount, 1)
+        XCTAssertFalse(host.wasRetired)
+        XCTAssertTrue(recorder.diagnosticsSnapshot().isRecording)
+        XCTAssertEqual(recorder.diagnosticsSnapshot().engineHostID, 1)
+    }
+
+    func testStaleHostIsRetiredAndExactlyOneFreshHostIsBuilt() async throws {
+        let stale = SucceedingEngineHost(hostID: 1)
+        let fresh = SucceedingEngineHost(hostID: 2)
+        let factory = CountingHostFactory(hosts: [stale, fresh])
+        let recorder = makeRecorder(factory: factory)
+        try await recorder.start()
+        _ = await recorder.stop()
+
+        stale.nextBeginIsStale = true
+        try await recorder.start()
+
+        XCTAssertTrue(stale.wasRetired, "a stale host must be retired")
+        XCTAssertEqual(factory.created, 2, "exactly one fresh host replaces the stale one")
+        XCTAssertEqual(recorder.diagnosticsSnapshot().engineHostID, 2)
+        XCTAssertTrue(recorder.diagnosticsSnapshot().isRecording)
+        XCTAssertFalse(fresh.wasRetired)
+    }
+
+    func testAFreshHostThatIsAlsoStaleFailsTheStartWithoutAThirdHost() async {
+        let first = SucceedingEngineHost(hostID: 1)
+        let second = SucceedingEngineHost(hostID: 2)
+        first.nextBeginIsStale = true
+        second.nextBeginIsStale = true
+        let factory = CountingHostFactory(hosts: [first, second])
+        let recorder = makeRecorder(factory: factory)
+
+        do {
+            try await recorder.start()
+            XCTFail("start() must fail when the replacement host is stale too")
+        } catch AudioRecorderError.engineFailedToStart {
+            // expected
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        XCTAssertEqual(factory.created, 2)
+        XCTAssertTrue(first.wasRetired)
+        XCTAssertTrue(second.wasRetired)
+    }
+
+    func testStaleRetryStaysWithinTheOneStartDeadline() async {
+        let stale = SucceedingEngineHost(hostID: 1)
+        stale.nextBeginIsStale = true
+        stale.beginDelay = 0.15
+        let stuck = StallingEngineHost(hostID: 2)
+        let factory = CountingHostFactory(hosts: [stale, stuck])
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.3)
+
+        let startedAt = Date()
+        do {
+            try await recorder.start()
+            XCTFail("start() should time out on the stuck replacement")
+        } catch AudioRecorderError.engineStartTimedOut(let seconds) {
+            XCTAssertEqual(seconds, 0.3, accuracy: 0.001)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.45, "the retry must not get a deadline of its own")
+        XCTAssertTrue(stale.wasRetired)
+        XCTAssertTrue(stuck.wasRetired)
+    }
+
+    func testTimeoutRetiresAReusedHostAndTheNextStartBuildsANewOne() async throws {
+        let first = SucceedingEngineHost(hostID: 1)
+        let second = SucceedingEngineHost(hostID: 2)
+        let factory = CountingHostFactory(hosts: [first, second])
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.2)
+        try await recorder.start()
+        _ = await recorder.stop()
+
+        first.nextBeginStalls = true
+        do {
+            try await recorder.start()
+            XCTFail("start() should time out")
+        } catch AudioRecorderError.engineStartTimedOut {
+            // expected
+        }
+        XCTAssertTrue(first.wasRetired, "a host that timed out must be retired")
+        XCTAssertEqual(recorder.diagnosticsSnapshot().captureStartTimeouts, 1)
+
+        try await recorder.start()
+        XCTAssertEqual(factory.created, 2)
+        XCTAssertEqual(recorder.diagnosticsSnapshot().engineHostID, 2)
+    }
+
+    func testPrewarmBuildsAtMostOneHostAndStartUsesIt() async throws {
+        let host = SucceedingEngineHost(hostID: 1)
+        let factory = CountingHostFactory(hosts: [host])
+        let recorder = makeRecorder(factory: factory)
+
+        await recorder.prewarm()
+        await recorder.prewarm()
+        await recorder.prewarm()
+        XCTAssertEqual(factory.created, 1)
+        XCTAssertEqual(host.warmCount, 1)
+
+        try await recorder.start()
+        await recorder.prewarm()
+        XCTAssertEqual(factory.created, 1, "prewarm while recording must not build a host")
+        XCTAssertEqual(host.beginCount, 1)
+        XCTAssertEqual(host.warmCount, 1)
+    }
+
+    func testPrewarmDoesNothingWithoutMicrophoneAccess() async {
+        let factory = CountingHostFactory(hosts: [])
+        let recorder = AudioRecorder(
+            maxDuration: 60,
+            startTimeout: 1,
+            engineHostFactory: { factory.next(hostID: $0) },
+            permissionCheck: {},
+            isMicrophoneAuthorized: { false }
+        )
+
+        await recorder.prewarm()
+
+        XCTAssertEqual(factory.created, 0)
+    }
+
+    func testStopDuringAReusedStartBehavesAsToday() async throws {
+        let host = SucceedingEngineHost(hostID: 1)
+        let factory = CountingHostFactory(hosts: [host])
+        let recorder = makeRecorder(factory: factory)
+        try await recorder.start()
+        _ = await recorder.stop()
+
+        host.beginDelay = 0.2
+        let starting = Task { try await recorder.start() }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let stoppedWhileStarting = await recorder.stop()
+        XCTAssertNil(stoppedWhileStarting, "nothing is recording yet, so stop() returns nil at once")
+        XCTAssertEqual(host.endCaptureCount, 1, "stop() while starting must not touch the host")
+
+        try await starting.value
+        XCTAssertTrue(recorder.diagnosticsSnapshot().isRecording)
+        _ = await recorder.stop()
+        XCTAssertEqual(host.endCaptureCount, 2)
+        XCTAssertFalse(host.wasRetired)
+        XCTAssertEqual(factory.created, 1)
+    }
+
+    private func makeRecorder(factory: CountingHostFactory, startTimeout: TimeInterval = 2) -> AudioRecorder {
+        AudioRecorder(
+            maxDuration: 60,
+            startTimeout: startTimeout,
+            engineHostFactory: { factory.next(hostID: $0) },
+            permissionCheck: {}
+        )
     }
 
     // MARK: - Capture pipeline channel handling
@@ -413,13 +584,17 @@ private final class StallingEngineHost: CaptureEngineHosting, @unchecked Sendabl
         return retired
     }
 
+    func warm() {}
+
     func begin(
         captureID: UInt64,
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
-        completion: @escaping @Sendable (Result<CaptureStartResult, AudioRecorderError>) -> Void
+        completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {}
+
+    func endCapture() {}
 
     func retire() {
         lock.lock()
@@ -433,31 +608,57 @@ private final class FailingEngineHost: CaptureEngineHosting, @unchecked Sendable
 
     init(hostID: UInt64) { self.hostID = hostID }
 
+    func warm() {}
+
     func begin(
         captureID: UInt64,
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
-        completion: @escaping @Sendable (Result<CaptureStartResult, AudioRecorderError>) -> Void
+        completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {
-        completion(.failure(.engineFailedToStart("converter init failed")))
+        completion(.failure(.recorder(.engineFailedToStart("converter init failed"))))
     }
+
+    func endCapture() {}
 
     func retire() {}
 }
 
-/// Reports a started capture without touching audio hardware.
+/// Reports a started capture without touching audio hardware. A test can
+/// make its next begin report the host stale, stall, or answer late.
 private final class SucceedingEngineHost: CaptureEngineHosting, @unchecked Sendable {
     let hostID: UInt64
     private let lock = NSLock()
     private var retired = false
+    private var begins = 0
+    private var warms = 0
+    private var endCaptures = 0
+    private var stale = false
+    private var stalls = false
+    private var delay: TimeInterval = 0
 
     init(hostID: UInt64) { self.hostID = hostID }
 
-    var wasRetired: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return retired
+    var wasRetired: Bool { locked { retired } }
+    var beginCount: Int { locked { begins } }
+    var warmCount: Int { locked { warms } }
+    var endCaptureCount: Int { locked { endCaptures } }
+    var nextBeginIsStale: Bool {
+        get { locked { stale } }
+        set { locked { stale = newValue } }
+    }
+    var nextBeginStalls: Bool {
+        get { locked { stalls } }
+        set { locked { stalls = newValue } }
+    }
+    var beginDelay: TimeInterval {
+        get { locked { delay } }
+        set { locked { delay = newValue } }
+    }
+
+    func warm() {
+        locked { warms += 1 }
     }
 
     func begin(
@@ -465,42 +666,88 @@ private final class SucceedingEngineHost: CaptureEngineHosting, @unchecked Senda
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
-        completion: @escaping @Sendable (Result<CaptureStartResult, AudioRecorderError>) -> Void
+        completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {
-        guard
-            let inputFormat = AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: 44_100,
-                channels: 1,
-                interleaved: false
-            ),
-            let pipeline = try? CapturePipeline(
-                captureID: captureID,
-                inputFormat: inputFormat,
-                outputFormat: outputFormat,
-                diagnostics: diagnostics
-            )
-        else {
-            completion(.failure(.engineFailedToStart("test host could not build a pipeline")))
-            return
+        let (isStale, isStalling, delay) = locked { () -> (Bool, Bool, TimeInterval) in
+            begins += 1
+            defer {
+                stale = false
+                stalls = false
+            }
+            return (stale, stalls, self.delay)
         }
-        diagnostics.beginCapture(
-            captureID: captureID,
-            engineHostID: hostID,
-            inputDevice: nil,
-            inputFormat: inputFormat
-        )
-        completion(.success(CaptureStartResult(
-            pipeline: pipeline,
-            inputDevice: nil,
-            inputFormat: inputFormat
-        )))
+        if isStalling { return }
+        let hostID = hostID
+        DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+            if isStale {
+                completion(.failure(.staleHost("test host reported stale")))
+                return
+            }
+            guard
+                let inputFormat = AVAudioFormat(
+                    commonFormat: .pcmFormatFloat32,
+                    sampleRate: 44_100,
+                    channels: 1,
+                    interleaved: false
+                ),
+                let pipeline = try? CapturePipeline(
+                    captureID: captureID,
+                    inputFormat: inputFormat,
+                    outputFormat: outputFormat,
+                    diagnostics: diagnostics
+                )
+            else {
+                completion(.failure(.recorder(.engineFailedToStart("test host could not build a pipeline"))))
+                return
+            }
+            diagnostics.beginCapture(
+                captureID: captureID,
+                engineHostID: hostID,
+                inputDevice: nil,
+                inputFormat: inputFormat
+            )
+            completion(.success(CaptureStartResult(
+                pipeline: pipeline,
+                inputDevice: nil,
+                inputFormat: inputFormat
+            )))
+        }
+    }
+
+    func endCapture() {
+        locked { endCaptures += 1 }
     }
 
     func retire() {
+        locked { retired = true }
+    }
+
+    private func locked<T>(_ body: () -> T) -> T {
         lock.lock()
-        retired = true
-        lock.unlock()
+        defer { lock.unlock() }
+        return body()
+    }
+}
+
+/// Hands out the given hosts in order and counts how many were built.
+private final class CountingHostFactory: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hosts: [CaptureEngineHosting]
+    private var count = 0
+
+    init(hosts: [CaptureEngineHosting]) { self.hosts = hosts }
+
+    var created: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func next(hostID: UInt64) -> CaptureEngineHosting {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return hosts.isEmpty ? StallingEngineHost(hostID: hostID) : hosts.removeFirst()
     }
 }
 
