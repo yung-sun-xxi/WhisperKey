@@ -730,6 +730,109 @@ public enum AudioRecorderError: Error, Equatable, Sendable {
     case engineStartTimedOut(TimeInterval)
 }
 
+/// The input device's nominal sample rate and input channel count, read
+/// straight from CoreAudio. Read again before reusing an engine, it says
+/// whether the hardware changed since the engine was built.
+///
+/// It is compared with itself, never with the engine's format: with a
+/// different output device, AVAudioEngine runs its input at the output's rate
+/// (a 48 kHz MacBook mic shows up as 44.1 kHz next to 44.1 kHz speakers).
+struct AudioInputHardwareFormat: Equatable, Sendable {
+    let sampleRate: Double
+    let channelCount: UInt32
+
+    var logDescription: String {
+        "sampleRate=\(sampleRate) channelCount=\(channelCount)"
+    }
+
+    static func current(deviceID: AudioObjectID) -> AudioInputHardwareFormat? {
+        guard
+            let sampleRate = nominalSampleRate(deviceID: deviceID),
+            let channelCount = inputChannelCount(deviceID: deviceID)
+        else {
+            return nil
+        }
+        return AudioInputHardwareFormat(sampleRate: sampleRate, channelCount: channelCount)
+    }
+
+    static func nominalSampleRate(deviceID: AudioObjectID) -> Double? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var rate = Float64(0)
+        var size = UInt32(MemoryLayout<Float64>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &rate)
+        guard status == noErr, rate > 0 else {
+            recorderLog.error("nominalSampleRate: deviceID=\(deviceID, privacy: .public) status=\(status, privacy: .public)")
+            return nil
+        }
+        return rate
+    }
+
+    private static func inputChannelCount(deviceID: AudioObjectID) -> UInt32? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        var status = AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size)
+        guard status == noErr, size > 0 else {
+            recorderLog.error("inputChannelCount: deviceID=\(deviceID, privacy: .public) size status=\(status, privacy: .public)")
+            return nil
+        }
+        let raw = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(size),
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { raw.deallocate() }
+        status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, raw)
+        guard status == noErr else {
+            recorderLog.error("inputChannelCount: deviceID=\(deviceID, privacy: .public) status=\(status, privacy: .public)")
+            return nil
+        }
+        let buffers = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
+        return buffers.reduce(0) { $0 + $1.mNumberChannels }
+    }
+}
+
+/// The default output device and its nominal sample rate. AVAudioEngine's
+/// input format follows the output device on macOS, so a change here makes a
+/// warm engine stale as surely as an input change does.
+struct AudioOutputDeviceSnapshot: Equatable, Sendable {
+    let objectID: AudioObjectID
+    let sampleRate: Double?
+
+    var logDescription: String {
+        "id=\(objectID) sampleRate=\(sampleRate.map { String($0) } ?? "nil")"
+    }
+
+    static func currentDefault() -> AudioOutputDeviceSnapshot? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var deviceID = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &deviceID
+        )
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return AudioOutputDeviceSnapshot(
+            objectID: deviceID,
+            sampleRate: AudioInputHardwareFormat.nominalSampleRate(deviceID: deviceID)
+        )
+    }
+}
+
 /// Everything a successful capture start hands back to the `AudioRecorder`
 /// actor. Not `Sendable` by construction: it carries CoreAudio objects that
 /// only the recorder and the capture's own pipeline touch.
@@ -739,6 +842,14 @@ struct CaptureStartResult: @unchecked Sendable {
     let inputFormat: AVAudioFormat
 }
 
+/// Why an engine host's `begin` did not start a capture.
+enum CaptureBeginError: Error, Equatable, Sendable {
+    /// The host's engine was built for an input that no longer matches the
+    /// hardware. The recorder retires it and builds one fresh host.
+    case staleHost(String)
+    case recorder(AudioRecorderError)
+}
+
 /// Owns one `AVAudioEngine` and performs every CoreAudio-touching operation on
 /// its own serial queue.
 ///
@@ -746,16 +857,27 @@ struct CaptureStartResult: @unchecked Sendable {
 /// `coreaudiod` for the hardware format is the observed case — strands this
 /// host and its queue. It must never strand the `AudioRecorder` actor, which
 /// still has to answer `stop()` and start a later capture.
+///
+/// A host outlives one capture while its input stays the same: building the
+/// engine (input node, tap, `prepare()`) is most of the start latency.
 protocol CaptureEngineHosting: AnyObject, Sendable {
     var hostID: UInt64 { get }
+
+    /// Builds the engine ahead of a capture without starting it. Returns at
+    /// once; the work runs on the host's queue. Idempotent.
+    func warm()
 
     func begin(
         captureID: UInt64,
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
-        completion: @escaping @Sendable (Result<CaptureStartResult, AudioRecorderError>) -> Void
+        completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     )
+
+    /// Ends a capture normally and keeps the host for the next one: detaches
+    /// the capture, then stops and re-prepares the engine off the actor.
+    func endCapture()
 
     /// Marks the host unusable and tears the engine down off the actor.
     /// Safe to call more than once, and safe to call while `begin` is stuck.
@@ -766,11 +888,11 @@ protocol CaptureEngineHosting: AnyObject, Sendable {
 /// start deadline. Whoever loses the race is dropped, never resumed twice.
 private final class StartResultBox: @unchecked Sendable {
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<Result<CaptureStartResult, AudioRecorderError>, Never>?
-    private var pending: Result<CaptureStartResult, AudioRecorderError>?
+    private var continuation: CheckedContinuation<Result<CaptureStartResult, CaptureBeginError>, Never>?
+    private var pending: Result<CaptureStartResult, CaptureBeginError>?
     private var isSettled = false
 
-    func settle(_ result: Result<CaptureStartResult, AudioRecorderError>) {
+    func settle(_ result: Result<CaptureStartResult, CaptureBeginError>) {
         lock.lock()
         guard !isSettled else {
             lock.unlock()
@@ -787,7 +909,7 @@ private final class StartResultBox: @unchecked Sendable {
         }
     }
 
-    func value() async -> Result<CaptureStartResult, AudioRecorderError> {
+    func value() async -> Result<CaptureStartResult, CaptureBeginError> {
         await withCheckedContinuation { continuation in
             lock.lock()
             if let ready = pending {
@@ -802,21 +924,103 @@ private final class StartResultBox: @unchecked Sendable {
     }
 }
 
+/// The one tap a host installs forwards each buffer to whichever capture is
+/// attached. Between captures nothing is attached and buffers are dropped.
+private final class TapForwarder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pipeline: CapturePipeline?
+    private var diagnostics: AudioRecorderDiagnosticsState?
+    private var tapBufferSequence: UInt64 = 0
+
+    func attach(_ pipeline: CapturePipeline, diagnostics: AudioRecorderDiagnosticsState) {
+        lock.lock()
+        self.pipeline = pipeline
+        self.diagnostics = diagnostics
+        tapBufferSequence = 0
+        lock.unlock()
+    }
+
+    @discardableResult
+    func detach() -> CapturePipeline? {
+        lock.lock()
+        defer { lock.unlock() }
+        let detached = pipeline
+        pipeline = nil
+        diagnostics = nil
+        return detached
+    }
+
+    func forward(_ buffer: AVAudioPCMBuffer) {
+        let enqueuedAtNanos = audioRecorderNowNanos()
+        lock.lock()
+        guard let pipeline, let diagnostics else {
+            lock.unlock()
+            return
+        }
+        tapBufferSequence += 1
+        let tapBufferID = tapBufferSequence
+        lock.unlock()
+
+        let inputFrameLength = buffer.frameLength
+        diagnostics.recordTap(inputFrameLength: inputFrameLength)
+        guard let copiedBuffer = copyPCMBuffer(buffer) else {
+            diagnostics.recordOutputAllocationFailure(appendNanos: 0)
+            return
+        }
+        pipeline.enqueue(
+            buffer: copiedBuffer,
+            tapBufferID: tapBufferID,
+            inputFrameLength: inputFrameLength,
+            enqueuedAtNanos: enqueuedAtNanos
+        )
+    }
+}
+
 final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
     let hostID: UInt64
 
     private let queue: DispatchQueue
-    private let engine = AVAudioEngine()
+    private let forwarder = TapForwarder()
     private let lock = NSLock()
     private var isRetired = false
+    private var configurationChanged = false
+
+    /// What the engine was built for. Touched only from `queue`.
+    private struct WarmState {
+        let inputDevice: AudioInputDeviceSnapshot?
+        let inputHardware: AudioInputHardwareFormat?
+        let outputDevice: AudioOutputDeviceSnapshot?
+        let inputFormat: AVAudioFormat
+    }
 
     // Touched only from `queue`.
-    private var installedPipeline: CapturePipeline?
+    private var engine: AVAudioEngine?
+    private var configurationObserver: NSObjectProtocol?
     private var didInstallTap = false
+    private var warmState: WarmState?
+    private var warmFailure: String?
 
     init(hostID: UInt64) {
         self.hostID = hostID
         queue = DispatchQueue(label: "WhisperKey.AudioRecorder.engine.\(hostID)", qos: .userInitiated)
+    }
+
+    func warm() {
+        queue.async { [self] in
+            guard !isRetiredNow, engine == nil, warmFailure == nil else { return }
+            var phases = CaptureStartPhases()
+            do {
+                try performWarm(phases: &phases)
+                recorderLog.info(
+                    "prewarm: hostID=\(self.hostID, privacy: .public) warm inputNodeMs=\(phases.inputNodeMillis ?? -1, privacy: .public) installTapMs=\(phases.installTapMillis ?? -1, privacy: .public) prepareMs=\(phases.prepareMillis ?? -1, privacy: .public)"
+                )
+            } catch {
+                // A half-built engine is not reused: `begin` reports the host
+                // stale and the recorder builds a fresh one.
+                warmFailure = String(describing: error)
+                recorderLog.error("prewarm: hostID=\(self.hostID, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     func begin(
@@ -824,10 +1028,10 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
-        completion: @escaping @Sendable (Result<CaptureStartResult, AudioRecorderError>) -> Void
+        completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {
         queue.async { [self] in
-            let result: Result<CaptureStartResult, AudioRecorderError>
+            let result: Result<CaptureStartResult, CaptureBeginError>
             do {
                 let started = try performBegin(
                     captureID: captureID,
@@ -836,10 +1040,12 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
                     previousInputDevice: previousInputDevice
                 )
                 result = .success(started)
-            } catch let error as AudioRecorderError {
+            } catch let error as CaptureBeginError {
                 result = .failure(error)
+            } catch let error as AudioRecorderError {
+                result = .failure(.recorder(error))
             } catch {
-                result = .failure(.engineFailedToStart(error.localizedDescription))
+                result = .failure(.recorder(.engineFailedToStart(error.localizedDescription)))
             }
 
             // The recorder may have given up on this host while a CoreAudio
@@ -850,10 +1056,24 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
                     "beginCapture: captureID=\(captureID, privacy: .public) hostID=\(self.hostID, privacy: .public) completed after the host was retired; tearing down"
                 )
                 teardown()
-                completion(.failure(.engineFailedToStart("engine host retired before start completed")))
+                completion(.failure(.recorder(.engineFailedToStart("engine host retired before start completed"))))
                 return
             }
             completion(result)
+        }
+    }
+
+    func endCapture() {
+        // Detached at once, under a short lock: no buffer reaches the finished
+        // capture even while the queue is still busy.
+        forwarder.detach()
+        queue.async { [self] in
+            guard !isRetiredNow, let engine else { return }
+            engine.stop()
+            // Re-prepared so the next start is only `engine.start()`. A host
+            // whose configuration changed is stale anyway; leave it alone.
+            guard !configurationChangedNow else { return }
+            engine.prepare()
         }
     }
 
@@ -872,6 +1092,103 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         return isRetired
     }
 
+    private var configurationChangedNow: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return configurationChanged
+    }
+
+    private func markConfigurationChanged() {
+        lock.lock()
+        configurationChanged = true
+        lock.unlock()
+        recorderLog.notice("engine host hostID=\(self.hostID, privacy: .public) received AVAudioEngineConfigurationChange; it will not be reused")
+    }
+
+    /// Builds the engine: input node, one persistent tap, `prepare()`. Never
+    /// starts it, so the input device does not run until a capture begins.
+    private func performWarm(phases: inout CaptureStartPhases) throws {
+        let inputDevice = AudioInputDeviceSnapshot.currentDefault()
+        let inputHardware = inputDevice.flatMap { AudioInputHardwareFormat.current(deviceID: $0.objectID) }
+        let outputDevice = AudioOutputDeviceSnapshot.currentDefault()
+        let engine = AVAudioEngine()
+        self.engine = engine
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.markConfigurationChanged()
+        }
+
+        // A fresh engine reads the hardware format on first access to its
+        // input node and caches it for its lifetime. Reusing an engine across
+        // a device switch made installTap throw an Obj-C exception on format
+        // mismatch, which crashed the app. So the tap goes in exactly once,
+        // here, on the format just read, and every reuse first checks that
+        // the hardware still is what this engine was built for.
+        let inputNodeStartedAt = audioRecorderNowNanos()
+        let input = engine.inputNode
+        phases.inputNodeMillis = CaptureStartPhases.millis(since: inputNodeStartedAt)
+        let inputFormat = input.outputFormat(forBus: 0)
+        recorderLog.info(
+            "warm: hostID=\(self.hostID, privacy: .public) defaultInput=\(inputDevice?.logDescription ?? "nil", privacy: .public) inputHardware=\(inputHardware?.logDescription ?? "nil", privacy: .public) defaultOutput=\(outputDevice?.logDescription ?? "nil", privacy: .public) inputFormat sampleRate=\(inputFormat.sampleRate, privacy: .public) channelCount=\(inputFormat.channelCount, privacy: .public) commonFormat=\(inputFormat.commonFormat.rawValue, privacy: .public) interleaved=\(inputFormat.isInterleaved, privacy: .public)"
+        )
+
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            recorderLog.error("warm: hostID=\(self.hostID, privacy: .public) invalid input format \(String(describing: inputFormat), privacy: .public)")
+            throw AudioRecorderError.engineFailedToStart("invalid input format \(inputFormat)")
+        }
+
+        let installTapStartedAt = audioRecorderNowNanos()
+        input.installTap(onBus: 0, bufferSize: 4_096, format: inputFormat) { [forwarder] buffer, _ in
+            forwarder.forward(buffer)
+        }
+        didInstallTap = true
+        phases.installTapMillis = CaptureStartPhases.millis(since: installTapStartedAt)
+
+        let prepareStartedAt = audioRecorderNowNanos()
+        engine.prepare()
+        phases.prepareMillis = CaptureStartPhases.millis(since: prepareStartedAt)
+
+        warmState = WarmState(
+            inputDevice: inputDevice,
+            inputHardware: inputHardware,
+            outputDevice: outputDevice,
+            inputFormat: inputFormat
+        )
+    }
+
+    /// Why a warm engine no longer describes the hardware, or nil if it does.
+    /// Runs on `queue`: these CoreAudio reads can hang, and the recorder's
+    /// start deadline covers this queue, never the actor.
+    private func stalenessReason(of warm: WarmState) -> String? {
+        if configurationChangedNow {
+            return "the engine configuration changed"
+        }
+        guard let builtFor = warm.inputDevice else {
+            return "no default input device was known when the engine was built"
+        }
+        let current = AudioInputDeviceSnapshot.currentDefault()
+        guard current == builtFor else {
+            return "the default input changed from \(builtFor.logDescription) to \(current?.logDescription ?? "nil")"
+        }
+        guard
+            let builtForHardware = warm.inputHardware,
+            let hardware = AudioInputHardwareFormat.current(deviceID: builtFor.objectID)
+        else {
+            return "the input hardware format could not be read"
+        }
+        guard hardware == builtForHardware else {
+            return "the input hardware changed from \(builtForHardware.logDescription) to \(hardware.logDescription)"
+        }
+        let output = AudioOutputDeviceSnapshot.currentDefault()
+        guard output == warm.outputDevice else {
+            return "the default output changed from \(warm.outputDevice?.logDescription ?? "nil") to \(output?.logDescription ?? "nil")"
+        }
+        return nil
+    }
+
     private func performBegin(
         captureID: UInt64,
         outputFormat: AVAudioFormat,
@@ -879,37 +1196,40 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         previousInputDevice: AudioInputDeviceSnapshot?
     ) throws -> CaptureStartResult {
         let beginStartedAt = audioRecorderNowNanos()
-        var phases = CaptureStartPhases(reusedEngine: false)
-        let inputDevice = AudioInputDeviceSnapshot.currentDefault()
+        if let warmFailure {
+            throw CaptureBeginError.staleHost("an earlier warm-up failed: \(warmFailure)")
+        }
+
+        // `reusedEngine` is true when the engine was built before this begin,
+        // by `warm()` or by an earlier capture.
+        var phases = CaptureStartPhases(reusedEngine: warmState != nil)
+        if let warm = warmState {
+            if let reason = stalenessReason(of: warm) {
+                recorderLog.notice(
+                    "beginCapture: captureID=\(captureID, privacy: .public) hostID=\(self.hostID, privacy: .public) stale: \(reason, privacy: .public)"
+                )
+                throw CaptureBeginError.staleHost(reason)
+            }
+        } else {
+            // Just built from the current hardware: nothing to be stale against.
+            try performWarm(phases: &phases)
+        }
+        guard let warm = warmState, let engine else {
+            throw AudioRecorderError.engineFailedToStart("engine host is not warm")
+        }
+
+        let inputDevice = warm.inputDevice
+        let inputFormat = warm.inputFormat
         let didInputDeviceChange = previousInputDevice.map { $0 != inputDevice } ?? false
-
         recorderLog.info(
-            "beginCapture: captureID=\(captureID, privacy: .public) hostID=\(self.hostID, privacy: .public) defaultInput=\(inputDevice?.logDescription ?? "nil", privacy: .public) inputDeviceChangedSincePrevious=\(didInputDeviceChange, privacy: .public)"
+            "beginCapture: captureID=\(captureID, privacy: .public) hostID=\(self.hostID, privacy: .public) reusedEngine=\(phases.reusedEngine ?? false, privacy: .public) defaultInput=\(inputDevice?.logDescription ?? "nil", privacy: .public) inputDeviceChangedSincePrevious=\(didInputDeviceChange, privacy: .public)"
         )
-
-        // Each capture gets its own engine (this host owns exactly one) so the
-        // input node's cached format matches the current hardware. AVAudioEngine
-        // caches the format from its first activation; reusing one across a
-        // device switch makes installTap throw an Obj-C exception on format
-        // mismatch, which crashes the app.
-        let inputNodeStartedAt = audioRecorderNowNanos()
-        let input = engine.inputNode
-        phases.inputNodeMillis = CaptureStartPhases.millis(since: inputNodeStartedAt)
-        let inputFormat = input.outputFormat(forBus: 0)
         diagnostics.beginCapture(
             captureID: captureID,
             engineHostID: hostID,
             inputDevice: inputDevice,
             inputFormat: inputFormat
         )
-        recorderLog.info(
-            "beginCapture: captureID=\(captureID, privacy: .public) inputFormat sampleRate=\(inputFormat.sampleRate, privacy: .public) channelCount=\(inputFormat.channelCount, privacy: .public) commonFormat=\(inputFormat.commonFormat.rawValue, privacy: .public) interleaved=\(inputFormat.isInterleaved, privacy: .public)"
-        )
-
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            recorderLog.error("beginCapture: captureID=\(captureID, privacy: .public) invalid input format \(String(describing: inputFormat), privacy: .public)")
-            throw AudioRecorderError.engineFailedToStart("invalid input format \(inputFormat)")
-        }
 
         let pipeline: CapturePipeline
         do {
@@ -926,36 +1246,8 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         if pipeline.isDownmixing {
             recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) downmixing \(inputFormat.channelCount, privacy: .public) input channels to mono")
         }
-        installedPipeline = pipeline
+        forwarder.attach(pipeline, diagnostics: diagnostics)
 
-        recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) installing input tap")
-        var tapBufferSequence: UInt64 = 0
-        let installTapStartedAt = audioRecorderNowNanos()
-        input.installTap(onBus: 0, bufferSize: 4_096, format: inputFormat) { buffer, _ in
-            tapBufferSequence += 1
-            let tapBufferID = tapBufferSequence
-            let enqueuedAtNanos = audioRecorderNowNanos()
-            let inputFrameLength = buffer.frameLength
-            diagnostics.recordTap(inputFrameLength: inputFrameLength)
-            guard let copiedBuffer = copyPCMBuffer(buffer) else {
-                diagnostics.recordOutputAllocationFailure(appendNanos: 0)
-                return
-            }
-            pipeline.enqueue(
-                buffer: copiedBuffer,
-                tapBufferID: tapBufferID,
-                inputFrameLength: inputFrameLength,
-                enqueuedAtNanos: enqueuedAtNanos
-            )
-        }
-        didInstallTap = true
-        phases.installTapMillis = CaptureStartPhases.millis(since: installTapStartedAt)
-        recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) input tap installed")
-
-        let prepareStartedAt = audioRecorderNowNanos()
-        engine.prepare()
-        phases.prepareMillis = CaptureStartPhases.millis(since: prepareStartedAt)
-        recorderLog.info("beginCapture: captureID=\(captureID, privacy: .public) engine prepared; starting")
         let engineStartStartedAt = audioRecorderNowNanos()
         do {
             try engine.start()
@@ -979,10 +1271,15 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
     /// Idempotent. Runs on `queue`, so it is ordered behind any `begin` work
     /// that is still stuck in CoreAudio.
     private func teardown() {
-        if let pipeline = installedPipeline {
+        if let pipeline = forwarder.detach() {
             _ = pipeline.retireAndSnapshot()
-            installedPipeline = nil
         }
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+            self.configurationObserver = nil
+        }
+        warmState = nil
+        guard let engine else { return }
         if didInstallTap {
             didInstallTap = false
             engine.inputNode.removeTap(onBus: 0)
@@ -1010,6 +1307,7 @@ public actor AudioRecorder {
     private nonisolated let diagnostics = AudioRecorderDiagnosticsState()
     private let engineHostFactory: @Sendable (UInt64) -> CaptureEngineHosting
     private let permissionCheckOverride: (@Sendable () async throws -> Void)?
+    private let isMicrophoneAuthorized: @Sendable () -> Bool
 
     private let outputFormat: AVAudioFormat = {
         guard let format = AVAudioFormat(
@@ -1024,8 +1322,11 @@ public actor AudioRecorder {
     }()
 
     private var activePipeline: CapturePipeline?
-    private var activeHost: CaptureEngineHosting?
+    /// The engine host in use: recording through it, or kept warm after
+    /// `prewarm()` or a normal `stop()` so the next start reuses its engine.
+    private var host: CaptureEngineHosting?
     private var isRecording = false
+    private var isStarting = false
     private var startTime: Date?
     private var activeCaptureID: UInt64?
     private var nextCaptureID: UInt64 = 1
@@ -1040,6 +1341,7 @@ public actor AudioRecorder {
         self.startTimeout = AudioRecorder.defaultStartTimeout
         self.engineHostFactory = { CaptureEngineHost(hostID: $0) }
         self.permissionCheckOverride = nil
+        self.isMicrophoneAuthorized = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
     }
 
     /// Test seam: lets a test drive a host that stalls, completes late, or
@@ -1048,12 +1350,14 @@ public actor AudioRecorder {
         maxDuration: TimeInterval,
         startTimeout: TimeInterval,
         engineHostFactory: @escaping @Sendable (UInt64) -> CaptureEngineHosting,
-        permissionCheck: @escaping @Sendable () async throws -> Void
+        permissionCheck: @escaping @Sendable () async throws -> Void,
+        isMicrophoneAuthorized: @escaping @Sendable () -> Bool = { true }
     ) {
         self.maxDuration = maxDuration
         self.startTimeout = startTimeout
         self.engineHostFactory = engineHostFactory
         self.permissionCheckOverride = permissionCheck
+        self.isMicrophoneAuthorized = isMicrophoneAuthorized
     }
 
     /// Registers a callback fired when `maxDuration` is reached.
@@ -1073,16 +1377,99 @@ public actor AudioRecorder {
         diagnostics.recordStopRequested()
     }
 
+    /// Builds the engine ahead of the next `start()` without starting it, so
+    /// that start costs only `engine.start()`. A no-op unless microphone
+    /// access is already granted (it never prompts) and no capture is running
+    /// or starting. Returns at once: the CoreAudio work runs on the host's queue.
+    public func prewarm() {
+        guard !isRecording, !isStarting, host == nil else { return }
+        guard isMicrophoneAuthorized() else { return }
+        let host = makeHost()
+        recorderLog.info("prewarm: building engine host hostID=\(host.hostID, privacy: .public)")
+        host.warm()
+    }
+
     public func start() async throws {
-        guard !isRecording else { throw AudioRecorderError.alreadyRecording }
+        guard !isRecording, !isStarting else { throw AudioRecorderError.alreadyRecording }
         try await ensureMicrophonePermission()
+        guard !isRecording, !isStarting else { throw AudioRecorderError.alreadyRecording }
+        isStarting = true
+        defer { isStarting = false }
 
         let captureID = nextCaptureID
         nextCaptureID += 1
+        // One deadline for the whole start, a retry on a fresh host included.
+        let deadlineNanos = audioRecorderNowNanos() + UInt64(startTimeout * 1_000_000_000)
+        var replacedStaleHost = false
+
+        while true {
+            let host = self.host ?? makeHost()
+            let outcome = await begin(on: host, captureID: captureID, deadlineNanos: deadlineNanos)
+
+            switch outcome {
+            case .success(let started):
+                activePipeline = started.pipeline
+                isRecording = true
+                startTime = Date()
+                activeCaptureID = captureID
+                activeInputDevice = started.inputDevice
+                lastInputDevice = started.inputDevice
+                diagnostics.recordEngineStarted()
+                scheduleMaxDurationTask()
+                return
+            case .failure(.staleHost(let reason)) where !replacedStaleHost:
+                replacedStaleHost = true
+                recorderLog.notice(
+                    "start: captureID=\(captureID, privacy: .public) hostID=\(host.hostID, privacy: .public) is stale (\(reason, privacy: .public)); retiring it and building a fresh host"
+                )
+                retire(host)
+            case .failure(let failure):
+                retire(host)
+                let error: AudioRecorderError
+                switch failure {
+                case .recorder(let recorderError):
+                    error = recorderError
+                case .staleHost(let reason):
+                    error = .engineFailedToStart("the audio input changed while starting: \(reason)")
+                }
+                if case .engineStartTimedOut(let seconds) = error {
+                    diagnostics.recordCaptureStartTimeout()
+                    recorderLog.error(
+                        "start: captureID=\(captureID, privacy: .public) hostID=\(host.hostID, privacy: .public) timed out after \(seconds, privacy: .public)s; retiring engine host"
+                    )
+                }
+                throw error
+            }
+        }
+    }
+
+    private func makeHost() -> CaptureEngineHosting {
         let hostID = nextEngineHostID
         nextEngineHostID += 1
-
         let host = engineHostFactory(hostID)
+        self.host = host
+        return host
+    }
+
+    private func retire(_ host: CaptureEngineHosting) {
+        host.retire()
+        if self.host === host {
+            self.host = nil
+        }
+    }
+
+    private func begin(
+        on host: CaptureEngineHosting,
+        captureID: UInt64,
+        deadlineNanos: UInt64
+    ) async -> Result<CaptureStartResult, CaptureBeginError> {
+        let deadline = startTimeout
+        let now = audioRecorderNowNanos()
+        guard deadlineNanos > now else {
+            return .failure(.recorder(.engineStartTimedOut(deadline)))
+        }
+        let remainingNanos = deadlineNanos - now
+
         let box = StartResultBox()
         host.begin(
             captureID: captureID,
@@ -1093,38 +1480,16 @@ public actor AudioRecorder {
             box.settle(result)
         }
 
-        let deadline = startTimeout
         let timeoutTask = Task { [box] in
-            try? await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: remainingNanos)
             guard !Task.isCancelled else { return }
-            box.settle(.failure(.engineStartTimedOut(deadline)))
+            box.settle(.failure(.recorder(.engineStartTimedOut(deadline))))
         }
         // Awaiting the box frees the actor's executor: a CoreAudio call stuck
         // inside the host cannot block a later `stop()` or `start()`.
         let outcome = await box.value()
         timeoutTask.cancel()
-
-        switch outcome {
-        case .success(let started):
-            activeHost = host
-            activePipeline = started.pipeline
-            isRecording = true
-            startTime = Date()
-            activeCaptureID = captureID
-            activeInputDevice = started.inputDevice
-            lastInputDevice = started.inputDevice
-            diagnostics.recordEngineStarted()
-            scheduleMaxDurationTask()
-        case .failure(let error):
-            host.retire()
-            if case .engineStartTimedOut(let seconds) = error {
-                diagnostics.recordCaptureStartTimeout()
-                recorderLog.error(
-                    "start: captureID=\(captureID, privacy: .public) hostID=\(hostID, privacy: .public) timed out after \(seconds, privacy: .public)s; retiring engine host"
-                )
-            }
-            throw error
-        }
+        return outcome
     }
 
     public func stop() -> AudioBuffer? {
@@ -1139,10 +1504,11 @@ public actor AudioRecorder {
         maxDurationTask = nil
 
         // Retire the capture before the engine: the PCM snapshot is taken
-        // under a short lock, while tearing the engine down is CoreAudio work
-        // that the host performs on its own queue.
+        // under a short lock, while stopping the engine is CoreAudio work
+        // that the host performs on its own queue. The host is kept, warm,
+        // for the next start.
         let captured = activePipeline?.retireAndSnapshot() ?? Data()
-        activeHost?.retire()
+        host?.endCapture()
         let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
         let capturedDuration = capturedDuration(byteCount: captured.count)
         let expectedBytes = expectedByteCount(duration: elapsed)
@@ -1160,7 +1526,6 @@ public actor AudioRecorder {
         )
         startTime = nil
         activePipeline = nil
-        activeHost = nil
         activeCaptureID = nil
         activeInputDevice = nil
 
