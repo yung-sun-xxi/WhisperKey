@@ -429,10 +429,11 @@ private struct CommandCenterHeader: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(PopoverTypography.secondaryColor)
                     .frame(width: 14, height: 14, alignment: .center)
-                Text("\(settings.provider.displayName) · \(settings.currentTranscriptionModelID)")
+                Text("\(settings.provider.shortDisplayName) · \(settings.currentTranscriptionModelID)")
                     .font(PopoverTypography.caption)
                     .foregroundColor(PopoverTypography.primaryColor)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                     .truncationMode(.middle)
             }
             .help("\(settings.provider.displayName) · \(settings.currentTranscriptionModelID)")
