@@ -429,3 +429,15 @@ final class TranscriptionLanguageTests: XCTestCase {
         }
     }
 }
+
+final class TranscriptionProviderIDNameTests: XCTestCase {
+    func testShortDisplayNameIsCompactProviderName() {
+        XCTAssertEqual(TranscriptionProviderID.openai.shortDisplayName, "OpenAI")
+        XCTAssertEqual(TranscriptionProviderID.groq.shortDisplayName, "Groq")
+    }
+
+    func testDisplayNameIsUnchanged() {
+        XCTAssertEqual(TranscriptionProviderID.openai.displayName, "OpenAI")
+        XCTAssertEqual(TranscriptionProviderID.groq.displayName, "Groq Whisper")
+    }
+}
