@@ -98,4 +98,28 @@ final class ErrorToastTests: XCTestCase {
         XCTAssertEqual(content.message, "Network error — check your internet connection.")
         XCTAssertEqual(content.action, .retry)
     }
+
+    // MARK: Lifetime
+
+    func testWarningStaysUntilDismissedByDefault() {
+        let content = ToastContent(message: "No response from Groq", action: .retry, style: .warning)
+        XCTAssertEqual(content.lifetime, .untilDismissed)
+    }
+
+    func testInformationLeavesOnItsOwnByDefault() {
+        let content = ToastContent(message: "No speech detected", action: .none, style: .information)
+        XCTAssertEqual(content.lifetime, .transient)
+    }
+
+    func testExplicitLifetimeOverridesTheStyleDefault() {
+        let content = ToastContent(message: "Not pasted", action: .none, style: .warning, lifetime: .transient)
+        XCTAssertEqual(content.lifetime, .transient)
+    }
+
+    func testDecisionContentUsesTheStyleDefault() {
+        let warning = ToastDecision.content(reason: .transcription(.network), message: "m", hasCachedAudio: true)
+        XCTAssertEqual(warning.lifetime, .untilDismissed)
+        let info = ToastDecision.content(reason: .transcription(.unknown), message: "m", hasCachedAudio: false, style: .information)
+        XCTAssertEqual(info.lifetime, .transient)
+    }
 }
