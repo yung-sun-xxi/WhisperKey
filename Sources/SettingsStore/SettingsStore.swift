@@ -39,6 +39,14 @@ public enum TranscriptionProviderID: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// Compact provider name for tight places such as the popover header.
+    public var shortDisplayName: String {
+        switch self {
+        case .openai: return "OpenAI"
+        case .groq: return "Groq"
+        }
+    }
+
     public var keychainService: String { "WhisperKey.\(rawValue)" }
     public var keychainAccount: String { "apiKey" }
 }
