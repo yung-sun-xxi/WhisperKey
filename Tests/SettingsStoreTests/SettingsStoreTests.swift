@@ -52,6 +52,12 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.openAIModel.rawValue, "gpt-transcribe")
     }
 
+    func testPersistedDistilWhisperModelLoadsAsWhisperLargeV3Turbo() {
+        defaults.set("distil-whisper-large-v3-en", forKey: "WhisperKey.settings.groqModel")
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(store.groqModel.rawValue, "whisper-large-v3-turbo")
+    }
+
     func testValuesPersistAcrossInstances() {
         let keychain = InMemoryKeychain()
         let first = SettingsStore(keychain: keychain, defaults: defaults)
@@ -180,11 +186,11 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.currentTranscriptionProviderID, "groq")
         XCTAssertEqual(store.currentTranscriptionModelID, "whisper-large-v3")
 
-        store.groqModel = .distilWhisperLargeV3EN
-        XCTAssertEqual(store.currentTranscriptionModelID, "distil-whisper-large-v3-en")
+        store.groqModel = .whisperLargeV3Turbo
+        XCTAssertEqual(store.currentTranscriptionModelID, "whisper-large-v3-turbo")
 
         store.openAIModel = .gptTranscribe
-        XCTAssertEqual(store.currentTranscriptionModelID, "distil-whisper-large-v3-en")
+        XCTAssertEqual(store.currentTranscriptionModelID, "whisper-large-v3-turbo")
 
         store.provider = .openai
         XCTAssertEqual(store.currentTranscriptionProviderID, "openai")
@@ -427,5 +433,17 @@ final class TranscriptionLanguageTests: XCTestCase {
         for language in TranscriptionLanguage.allCases {
             XCTAssertFalse(language.displayName.isEmpty)
         }
+    }
+}
+
+final class TranscriptionProviderIDNameTests: XCTestCase {
+    func testShortDisplayNameIsCompactProviderName() {
+        XCTAssertEqual(TranscriptionProviderID.openai.shortDisplayName, "OpenAI")
+        XCTAssertEqual(TranscriptionProviderID.groq.shortDisplayName, "Groq")
+    }
+
+    func testDisplayNameIsUnchanged() {
+        XCTAssertEqual(TranscriptionProviderID.openai.displayName, "OpenAI")
+        XCTAssertEqual(TranscriptionProviderID.groq.displayName, "Groq Whisper")
     }
 }

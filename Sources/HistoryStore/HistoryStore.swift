@@ -229,6 +229,7 @@ public enum TranscriptionCostEstimator {
         case "whisper-large-v3-turbo":
             dollarsPerHour = 0.04
         case "distil-whisper-large-v3-en":
+            // No longer offered; kept so older history entries still show a cost.
             dollarsPerHour = 0.02
         default:
             return nil

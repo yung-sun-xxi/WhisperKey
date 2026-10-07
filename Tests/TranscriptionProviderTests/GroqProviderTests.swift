@@ -35,6 +35,13 @@ final class GroqProviderTests: XCTestCase {
         StubURLProtocol.reset()
     }
 
+    func testModelListIsExactlyLargeV3AndTurbo() {
+        XCTAssertEqual(
+            GroqProvider.Model.allCases.map(\.rawValue),
+            ["whisper-large-v3", "whisper-large-v3-turbo"]
+        )
+    }
+
     func testHitsGroqEndpoint() async throws {
         StubURLProtocol.nextOutcome = .http(.init(
             statusCode: 200,
