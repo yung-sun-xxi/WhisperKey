@@ -74,6 +74,48 @@ final class AudioRecorderTests: XCTestCase {
         XCTAssertNil(snapshot.conversionStartedAt)
     }
 
+    // MARK: - Start-phase diagnostics
+
+    func testDiagnosticsSnapshotDecodesWithoutStartPhaseFields() throws {
+        let recorder = AudioRecorder()
+        let encoded = try JSONEncoder().encode(recorder.diagnosticsSnapshot())
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        for key in ["inputNodeMillis", "installTapMillis", "prepareMillis", "engineStartMillis", "beginTotalMillis", "reusedEngine"] {
+            object.removeValue(forKey: key)
+        }
+        let older = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(AudioRecorderDiagnosticsSnapshot.self, from: older)
+
+        XCTAssertNil(decoded.beginTotalMillis)
+        XCTAssertNil(decoded.reusedEngine)
+    }
+
+    func testStartPhasesAreReportedAndClearedByTheNextCapture() throws {
+        let diagnostics = AudioRecorderDiagnosticsState()
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1))
+        diagnostics.beginCapture(captureID: 1, engineHostID: 1, inputDevice: nil, inputFormat: format)
+        diagnostics.recordStartPhases(CaptureStartPhases(
+            inputNodeMillis: 300,
+            installTapMillis: 40,
+            prepareMillis: 90,
+            engineStartMillis: 120,
+            beginTotalMillis: 560,
+            reusedEngine: false
+        ))
+
+        let first = diagnostics.snapshot()
+        XCTAssertEqual(first.inputNodeMillis, 300)
+        XCTAssertEqual(first.beginTotalMillis, 560)
+        XCTAssertEqual(first.reusedEngine, false)
+
+        diagnostics.beginCapture(captureID: 2, engineHostID: 1, inputDevice: nil, inputFormat: format)
+        let second = diagnostics.snapshot()
+        XCTAssertNil(second.inputNodeMillis)
+        XCTAssertNil(second.beginTotalMillis)
+        XCTAssertNil(second.reusedEngine)
+    }
+
     // MARK: - Capture start deadline
 
     func testStartTimesOutWhenEngineHostNeverCompletes() async {

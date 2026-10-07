@@ -36,6 +36,14 @@ private struct RecordingDiagnosticsEvent: Encodable {
     let appBundleID: String?
     let appVersion: String?
     let recorder: AudioRecorderDiagnosticsSnapshot
+    /// Filled only for `recording_session_started`.
+    let startLatency: RecordingStartLatency?
+}
+
+/// Milliseconds from entry into `startRecording()`, on the monotonic clock.
+private struct RecordingStartLatency: Encodable {
+    let hotkeyToEngineStartedMillis: Double
+    let hotkeyToStartSoundMillis: Double
 }
 
 private enum RecordingDiagnosticsFile {
@@ -297,6 +305,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func startRecording() {
+        let hotkeyAtNanos = DispatchTime.now().uptimeNanoseconds
         refreshPermissions()
         guard Self.canStartRecording(from: state), permissions.allGranted else { return }
         let recordingID = UUID()
@@ -321,6 +330,7 @@ final class AppCoordinator: ObservableObject {
                 }
 
                 try await recorder.start()
+                let engineStartedAtNanos = DispatchTime.now().uptimeNanoseconds
 
                 guard activeRecordingID == recordingID else {
                     recorder.recordStopRequestedForDiagnostics()
@@ -346,8 +356,18 @@ final class AppCoordinator: ObservableObject {
                 state = .recording
                 appleMusic.recordingDidStart(enabled: settings.pauseAppleMusicWhileRecording)
                 startRecordingTimer()
-                appendRecordingDiagnostic("recording_session_started", recordingID: recordingID)
                 playSound(.start)
+                let startSoundAtNanos = DispatchTime.now().uptimeNanoseconds
+                let latency = RecordingStartLatency(
+                    hotkeyToEngineStartedMillis: Self.millis(from: hotkeyAtNanos, to: engineStartedAtNanos),
+                    hotkeyToStartSoundMillis: Self.millis(from: hotkeyAtNanos, to: startSoundAtNanos)
+                )
+                logStartLatency(latency, recordingID: recordingID)
+                appendRecordingDiagnostic(
+                    "recording_session_started",
+                    recordingID: recordingID,
+                    startLatency: latency
+                )
             } catch AudioRecorderError.engineStartTimedOut(let seconds) {
                 guard activeRecordingID == recordingID else { return }
                 handleCaptureStartTimeout(recordingID: recordingID, seconds: seconds)
@@ -1041,7 +1061,8 @@ final class AppCoordinator: ObservableObject {
         recordingID: UUID? = nil,
         phase: ProcessingPhase? = nil,
         metrics: ProcessingMetrics? = nil,
-        recorderSnapshot: AudioRecorderDiagnosticsSnapshot? = nil
+        recorderSnapshot: AudioRecorderDiagnosticsSnapshot? = nil,
+        startLatency: RecordingStartLatency? = nil
     ) {
         let resolvedMetrics = metrics ?? activeProcessingMetrics
         let event = RecordingDiagnosticsEvent(
@@ -1057,9 +1078,33 @@ final class AppCoordinator: ObservableObject {
             byteSize: resolvedMetrics?.byteSize,
             appBundleID: Bundle.main.bundleIdentifier,
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-            recorder: recorderSnapshot ?? recorder.diagnosticsSnapshot()
+            recorder: recorderSnapshot ?? recorder.diagnosticsSnapshot(),
+            startLatency: startLatency
         )
         RecordingDiagnosticsFile.append(event, logger: log)
+    }
+
+    private static func millis(from startNanos: UInt64, to endNanos: UInt64) -> Double {
+        Double(endNanos &- startNanos) / 1_000_000
+    }
+
+    /// `notice`, not `info`: only notice and above persist in the unified log.
+    private func logStartLatency(_ latency: RecordingStartLatency, recordingID: UUID) {
+        let snapshot = recorder.diagnosticsSnapshot()
+        let values: [(String, Double?)] = [
+            ("hotkeyToEngineStartedMs", latency.hotkeyToEngineStartedMillis),
+            ("hotkeyToStartSoundMs", latency.hotkeyToStartSoundMillis),
+            ("beginTotalMs", snapshot.beginTotalMillis),
+            ("inputNodeMs", snapshot.inputNodeMillis),
+            ("installTapMs", snapshot.installTapMillis),
+            ("prepareMs", snapshot.prepareMillis),
+            ("engineStartMs", snapshot.engineStartMillis),
+        ]
+        let fields = values
+            .map { name, value in "\(name)=\(value.map { String(format: "%.1f", $0) } ?? "nil")" }
+            .joined(separator: " ")
+        let reused = snapshot.reusedEngine.map { String($0) } ?? "nil"
+        log.notice("recording start latency recordingID=\(recordingID.uuidString, privacy: .public) \(fields, privacy: .public) reusedEngine=\(reused, privacy: .public)")
     }
 
     private func completeProcessing(operationID: UUID, clearCachedAudio: Bool, playDoneSound: Bool) {
