@@ -41,6 +41,9 @@ same check the pull request gets.
    while `swift build` and `swift test` still pass, so the package graph looks
    healthy right up to the app build. Keep every local package path relative to the
    project itself, never to the name of the folder it sits in.
+7. **The self-hosted runner's logs (`~/actions-runner-whisperkey/_diag`) write
+   decimals with a comma**, after this Mac's locale: `Back off 7,642 seconds` is
+   7.6 seconds, not two hours.
 
 ## Releases
 
