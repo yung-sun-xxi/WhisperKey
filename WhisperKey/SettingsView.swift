@@ -7,6 +7,9 @@ import SettingsStore
 import TranscriptionProvider
 import HistoryStore
 import UsageStatsStore
+#if DEBUG
+import DevBuildMarker
+#endif
 
 enum SettingsWindowLayout {
     static let contentWidth: CGFloat = 460
@@ -390,6 +393,24 @@ private struct PermissionBanner: View {
     }
 }
 
+#if DEBUG
+/// Marks the dev app's popover with the same letter as its menu bar icon (#149).
+private struct DevBuildBadge: View {
+    var body: some View {
+        Text(DevBuildMarker.letter)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(PopoverTypography.secondaryColor)
+            .frame(minWidth: 16, minHeight: 16)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(PopoverTypography.secondaryColor.opacity(0.6), lineWidth: 1)
+            )
+            .help("WhisperKey Dev (Debug build)")
+            .accessibilityLabel("Dev build")
+    }
+}
+#endif
+
 private struct CommandCenterHeader: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var usageStats: UsageStatsStore
@@ -439,6 +460,10 @@ private struct CommandCenterHeader: View {
             .help("\(settings.provider.displayName) · \(settings.currentTranscriptionModelID)")
 
             Spacer(minLength: 8)
+
+            #if DEBUG
+            DevBuildBadge()
+            #endif
 
             statusControl
         }
