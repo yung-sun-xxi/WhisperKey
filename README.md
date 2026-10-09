@@ -107,13 +107,10 @@ The installed dev app uses bundle id `yung-sun-xxi.WhisperKey.dev`; the release
 app uses `yung-sun-xxi.WhisperKey`. macOS permissions are separate for those two
 identities.
 
-Debug builds use a stable local signing identity named
-`WhisperKey Local Development` so macOS TCC permissions survive rebuilds. Create
-it once before using the Debug Xcode schemes:
-
-```sh
-scripts/ensure-local-signing-cert.sh
-```
+Debug builds are signed with the "Apple Development" certificate of team
+`UGLRY9ACZ6`, which has to be in the login keychain. The team ID is what lets
+Keychain access and TCC permissions survive rebuilds: macOS remembers an app
+signed without a team by its code hash, which changes on every build.
 
 To skip the `/Applications` install step in scripts or CI:
 
