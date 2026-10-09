@@ -74,7 +74,7 @@ final class HistoryCapChangeTests: XCTestCase {
     // MARK: - Wording
 
     func testWordingForSeveralEntries() {
-        let prompt = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 25, otherAppName: nil)
+        let prompt = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 25)
         XCTAssertEqual(prompt.title, "Delete 5 oldest entries?")
         XCTAssertEqual(
             prompt.informativeText,
@@ -85,7 +85,7 @@ final class HistoryCapChangeTests: XCTestCase {
     }
 
     func testWordingForOneEntry() {
-        let prompt = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 29, otherAppName: nil)
+        let prompt = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 29)
         XCTAssertEqual(prompt.title, "Delete the oldest entry?")
         XCTAssertEqual(
             prompt.informativeText,
@@ -95,13 +95,13 @@ final class HistoryCapChangeTests: XCTestCase {
     }
 
     func testWordingForALimitOfOne() {
-        let prompt = HistoryCapChangePrompt(fileEntryCount: 4, newLimit: 1, otherAppName: nil)
+        let prompt = HistoryCapChangePrompt(fileEntryCount: 4, newLimit: 1)
         XCTAssertEqual(prompt.title, "Delete 3 oldest entries?")
         XCTAssertEqual(prompt.informativeText, "Their audio is deleted too. This can't be undone.")
     }
 
     func testWordingForALimitOfZero() {
-        let all = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 0, otherAppName: nil)
+        let all = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 0)
         XCTAssertEqual(all.title, "Delete all 30 entries?")
         XCTAssertEqual(
             all.informativeText,
@@ -109,51 +109,13 @@ final class HistoryCapChangeTests: XCTestCase {
         )
         XCTAssertEqual(all.confirmButtonTitle, "Delete 30 Entries")
 
-        let only = HistoryCapChangePrompt(fileEntryCount: 1, newLimit: 0, otherAppName: nil)
+        let only = HistoryCapChangePrompt(fileEntryCount: 1, newLimit: 0)
         XCTAssertEqual(only.title, "Delete the only entry?")
         XCTAssertEqual(
             only.informativeText,
             "Its audio is deleted too. This can't be undone."
         )
         XCTAssertEqual(only.confirmButtonTitle, "Delete 1 Entry")
-    }
-
-    func testSharedHistorySentenceAppearsOnlyWhenTheOtherAppIsInstalled() {
-        let shared = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 25, otherAppName: "WhisperKey Dev")
-        XCTAssertEqual(
-            shared.informativeText,
-            "Their audio is deleted too. This can't be undone. WhisperKey Dev loses them too."
-        )
-        let sharedOne = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 29, otherAppName: "WhisperKey")
-        XCTAssertTrue(
-            sharedOne.informativeText.hasSuffix(" WhisperKey loses it too."),
-            sharedOne.informativeText
-        )
-
-        let alone = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 25, otherAppName: nil)
-        XCTAssertFalse(alone.informativeText.contains("loses"), alone.informativeText)
-    }
-
-    func testEvaluateCarriesTheOtherAppIntoThePrompt() {
-        guard case .confirm(let prompt) = HistoryCapChange.evaluate(
-            currentLimit: 30, proposedLimit: 25, fileEntryCount: 30, otherAppName: "WhisperKey Dev"
-        ) else { return XCTFail("must ask") }
-        XCTAssertEqual(prompt.otherAppName, "WhisperKey Dev")
-    }
-
-    // MARK: - Which app shares the file
-
-    func testCounterpartOfTheReleaseAppIsTheDevAppAndBack() {
-        XCTAssertEqual(
-            HistorySharingApp.counterpart(ofBundleIdentifier: "yung-sun-xxi.WhisperKey"),
-            HistorySharingApp(bundleIdentifier: "yung-sun-xxi.WhisperKey.dev", name: "WhisperKey Dev")
-        )
-        XCTAssertEqual(
-            HistorySharingApp.counterpart(ofBundleIdentifier: "yung-sun-xxi.WhisperKey.dev"),
-            HistorySharingApp(bundleIdentifier: "yung-sun-xxi.WhisperKey", name: "WhisperKey")
-        )
-        XCTAssertNil(HistorySharingApp.counterpart(ofBundleIdentifier: nil))
-        XCTAssertNil(HistorySharingApp.counterpart(ofBundleIdentifier: "com.apple.xctest"))
     }
 
     // MARK: - The count comes from the file
