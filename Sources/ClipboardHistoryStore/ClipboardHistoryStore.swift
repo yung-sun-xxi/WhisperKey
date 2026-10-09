@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import SharedJSONFile
 
 /// The clipboard history behind the quick-paste popup.
 ///
@@ -18,23 +19,51 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
     public static let defaultMaxEntries = 20
     public static let allowedMaxRange: ClosedRange<Int> = 0...200
 
-    /// Newest first.
+    /// Newest first: the file merged with this instance's concealed entries, cut to
+    /// `maxEntries`.
     @Published public private(set) var entries: [ClipboardEntry] = []
     public private(set) var maxEntries: Int
 
     private let url: URL
+    private let file: SharedJSONFile<ClipboardEntry>
+    private var watcher: DirectoryWatcher?
+    /// Concealed entries this instance recorded, newest first. Memory only, never the file,
+    /// and never seen by the other app.
+    private var concealed: [ConcealedEntry] = []
 
+    /// A concealed entry and the file entries that were already there when it was recorded.
+    /// Everything else in the file is newer than it. Dates cannot decide this: the file
+    /// keeps them to the whole second.
+    struct ConcealedEntry {
+        let entry: ClipboardEntry
+        let olderIDs: Set<UUID>
+    }
+
+    /// The file is shared with the other build of the app (release and dev), which may run
+    /// at the same time with a different cap (#140). Every change reads the file as it is now
+    /// and writes it back under a lock, the directory is watched for the other app's
+    /// writes, and an ordinary write never shrinks the file below the size it had. Loading
+    /// does not trim the file; only lowering the cap with `setMaxEntries` does.
     public init(url: URL? = nil, maxEntries: Int = ClipboardHistoryStore.defaultMaxEntries) {
         let resolvedURL = url ?? Self.defaultURL()
         self.url = resolvedURL
         self.maxEntries = Self.clamp(maxEntries)
+        self.file = SharedJSONFile(url: resolvedURL, encoder: Self.makeEncoder(), decoder: Self.makeDecoder())
 
-        let loaded = (try? Self.load(from: resolvedURL)) ?? []
-        let trimmed = Self.applyMax(entries: loaded, max: self.maxEntries)
-        self.entries = trimmed
-        if trimmed.count != loaded.count {
-            try? Self.persist(entries: Self.persistable(trimmed), to: resolvedURL)
+        try? FileManager.default.createDirectory(at: file.directory, withIntermediateDirectories: true)
+        // Watch before the first read, so a write landing between the two is not missed.
+        self.watcher = DirectoryWatcher(directory: file.directory) { [weak self] in
+            self?.reloadFromDisk()
         }
+        _ = try? file.load()
+        refreshDisplay()
+    }
+
+    /// Picks up another process's writes. The directory watcher calls this on the main
+    /// queue; `entries` is republished only when what it shows actually changed.
+    public func reloadFromDisk() {
+        guard (try? file.reloadIfChanged()) != nil else { return }
+        refreshDisplay()
     }
 
     /// Offers a candidate entry. Returns the entry that was stored, or `nil` when it was
@@ -44,6 +73,9 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
     /// `isConcealed` changes nothing about whether the entry is kept, where it sits, how
     /// it de-duplicates or whether it counts against the cap. It changes only whether it
     /// is written to the file.
+    ///
+    /// "The newest entry" is the newest in the file as it is now, so one copy caught by
+    /// both apps lands in the file once.
     @discardableResult
     public func record(
         text: String,
@@ -54,37 +86,107 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
     ) -> ClipboardEntry? {
         guard maxEntries > 0 else { return nil }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        // Against the most recent entry only. The same text copied again after something
-        // else in between is a deliberate second copy and gets its own entry.
-        guard entries.first?.text != text else { return nil }
 
         let entry = ClipboardEntry(id: id, text: text, capturedAt: now, origin: origin, isConcealed: isConcealed)
-        let updated = Self.applyMax(entries: [entry] + entries, max: maxEntries)
-        entries = updated
-        try? Self.persist(entries: Self.persistable(updated), to: url)
-        return entry
+        defer { refreshDisplay() }
+
+        if isConcealed {
+            // Nothing is written, but the repeat check still needs the file as it is now.
+            _ = try? file.load()
+            // Against the most recent entry only. The same text copied again after something
+            // else in between is a deliberate second copy and gets its own entry.
+            guard Self.merge(persisted: file.contents, concealed: concealed).first?.text != text else { return nil }
+            concealed.insert(ConcealedEntry(entry: entry, olderIDs: Set(file.contents.map(\.id))), at: 0)
+            return entry
+        }
+
+        let stored = try? updateFile { contents -> Bool in
+            guard Self.merge(persisted: contents, concealed: self.concealed).first?.text != text else { return false }
+            let previousCount = contents.count
+            contents.insert(entry, at: 0)
+            let keep = max(self.maxEntries, previousCount)
+            if contents.count > keep {
+                contents = Array(contents.prefix(keep))
+            }
+            return true
+        }
+        return stored == true ? entry : nil
     }
 
+    /// Empties the list: every entry this instance has seen in the file, beyond its own cap
+    /// too, and its concealed entries. Nothing the other app added since is touched.
     public func clear() {
-        guard !entries.isEmpty else { return }
-        entries = []
-        try? Self.persist(entries: [], to: url)
+        let seen = Set(file.contents.map(\.id))
+        concealed = []
+        if !seen.isEmpty {
+            _ = try? updateFile { contents in contents.removeAll { seen.contains($0.id) } }
+        }
+        refreshDisplay()
     }
 
+    /// Raising the cap only shows more of the file. Lowering it trims the shared file to
+    /// the new cap.
     public func setMaxEntries(_ value: Int) {
         let clamped = Self.clamp(value)
         guard clamped != maxEntries else { return }
+        let lowered = clamped < maxEntries
         maxEntries = clamped
-        let trimmed = Self.applyMax(entries: entries, max: clamped)
-        if trimmed.count != entries.count {
-            entries = trimmed
-            try? Self.persist(entries: Self.persistable(trimmed), to: url)
+        if lowered {
+            _ = try? updateFile { contents in
+                if contents.count > clamped { contents = Array(contents.prefix(clamped)) }
+            }
         }
+        refreshDisplay()
     }
 
     public var fileURL: URL { url }
 
     // MARK: - Internals
+
+    /// Every write of the file goes through here, and so through `persistable(_:)`.
+    private func updateFile<Result>(_ change: (inout [ClipboardEntry]) throws -> Result) throws -> Result {
+        try file.update { contents -> Result in
+            let result = try change(&contents)
+            contents = Self.persistable(contents)
+            return result
+        }
+    }
+
+    /// Shows the newest `maxEntries` of the file and this instance's concealed entries
+    /// together. A concealed entry pushed out of that window is forgotten, exactly as it
+    /// was when the list was only ever in memory.
+    private func refreshDisplay() {
+        let shown = maxEntries > 0
+            ? Array(Self.merge(persisted: file.contents, concealed: concealed).prefix(maxEntries))
+            : []
+        let shownIDs = Set(shown.map(\.id))
+        concealed.removeAll { !shownIDs.contains($0.entry.id) }
+        if shown != entries {
+            entries = shown
+        }
+    }
+
+    /// The file's entries with the concealed ones put back where they were recorded: each
+    /// sits above the file entries that were there before it and below every later one.
+    /// Both lists and the result are newest first.
+    static func merge(persisted: [ClipboardEntry], concealed: [ConcealedEntry]) -> [ClipboardEntry] {
+        guard !concealed.isEmpty else { return persisted }
+        // Later file entries are always inserted on top, so the ones newer than a concealed
+        // entry are a prefix of the file, and it goes right after that prefix.
+        var above: [Int: [ClipboardEntry]] = [:]
+        for item in concealed {
+            let index = persisted.firstIndex { item.olderIDs.contains($0.id) } ?? persisted.count
+            above[index, default: []].append(item.entry)
+        }
+        var merged: [ClipboardEntry] = []
+        merged.reserveCapacity(persisted.count + concealed.count)
+        for (index, entry) in persisted.enumerated() {
+            merged.append(contentsOf: above[index] ?? [])
+            merged.append(entry)
+        }
+        merged.append(contentsOf: above[persisted.count] ?? [])
+        return merged
+    }
 
     static func clamp(_ value: Int) -> Int {
         min(max(value, allowedMaxRange.lowerBound), allowedMaxRange.upperBound)
@@ -97,12 +199,6 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
     /// lives exactly as long as the process does.
     static func persistable(_ entries: [ClipboardEntry]) -> [ClipboardEntry] {
         entries.filter { !$0.isConcealed }
-    }
-
-    static func applyMax(entries: [ClipboardEntry], max: Int) -> [ClipboardEntry] {
-        if max <= 0 { return [] }
-        if entries.count <= max { return entries }
-        return Array(entries.prefix(max))
     }
 
     static func defaultURL() -> URL {
@@ -124,26 +220,5 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }
-
-    static func load(from url: URL) throws -> [ClipboardEntry] {
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        let data = try Data(contentsOf: url)
-        guard !data.isEmpty else { return [] }
-        return try makeDecoder().decode([ClipboardEntry].self, from: data)
-    }
-
-    static func persist(entries: [ClipboardEntry], to url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try makeEncoder().encode(entries)
-        let tmp = url.deletingLastPathComponent()
-            .appendingPathComponent(".clipboard-history-\(UUID().uuidString).json.tmp")
-        try data.write(to: tmp, options: [.atomic])
-        defer { try? FileManager.default.removeItem(at: tmp) }
-        if FileManager.default.fileExists(atPath: url.path) {
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
-        } else {
-            try FileManager.default.moveItem(at: tmp, to: url)
-        }
     }
 }

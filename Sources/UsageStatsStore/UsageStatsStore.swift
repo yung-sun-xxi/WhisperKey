@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SharedJSONFile
 
 public struct UsageEntry: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
@@ -107,15 +108,33 @@ public struct UsageBreakdownRow: Equatable, Sendable, Identifiable {
 }
 
 public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
+    /// Everything in the file, oldest first, as this instance last saw it.
     @Published public private(set) var entries: [UsageEntry] = []
 
     private let url: URL
-    private let lock = NSLock()
+    private let file: SharedJSONFile<UsageEntry>
+    private var watcher: DirectoryWatcher?
 
+    /// The file is shared with the other build of the app (release and dev), so every
+    /// change goes through `SharedJSONFile` and the directory is watched for the other
+    /// app's writes (#140).
     public init(url: URL? = nil) {
         let resolvedURL = url ?? Self.defaultURL()
         self.url = resolvedURL
-        self.entries = (try? Self.load(from: resolvedURL)) ?? []
+        self.file = SharedJSONFile(url: resolvedURL, encoder: Self.makeEncoder(), decoder: Self.makeDecoder())
+        try? FileManager.default.createDirectory(at: file.directory, withIntermediateDirectories: true)
+        // Watch before the first read, so a write landing between the two is not missed.
+        self.watcher = DirectoryWatcher(directory: file.directory) { [weak self] in
+            self?.reloadFromDisk()
+        }
+        self.entries = (try? file.load()) ?? []
+    }
+
+    /// Picks up another process's writes. The directory watcher calls this on the main
+    /// queue; `entries` is republished only when the file's contents actually changed.
+    public func reloadFromDisk() {
+        guard let fresh = try? file.reloadIfChanged() else { return }
+        publish(fresh)
     }
 
     public var fileURL: URL { url }
@@ -141,7 +160,13 @@ public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
             estimatedPriceAtTime: estimatedPriceAtTime,
             currency: currency
         )
-        applyAndPersist(entries + [entry])
+        do {
+            try file.update { $0.append(entry) }
+            publish(file.contents)
+        } catch {
+            // Non-fatal: usage data is best-effort. Shown for this session only.
+            publish(entries + [entry])
+        }
         return entry
     }
 
@@ -195,19 +220,19 @@ public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
             }
     }
 
+    /// Removes the entries for `keys` that this instance has seen. An entry the other app
+    /// added since then stays: nobody looked at it before asking for the reset.
     public func resetCounters(for keys: Set<ProviderModelKey>) {
         guard !keys.isEmpty else { return }
-        let updated = entries.filter { entry in
-            !keys.contains(ProviderModelKey(providerID: entry.providerID, modelID: entry.modelID))
-        }
-        if updated.count != entries.count {
-            applyAndPersist(updated)
-        }
+        let targeted = Set(entries.filter { keys.contains(Self.key(of: $0)) }.map(\.id))
+        guard !targeted.isEmpty else { return }
+        removeFromFile(targeted)
     }
 
+    /// Removes every entry this instance has seen, and nothing the other app added since.
     public func resetAll() {
         guard !entries.isEmpty else { return }
-        applyAndPersist([])
+        removeFromFile(Set(entries.map(\.id)))
     }
 
     // MARK: - Internals
@@ -272,13 +297,23 @@ public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
         )
     }
 
-    private func applyAndPersist(_ updated: [UsageEntry]) {
-        entries = updated
+    private func removeFromFile(_ ids: Set<UUID>) {
         do {
-            try Self.persist(entries: updated, to: url)
+            try file.update { contents in contents.removeAll { ids.contains($0.id) } }
+            publish(file.contents)
         } catch {
-            // Non-fatal: caller logs separately; usage data is best-effort.
+            // Non-fatal: the file is left as it was, and so is the list.
         }
+    }
+
+    private func publish(_ fresh: [UsageEntry]) {
+        if fresh != entries {
+            entries = fresh
+        }
+    }
+
+    private static func key(of entry: UsageEntry) -> ProviderModelKey {
+        ProviderModelKey(providerID: entry.providerID, modelID: entry.modelID)
     }
 
     static func defaultURL() -> URL {
@@ -298,25 +333,5 @@ public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }
-
-    static func load(from url: URL) throws -> [UsageEntry] {
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        let data = try Data(contentsOf: url)
-        guard !data.isEmpty else { return [] }
-        return try makeDecoder().decode([UsageEntry].self, from: data)
-    }
-
-    static func persist(entries: [UsageEntry], to url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try makeEncoder().encode(entries)
-        let tmp = url.deletingLastPathComponent().appendingPathComponent(".usage-stats-\(UUID().uuidString).json.tmp")
-        try data.write(to: tmp, options: [.atomic])
-        defer { try? FileManager.default.removeItem(at: tmp) }
-        if FileManager.default.fileExists(atPath: url.path) {
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
-        } else {
-            try FileManager.default.moveItem(at: tmp, to: url)
-        }
     }
 }

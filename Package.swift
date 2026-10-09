@@ -29,15 +29,22 @@ let package = Package(
         .target(name: "AudioEncoder", dependencies: ["AudioRecorder"]),
         .target(name: "TranscriptionProvider", dependencies: ["AudioEncoder"]),
         .target(name: "PasteEngine", dependencies: ["ClipboardHistoryStore"]),
-        .target(name: "HistoryStore"),
-        .target(name: "ClipboardHistoryStore"),
+        .target(name: "SharedJSONFile"),
+        .target(name: "HistoryStore", dependencies: ["SharedJSONFile"]),
+        .target(name: "ClipboardHistoryStore", dependencies: ["SharedJSONFile"]),
         .target(name: "QuickPaste", dependencies: ["HotkeyEngine", "ClipboardHistoryStore", "PasteEngine"]),
         .target(name: "KeychainStore"),
         .target(name: "SettingsStore", dependencies: ["HotkeyEngine", "KeychainStore", "QuickPaste", "TranscriptionProvider", "UsageStatsStore"]),
-        .target(name: "UsageStatsStore"),
+        .target(name: "UsageStatsStore", dependencies: ["SharedJSONFile"]),
         .target(name: "ErrorToast", dependencies: ["TranscriptionProvider"]),
         .target(name: "LoginItem"),
         .target(name: "SingleInstance"),
+        // Appends through the real stores from a separate process, so a test can run two
+        // copies at once and prove the file lock holds across processes (#140).
+        .executableTarget(
+            name: "SharedStoreProbe",
+            dependencies: ["UsageStatsStore", "HistoryStore", "ClipboardHistoryStore"]
+        ),
         .target(
             name: "WhisperKeyKit",
             dependencies: [
@@ -58,6 +65,7 @@ let package = Package(
             ]
         ),
 
+        .testTarget(name: "SharedJSONFileTests", dependencies: ["SharedJSONFile", "SharedStoreProbe"]),
         .testTarget(name: "HotkeyEngineTests", dependencies: ["HotkeyEngine"]),
         .testTarget(name: "AudioRecorderTests", dependencies: ["AudioRecorder"]),
         .testTarget(name: "AudioEncoderTests", dependencies: ["AudioEncoder"]),
