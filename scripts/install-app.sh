@@ -6,6 +6,7 @@ set -euo pipefail
 APP_PATH="${1:-}"
 DESTINATION_DIR="${2:-/Applications}"
 EXPECTED_BUNDLE_ID_PREFIX="yung-sun-xxi.WhisperKey"
+EXPECTED_DEV_TEAM_ID="UGLRY9ACZ6"
 RESTART_AFTER_INSTALL="${WHISPERKEY_INSTALL_RESTART:-1}"
 STOP_RUNNING_APP="${WHISPERKEY_INSTALL_STOP_RUNNING_APP:-0}"
 
@@ -45,6 +46,7 @@ verify_signature() {
     local signing_info
     local designated_requirement
     local authority
+    local team_identifier
 
     if ! /usr/bin/codesign --verify --strict "$APP_PATH" >/dev/null 2>&1; then
         echo "ERROR: '$APP_PATH' does not have a valid code signature." >&2
@@ -69,8 +71,12 @@ verify_signature() {
         exit 1
     fi
 
-    if [[ "$BUNDLE_ID" == "$EXPECTED_BUNDLE_ID_PREFIX.dev" && "$authority" != "WhisperKey Local Development" ]]; then
-        echo "ERROR: WhisperKey Dev must be signed by 'WhisperKey Local Development' to preserve Keychain access." >&2
+    # The Keychain remembers which apps may read an item by team ID. An app signed
+    # without a team is remembered by its code hash instead, which changes on every
+    # build, so each new dev build would be asked for the API key again.
+    team_identifier=$(awk -F= '/^TeamIdentifier=/{print $2; exit}' <<<"$signing_info")
+    if [[ "$BUNDLE_ID" == "$EXPECTED_BUNDLE_ID_PREFIX.dev" && "$team_identifier" != "$EXPECTED_DEV_TEAM_ID" ]]; then
+        echo "ERROR: WhisperKey Dev must be signed with team $EXPECTED_DEV_TEAM_ID, not '${team_identifier:-none}'. The Keychain remembers an app with no team by its code hash, which changes on every build, so every install would ask for Keychain access again." >&2
         exit 1
     fi
 }

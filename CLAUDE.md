@@ -23,9 +23,12 @@ same check the pull request gets.
    green on CI and red on a laptop. `scripts/verify.sh` sets
    `WHISPERKEY_SKIP_APPLICATIONS_INSTALL=1` for the same reason. **CI therefore
    never exercises the install path**; only a hand-run scheme does.
-2. **Debug builds need a stable local signing identity** so macOS keeps their
-   TCC permissions across rebuilds. Create it once with
-   `scripts/ensure-local-signing-cert.sh`.
+2. **Debug builds are signed with the "Apple Development" identity of team
+   `UGLRY9ACZ6`**, so macOS keeps their Keychain access and TCC permissions across
+   rebuilds. The Keychain remembers an app by its team ID; an app signed without a
+   team is remembered by its code hash, which changes on every build, so each new
+   build would ask for the API key again. `scripts/install-app.sh` refuses a dev
+   app signed by any other team.
 3. **The dev app and the release app are different identities to macOS** —
    `yung-sun-xxi.WhisperKey.dev` and `yung-sun-xxi.WhisperKey`. Microphone,
    Accessibility and the rest are granted separately for each, so a permission
