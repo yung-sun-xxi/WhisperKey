@@ -10,7 +10,9 @@
 # installed app's designated requirement.
 #
 # The destination defaults to /Applications. Only then is a running
-# /Applications/WhisperKey.app quit before the copy and relaunched after it.
+# /Applications/WhisperKey.app quit before the copy and relaunched after it, and
+# a running WhisperKey Dev (any "WhisperKey Dev.app", installed or run from
+# DerivedData) quit and not relaunched, so the two never compete for the hotkey.
 # WHISPERKEY_INSTALL_DESTINATION_DIR=<dir> installs somewhere else and never
 # quits, kills or launches any WhisperKey process; it exists for testing.
 #
@@ -128,17 +130,24 @@ verify_release_signature() {
     echo "Signed by: $authority"
 }
 
-# PIDs of processes whose executable lives inside the installed bundle. Matching
-# the path, not the process name, leaves WhisperKey Dev and any other copy alone.
-running_app_pids() {
+# PIDs of processes whose executable path matches the glob "$1". Matching the
+# path, not the process name, tells the release app from WhisperKey Dev and from
+# copies elsewhere. "$1" is matched as a glob, so a literal path in it must not
+# contain glob characters; both callers below build theirs from fixed paths.
+executable_pids() {
+    local pattern="$1"
     local pid
     local command_path
     while read -r pid command_path; do
-        if [[ "$command_path" == "$DESTINATION_APP/Contents/MacOS/"* ]]; then
+        # shellcheck disable=SC2053 # $pattern is a glob
+        if [[ "$command_path" == $pattern ]]; then
             echo "$pid"
         fi
     done < <(ps -axo pid=,comm=)
 }
+
+RELEASE_EXECUTABLE_GLOB="$DESTINATION_APP/Contents/MacOS/*"
+DEV_EXECUTABLE_GLOB="*/WhisperKey Dev.app/Contents/MacOS/*"
 
 wait_for_exit() {
     local attempts="$1"
@@ -159,26 +168,35 @@ wait_for_exit() {
     return 1
 }
 
-quit_running_app() {
+# quit_app <label> <executable glob>: TERM every matching process, then KILL
+# whatever is still alive after 5 s.
+quit_app() {
+    local label="$1"
     local pids
-    pids=$(running_app_pids)
+    local pid
+    pids=$(executable_pids "$2")
     if [[ -z "$pids" ]]; then
-        echo "==> $DESTINATION_APP is not running."
+        echo "==> $label is not running."
         return 0
     fi
     # shellcheck disable=SC2086 # one PID per word
     set -- $pids
-    echo "==> Quitting $DESTINATION_APP (PID $*)..."
+    echo "==> Quitting $label:"
+    for pid in "$@"; do
+        echo "    PID $pid $(ps -o comm= -p "$pid" 2>/dev/null || true)"
+    done
     kill -TERM "$@" 2>/dev/null || true
     if wait_for_exit 50 "$@"; then
+        echo "==> Quit $label (PID $*)."
         return 0
     fi
-    echo "WARNING: WhisperKey did not quit within 5 s; killing it." >&2
+    echo "WARNING: $label did not quit within 5 s; killing it." >&2
     kill -KILL "$@" 2>/dev/null || true
     if ! wait_for_exit 20 "$@"; then
-        echo "ERROR: Could not stop the running WhisperKey (PID $*)." >&2
+        echo "ERROR: Could not stop the running $label (PID $*)." >&2
         exit 1
     fi
+    echo "==> Killed $label (PID $*)."
 }
 
 echo "==> Downloading $DMG_NAME from release v$VERSION..."
@@ -203,7 +221,9 @@ echo "==> Verifying the release signature..."
 verify_release_signature "$SOURCE_APP"
 
 if [[ "$MANAGES_LIVE_APP" == "1" ]]; then
-    quit_running_app
+    quit_app "$DESTINATION_APP" "$RELEASE_EXECUTABLE_GLOB"
+    # Quit, never relaunched: it would compete with the release for the hotkey.
+    quit_app "WhisperKey Dev" "$DEV_EXECUTABLE_GLOB"
 else
     echo "==> Destination is $DESTINATION_DIR, not $LIVE_DESTINATION_DIR: no WhisperKey process will be quit or launched."
 fi
