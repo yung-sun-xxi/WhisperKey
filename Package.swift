@@ -39,6 +39,9 @@ let package = Package(
         .target(name: "ErrorToast", dependencies: ["TranscriptionProvider"]),
         .target(name: "LoginItem"),
         .target(name: "SingleInstance"),
+        // Marks the Debug build (WhisperKey Dev) with a D. The whole module is compiled
+        // only under DEBUG, so a Release build carries none of it (#149).
+        .target(name: "DevBuildMarker"),
         // Appends through the real stores from a separate process, so a test can run two
         // copies at once and prove the file lock holds across processes (#140).
         .executableTarget(
@@ -62,6 +65,7 @@ let package = Package(
                 "ErrorToast",
                 "LoginItem",
                 "SingleInstance",
+                "DevBuildMarker",
             ]
         ),
 
@@ -80,5 +84,6 @@ let package = Package(
         .testTarget(name: "ErrorToastTests", dependencies: ["ErrorToast", "TranscriptionProvider"]),
         .testTarget(name: "LoginItemTests", dependencies: ["LoginItem"]),
         .testTarget(name: "SingleInstanceTests", dependencies: ["SingleInstance"]),
+        .testTarget(name: "DevBuildMarkerTests", dependencies: ["DevBuildMarker"]),
     ]
 )

@@ -2,6 +2,9 @@ import AppKit
 import Combine
 import os
 import SwiftUI
+#if DEBUG
+import DevBuildMarker
+#endif
 
 enum MenuBarLayout {
     static let popoverWidth: CGFloat = 306
@@ -320,7 +323,12 @@ final class MenuBarController: NSObject {
             image.size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
         }
         image.isTemplate = true
+        #if DEBUG
+        // The dev app carries a D beside the icon, drawn into the image itself (#149).
+        return DevBuildMarker.markedMenuBarImage(image)
+        #else
         return image
+        #endif
     }
 
     /// Puts the spinner into the slot the button reserved for the invisible title,
