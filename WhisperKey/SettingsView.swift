@@ -1441,8 +1441,7 @@ private struct GeneralSettingsPane: View {
         HistoryCapChange.evaluate(
             currentLimit: settings.historyMaxEntries,
             proposedLimit: historySizeDraft,
-            fileEntryCount: coordinator.history.fileEntryCount,
-            otherAppName: HistorySizeConfirmation.installedCounterpartName()
+            fileEntryCount: coordinator.history.fileEntryCount
         )
     }
 
@@ -1495,15 +1494,6 @@ enum HistorySizeConfirmation {
                 completion(response == .alertFirstButtonReturn)
             }
         }
-    }
-
-    /// The other WhisperKey app's name when it is installed on this Mac, since the two
-    /// share the history file.
-    static func installedCounterpartName() -> String? {
-        guard let counterpart = HistorySharingApp.counterpart(ofBundleIdentifier: Bundle.main.bundleIdentifier),
-              NSWorkspace.shared.urlForApplication(withBundleIdentifier: counterpart.bundleIdentifier) != nil
-        else { return nil }
-        return counterpart.name
     }
 }
 
