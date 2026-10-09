@@ -75,23 +75,24 @@ private struct UsageBreakdownView: View {
     @ObservedObject var usageStats: UsageStatsStore
     @ObservedObject var settings: SettingsStore
 
-    private static let contentWidth: CGFloat = 400
+    /// Wide enough for the longest "Provider · model" name next to the three figures,
+    /// so names are never truncated and the window does not resize between periods.
+    private static let contentWidth: CGFloat = 540
+    private static let figureColumnWidth: CGFloat = 76
 
     var body: some View {
         let range = settings.usageStatsRange
         let rows = usageStats.breakdown(range: range)
 
-        VStack(alignment: .leading, spacing: 10) {
-            Text(range.displayName)
-                .font(PopoverTypography.sectionTitle)
-                .foregroundColor(PopoverTypography.secondaryColor)
+        VStack(alignment: .leading, spacing: 14) {
+            HeaderPeriodPicker(selection: $settings.usageStatsRange)
 
             if rows.isEmpty {
                 Text("No usage in this period.")
                     .font(PopoverTypography.base)
                     .foregroundColor(PopoverTypography.secondaryColor)
-                    .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
-                    .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 7))
+                    .frame(maxWidth: .infinity, minHeight: 72, alignment: .center)
+                    .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 8))
             } else {
                 table(rows: rows, total: usageStats.totalSummary(range: range))
             }
@@ -103,15 +104,17 @@ private struct UsageBreakdownView: View {
     }
 
     private func table(rows: [UsageBreakdownRow], total: UsageSummary) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 0) {
             GridRow {
                 Text("Model")
-                Text("words").gridColumnAlignment(.trailing)
-                Text("audio").gridColumnAlignment(.trailing)
-                Text("cost").gridColumnAlignment(.trailing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                figureHeader("Words")
+                figureHeader("Audio")
+                figureHeader("Cost")
             }
             .font(.system(size: 11, weight: .medium))
-            .foregroundColor(PopoverTypography.primaryColor.opacity(0.62))
+            .foregroundColor(PopoverTypography.secondaryColor)
+            .padding(.bottom, 7)
 
             Divider()
 
@@ -119,9 +122,13 @@ private struct UsageBreakdownView: View {
                 GridRow {
                     Text(Self.modelName(for: row.key))
                         .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(Self.modelName(for: row.key))
-                    metrics(for: row.summary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    figures(for: row.summary)
+                }
+                .padding(.vertical, 7)
+
+                if row.id != rows.last?.id {
+                    Divider().opacity(0.5)
                 }
             }
 
@@ -129,22 +136,34 @@ private struct UsageBreakdownView: View {
 
             GridRow {
                 Text("Total")
-                metrics(for: total)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                figures(for: total)
             }
             .font(PopoverTypography.strongSectionTitle)
+            .padding(.top, 8)
         }
-        .padding(10)
-        .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 7))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func figureHeader(_ title: String) -> some View {
+        Text(title)
+            .frame(width: Self.figureColumnWidth, alignment: .trailing)
     }
 
     @ViewBuilder
-    private func metrics(for summary: UsageSummary) -> some View {
-        Text(UsageLineFormatter.wordsLabel(summary.wordCount))
+    private func figures(for summary: UsageSummary) -> some View {
+        figure(UsageLineFormatter.wordsLabel(summary.wordCount))
+        figure(UsageLineFormatter.compactAudioDurationLabel(summary.audioDurationSeconds))
+        figure(Self.costText(for: summary))
+    }
+
+    private func figure(_ text: String) -> some View {
+        Text(text)
             .monospacedDigit()
-        Text(UsageLineFormatter.compactAudioDurationLabel(summary.audioDurationSeconds))
-            .monospacedDigit()
-        Text(Self.costText(for: summary))
-            .monospacedDigit()
+            .lineLimit(1)
+            .frame(width: Self.figureColumnWidth, alignment: .trailing)
     }
 
     private static func modelName(for key: ProviderModelKey) -> String {

@@ -400,10 +400,7 @@ private struct CommandCenterHeader: View {
         VStack(alignment: .leading, spacing: 10) {
             headerRow
 
-            HStack(spacing: 6) {
-                UsageSummaryRow(summary: summary)
-                usageBreakdownButton
-            }
+            usageSummaryButton
 
             HeaderPeriodPicker(selection: $settings.usageStatsRange)
 
@@ -469,18 +466,15 @@ private struct CommandCenterHeader: View {
         usageStats.totalSummary(range: settings.usageStatsRange)
     }
 
-    private var usageBreakdownButton: some View {
+    /// The whole summary bar opens the per-model breakdown; a chevron inside it says so.
+    private var usageSummaryButton: some View {
         Button {
             UsageBreakdownWindowController.show(usageStats: usageStats, settings: settings)
         } label: {
-            Image(systemName: "list.bullet")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(PopoverTypography.secondaryColor)
-                .frame(width: 16, height: 41)
-                .contentShape(Rectangle())
+            UsageSummaryRow(summary: summary, showsDisclosure: true)
+                .contentShape(RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
-        .help("Usage by model")
         .accessibilityLabel("Usage by model")
     }
 
@@ -540,6 +534,7 @@ private struct CancelStatusIcon: View {
 
 private struct UsageSummaryRow: View {
     let summary: UsageSummary
+    var showsDisclosure = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -548,12 +543,20 @@ private struct UsageSummaryRow: View {
             UsageMetricColumn(value: UsageLineFormatter.compactAudioDurationLabel(summary.audioDurationSeconds), label: "audio")
             HeaderVerticalDivider()
             UsageMetricColumn(value: costText ?? "-", label: nil)
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(PopoverTypography.secondaryColor)
+                    .padding(.trailing, 9)
+            }
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 7))
-        .help(UsageLineFormatter.line(from: summary))
+        .help(showsDisclosure
+            ? "\(UsageLineFormatter.line(from: summary)). Click for usage by model."
+            : UsageLineFormatter.line(from: summary))
     }
 
     private var costText: String? {
@@ -586,7 +589,7 @@ private struct UsageMetricColumn: View {
     }
 }
 
-private struct HeaderPeriodPicker: View {
+struct HeaderPeriodPicker: View {
     @Binding var selection: UsageStatsRange
 
     var body: some View {
