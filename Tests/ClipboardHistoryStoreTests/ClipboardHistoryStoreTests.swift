@@ -282,7 +282,9 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertEqual(ClipboardHistoryStore(url: url).entries.map(\.isConcealed), [false])
     }
 
-    func testLoadedEntriesBeyondTheCapAreTrimmedOnInit() throws {
+    /// The file is shared with the other app, which may keep a bigger cap (#140): opening
+    /// it with a small cap shows the newest entries and leaves the file alone.
+    func testLoadedEntriesBeyondTheCapAreHiddenNotTrimmed() throws {
         let url = makeURL()
         let seed = ClipboardHistoryStore(url: url, maxEntries: 10)
         for i in 1...6 {
@@ -291,7 +293,7 @@ final class ClipboardHistoryStoreTests: XCTestCase {
 
         let capped = ClipboardHistoryStore(url: url, maxEntries: 2)
         XCTAssertEqual(capped.entries.map(\.text), ["entry-6", "entry-5"])
-        XCTAssertEqual(ClipboardHistoryStore(url: url, maxEntries: 10).entries.count, 2)
+        XCTAssertEqual(ClipboardHistoryStore(url: url, maxEntries: 10).entries.count, 6)
     }
 
     // MARK: - Preview

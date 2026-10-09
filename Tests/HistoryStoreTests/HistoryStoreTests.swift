@@ -257,9 +257,11 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertTrue(store.entries.isEmpty)
     }
 
-    // MARK: - Initial load applies max
+    // MARK: - Initial load shows max, does not trim
 
-    func testLoadingTrimsToConfiguredMax() throws {
+    /// The file is shared with the other app, which may keep a bigger cap (#140): loading
+    /// shows the newest `maxEntries` and leaves the file alone.
+    func testLoadingShowsConfiguredMaxWithoutTrimmingTheFile() throws {
         let url = makeURL()
         let pre = HistoryStore(url: url, maxEntries: 100)
         for i in 1...20 {
@@ -271,8 +273,8 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(reduced.entries.count, 5)
         XCTAssertEqual(reduced.entries.first?.text, "p-20")
 
-        let reloaded = HistoryStore(url: url, maxEntries: 5)
-        XCTAssertEqual(reloaded.entries.count, 5, "trim must have been written back to disk")
+        let reloaded = HistoryStore(url: url, maxEntries: 100)
+        XCTAssertEqual(reloaded.entries.count, 20, "loading must not trim the file")
     }
 
     // MARK: - Clear

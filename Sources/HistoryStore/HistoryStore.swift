@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SharedJSONFile
 
 public enum HistoryEntryStatus: String, Codable, Equatable, Sendable {
     case recognized
@@ -295,29 +296,51 @@ public struct HistoryUsageSummary: Equatable, Sendable {
     }
 }
 
+/// The transcription journal, in `history.json` and its `HistoryAudio` folder.
+///
+/// The file is shared with the other build of the app (release and dev), which may run at
+/// the same time with a different cap (#140). So:
+/// - every change reads the file as it is now and writes it back under a lock
+///   (`SharedJSONFile`), and the directory is watched for the other app's writes;
+/// - `entries` shows only the newest `maxEntries` of the file, but an ordinary write never
+///   shrinks the file below the size it had, so a small cap here does not cut a long
+///   history kept by the other app. Only lowering the cap with `setMaxEntries` trims it.
 public final class HistoryStore: ObservableObject, @unchecked Sendable {
 
     public static let defaultMaxEntries = 30
     public static let allowedMaxRange: ClosedRange<Int> = 0...1000
 
+    /// Newest first: the first `maxEntries` entries of the file.
     @Published public private(set) var entries: [HistoryEntry] = []
     public private(set) var maxEntries: Int
 
     private let url: URL
-    private let lock = NSLock()
+    private let file: SharedJSONFile<HistoryEntry>
+    private var watcher: DirectoryWatcher?
 
     public init(url: URL? = nil, maxEntries: Int = HistoryStore.defaultMaxEntries) {
         let resolvedURL = url ?? Self.defaultURL()
         self.url = resolvedURL
         self.maxEntries = Self.clamp(maxEntries)
+        self.file = SharedJSONFile(url: resolvedURL, encoder: Self.makeEncoder(), decoder: Self.makeDecoder())
 
-        let loaded = (try? Self.load(from: resolvedURL)) ?? []
-        let trimmed = Self.applyMax(entries: loaded, max: self.maxEntries)
-        self.entries = trimmed
-        if trimmed.count != loaded.count {
-            try? Self.persist(entries: trimmed, to: resolvedURL)
+        try? FileManager.default.createDirectory(at: file.directory, withIntermediateDirectories: true)
+        // Watch before the first read, so a write landing between the two is not missed.
+        self.watcher = DirectoryWatcher(directory: file.directory) { [weak self] in
+            self?.reloadFromDisk()
         }
-        removeOrphanedAudio()
+        // Loading does not trim the file. The orphan sweep runs under the lock and counts
+        // as referenced every entry in the file, including the ones beyond this cap that
+        // the other app still shows.
+        _ = try? file.update { contents in self.removeOrphanedAudio(referencedBy: contents) }
+        refreshDisplay()
+    }
+
+    /// Picks up another process's writes. The directory watcher calls this on the main
+    /// queue; `entries` is republished only when what it shows actually changed.
+    public func reloadFromDisk() {
+        guard (try? file.reloadIfChanged()) != nil else { return }
+        refreshDisplay()
     }
 
     @discardableResult
@@ -350,8 +373,7 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
             copiedToClipboard: copiedToClipboard,
             autoPasted: autoPasted
         )
-        let updated = Self.applyMax(entries: [entry] + entries, max: maxEntries)
-        applyAndPersist(updated)
+        mutate { contents in self.insert(entry, into: &contents) }
         return entry
     }
 
@@ -386,15 +408,16 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
             audioFileName: fileName
         )
 
-        do {
-            try writeAudio(audioData, fileName: fileName)
-        } catch {
-            return nil
+        // The audio is written under the same lock as the entry, so the other app's orphan
+        // sweep never sees the file without the entry that references it.
+        var audioWritten = false
+        let written: Void? = mutate { contents in
+            try self.writeAudio(audioData, fileName: fileName)
+            audioWritten = true
+            self.insert(entry, into: &contents)
         }
-
-        let updated = Self.applyMax(entries: [entry] + entries, max: maxEntries)
-        guard applyAndPersist(updated) else {
-            removeAudio(fileName: fileName)
+        guard written != nil else {
+            if audioWritten { removeAudio(fileName: fileName) }
             return nil
         }
         return entry
@@ -421,8 +444,7 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
             model: model,
             status: .captureFailed
         )
-        let updated = Self.applyMax(entries: [entry] + entries, max: maxEntries)
-        guard applyAndPersist(updated) else { return nil }
+        guard mutate({ contents in self.insert(entry, into: &contents) }) != nil else { return nil }
         return entry
     }
 
@@ -439,71 +461,59 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         copiedToClipboard: Bool?,
         autoPasted: Bool?
     ) -> HistoryEntry? {
-        guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
-        let existing = entries[index]
-        let updatedEntry = HistoryEntry(
-            id: existing.id,
-            text: text,
-            createdAt: existing.createdAt,
-            providerID: providerID,
-            language: language,
-            audioDurationSeconds: existing.audioDurationSeconds,
-            wordCount: HistoryEntry.countWords(in: text),
-            model: model,
-            estimatedPriceAtTime: estimatedPriceAtTime,
-            currency: currency,
-            destinationUsed: destinationUsed,
-            copiedToClipboard: copiedToClipboard,
-            autoPasted: autoPasted,
-            status: .recognized
-        )
-        var updated = entries
-        updated[index] = updatedEntry
-        guard applyAndPersist(updated) else { return nil }
-        return updatedEntry
+        replace(id: id) { existing in
+            HistoryEntry(
+                id: existing.id,
+                text: text,
+                createdAt: existing.createdAt,
+                providerID: providerID,
+                language: language,
+                audioDurationSeconds: existing.audioDurationSeconds,
+                wordCount: HistoryEntry.countWords(in: text),
+                model: model,
+                estimatedPriceAtTime: estimatedPriceAtTime,
+                currency: currency,
+                destinationUsed: destinationUsed,
+                copiedToClipboard: copiedToClipboard,
+                autoPasted: autoPasted,
+                status: .recognized
+            )
+        }
     }
 
     @discardableResult
     public func markNoSpeechDetected(id: UUID) -> HistoryEntry? {
-        guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
-        let existing = entries[index]
-        let updatedEntry = HistoryEntry(
-            id: existing.id,
-            text: "",
-            createdAt: existing.createdAt,
-            providerID: existing.providerID,
-            language: existing.language,
-            audioDurationSeconds: existing.audioDurationSeconds,
-            wordCount: 0,
-            model: existing.model,
-            status: .noSpeechDetected,
-            audioFileName: existing.audioFileName
-        )
-        var updated = entries
-        updated[index] = updatedEntry
-        guard applyAndPersist(updated) else { return nil }
-        return updatedEntry
+        replace(id: id) { existing in
+            HistoryEntry(
+                id: existing.id,
+                text: "",
+                createdAt: existing.createdAt,
+                providerID: existing.providerID,
+                language: existing.language,
+                audioDurationSeconds: existing.audioDurationSeconds,
+                wordCount: 0,
+                model: existing.model,
+                status: .noSpeechDetected,
+                audioFileName: existing.audioFileName
+            )
+        }
     }
 
     @discardableResult
     public func markSilentAudio(id: UUID) -> HistoryEntry? {
-        guard let index = entries.firstIndex(where: { $0.id == id }) else { return nil }
-        let existing = entries[index]
-        let updatedEntry = HistoryEntry(
-            id: existing.id,
-            text: "",
-            createdAt: existing.createdAt,
-            providerID: existing.providerID,
-            language: existing.language,
-            audioDurationSeconds: existing.audioDurationSeconds,
-            wordCount: 0,
-            model: existing.model,
-            status: .silentAudio
-        )
-        var updated = entries
-        updated[index] = updatedEntry
-        guard applyAndPersist(updated) else { return nil }
-        return updatedEntry
+        replace(id: id) { existing in
+            HistoryEntry(
+                id: existing.id,
+                text: "",
+                createdAt: existing.createdAt,
+                providerID: existing.providerID,
+                language: existing.language,
+                audioDurationSeconds: existing.audioDurationSeconds,
+                wordCount: 0,
+                model: existing.model,
+                status: .silentAudio
+            )
+        }
     }
 
     public func audioData(for entry: HistoryEntry) throws -> Data {
@@ -520,26 +530,39 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
 
     @discardableResult
     public func remove(id: UUID) -> Bool {
-        guard entries.contains(where: { $0.id == id }) else { return false }
-        return applyAndPersist(entries.filter { $0.id != id })
+        let removed = mutate { contents -> Bool in
+            let before = contents.count
+            contents.removeAll { $0.id == id }
+            return contents.count != before
+        }
+        return removed ?? false
     }
 
     public func usageSummaryForToday(now: Date = Date(), calendar: Calendar = .current) -> HistoryUsageSummary {
         HistoryUsageSummary.today(from: entries, now: now, calendar: calendar)
     }
 
+    /// Removes every entry this instance has seen in the file, beyond its own cap too, and
+    /// nothing the other app added since.
     public func clear() {
-        guard !entries.isEmpty else { return }
-        _ = applyAndPersist([])
+        let seen = Set(file.contents.map(\.id))
+        guard !seen.isEmpty else { return }
+        mutate { contents in contents.removeAll { seen.contains($0.id) } }
     }
 
+    /// Raising the cap only shows more of the file. Lowering it is the one operation that
+    /// trims the shared file, to the new cap, and deletes the trimmed entries' audio.
     public func setMaxEntries(_ value: Int) {
         let clamped = Self.clamp(value)
         guard clamped != maxEntries else { return }
+        let lowered = clamped < maxEntries
         maxEntries = clamped
-        let trimmed = Self.applyMax(entries: entries, max: clamped)
-        if trimmed.count != entries.count {
-            _ = applyAndPersist(trimmed)
+        if lowered {
+            mutate { contents in
+                if contents.count > clamped { contents = Array(contents.prefix(clamped)) }
+            }
+        } else {
+            refreshDisplay()
         }
     }
 
@@ -548,18 +571,52 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
 
     // MARK: - Internals
 
+    /// Puts `entry` on top and drops the oldest down to the larger of this cap and the
+    /// size the file had, so an ordinary write never shrinks the file.
+    private func insert(_ entry: HistoryEntry, into contents: inout [HistoryEntry]) {
+        let previousCount = contents.count
+        contents.insert(entry, at: 0)
+        let keep = max(maxEntries, previousCount)
+        if contents.count > keep {
+            contents = Array(contents.prefix(keep))
+        }
+    }
+
+    private func replace(id: UUID, with make: (HistoryEntry) -> HistoryEntry) -> HistoryEntry? {
+        let replaced = mutate { contents -> HistoryEntry? in
+            guard let index = contents.firstIndex(where: { $0.id == id }) else { return nil }
+            let updated = make(contents[index])
+            contents[index] = updated
+            return updated
+        }
+        return replaced ?? nil
+    }
+
+    /// Applies `change` to the file as it is now, under the lock, then deletes the audio of
+    /// whatever the change dropped and refreshes the list. `nil` means nothing was written.
     @discardableResult
-    private func applyAndPersist(_ updated: [HistoryEntry]) -> Bool {
+    private func mutate<Result>(_ change: (inout [HistoryEntry]) throws -> Result) -> Result? {
+        var droppedAudio: Set<String> = []
+        defer { refreshDisplay() }
         do {
-            try Self.persist(entries: updated, to: url)
-            let retainedAudio = Set(updated.compactMap(\.audioFileName))
-            let removedAudio = entries.compactMap(\.audioFileName).filter { !retainedAudio.contains($0) }
-            entries = updated
-            removedAudio.forEach(removeAudio(fileName:))
-            return true
+            let result = try file.update { contents -> Result in
+                let audioBefore = Set(contents.compactMap(\.audioFileName))
+                let result = try change(&contents)
+                droppedAudio = audioBefore.subtracting(contents.compactMap(\.audioFileName))
+                return result
+            }
+            droppedAudio.forEach(removeAudio(fileName:))
+            return result
         } catch {
             // Persistence failure is non-fatal — surface via the UI in a future toast.
-            return false
+            return nil
+        }
+    }
+
+    private func refreshDisplay() {
+        let shown = maxEntries > 0 ? Array(file.contents.prefix(maxEntries)) : []
+        if shown != entries {
+            entries = shown
         }
     }
 
@@ -576,7 +633,8 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         try? FileManager.default.removeItem(at: audioDirectory.appendingPathComponent(fileName))
     }
 
-    private func removeOrphanedAudio() {
+    /// Must run under the file lock, with `entries` being the whole file.
+    private func removeOrphanedAudio(referencedBy entries: [HistoryEntry]) {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: audioDirectory,
             includingPropertiesForKeys: nil,
@@ -590,12 +648,6 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
 
     static func clamp(_ value: Int) -> Int {
         min(max(value, allowedMaxRange.lowerBound), allowedMaxRange.upperBound)
-    }
-
-    static func applyMax(entries: [HistoryEntry], max: Int) -> [HistoryEntry] {
-        if max <= 0 { return [] }
-        if entries.count <= max { return entries }
-        return Array(entries.prefix(max))
     }
 
     static func defaultURL() -> URL {
@@ -615,25 +667,5 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }
-
-    static func load(from url: URL) throws -> [HistoryEntry] {
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        let data = try Data(contentsOf: url)
-        guard !data.isEmpty else { return [] }
-        return try makeDecoder().decode([HistoryEntry].self, from: data)
-    }
-
-    static func persist(entries: [HistoryEntry], to url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try makeEncoder().encode(entries)
-        let tmp = url.deletingLastPathComponent().appendingPathComponent(".history-\(UUID().uuidString).json.tmp")
-        try data.write(to: tmp, options: [.atomic])
-        defer { try? FileManager.default.removeItem(at: tmp) }
-        if FileManager.default.fileExists(atPath: url.path) {
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
-        } else {
-            try FileManager.default.moveItem(at: tmp, to: url)
-        }
     }
 }
