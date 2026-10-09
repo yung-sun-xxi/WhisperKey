@@ -544,10 +544,12 @@ private struct UsageSummaryRow: View {
             HeaderVerticalDivider()
             UsageMetricColumn(value: costText ?? "-", label: nil)
             if showsDisclosure {
+                // Its own segment, so the three figures keep equal widths.
+                HeaderVerticalDivider()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(PopoverTypography.secondaryColor)
-                    .padding(.trailing, 9)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(PopoverTypography.primaryColor.opacity(0.62))
+                    .frame(width: 26)
             }
         }
         .padding(.vertical, 5)
