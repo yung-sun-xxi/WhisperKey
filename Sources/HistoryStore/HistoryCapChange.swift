@@ -61,25 +61,12 @@ public struct HistoryCapChangePrompt: Equatable, Sendable {
         return deletedCount == 1 ? "Delete the oldest entry?" : "Delete \(deletedCount) oldest entries?"
     }
 
+    /// Short on purpose: the title already says how many entries go.
     public var informativeText: String {
-        let holds = "History holds \(fileEntryCount) \(fileEntryCount == 1 ? "entry" : "entries")"
-        let keeps: String
-        switch newLimit {
-        case 0: keeps = "a limit of 0 keeps none"
-        case 1: keeps = "a limit of 1 keeps the newest entry"
-        default: keeps = "a limit of \(newLimit) keeps the newest \(newLimit)"
-        }
-        let deleted: String
-        switch (newLimit == 0, deletedCount == 1) {
-        case (true, true): deleted = "The entry and its audio will be deleted."
-        case (true, false): deleted = "All \(deletedCount) entries and their audio will be deleted."
-        case (false, true): deleted = "The oldest entry and its audio will be deleted."
-        case (false, false): deleted = "The \(deletedCount) oldest entries and their audio will be deleted."
-        }
-        var text = "\(holds); \(keeps). \(deleted) This can't be undone."
+        let one = deletedCount == 1
+        var text = "\(one ? "Its" : "Their") audio is deleted too. This can't be undone."
         if let otherAppName {
-            let disappear = deletedCount == 1 ? "it disappears" : "they disappear"
-            text += " \(otherAppName) shares this history, so \(disappear) there too."
+            text += " \(otherAppName) loses \(one ? "it" : "them") too."
         }
         return text
     }

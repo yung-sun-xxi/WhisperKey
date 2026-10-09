@@ -78,7 +78,7 @@ final class HistoryCapChangeTests: XCTestCase {
         XCTAssertEqual(prompt.title, "Delete 5 oldest entries?")
         XCTAssertEqual(
             prompt.informativeText,
-            "History holds 30 entries; a limit of 25 keeps the newest 25. The 5 oldest entries and their audio will be deleted. This can't be undone."
+            "Their audio is deleted too. This can't be undone."
         )
         XCTAssertEqual(prompt.confirmButtonTitle, "Delete 5 Entries")
         XCTAssertEqual(HistoryCapChangePrompt.cancelButtonTitle, "Cancel")
@@ -89,17 +89,15 @@ final class HistoryCapChangeTests: XCTestCase {
         XCTAssertEqual(prompt.title, "Delete the oldest entry?")
         XCTAssertEqual(
             prompt.informativeText,
-            "History holds 30 entries; a limit of 29 keeps the newest 29. The oldest entry and its audio will be deleted. This can't be undone."
+            "Its audio is deleted too. This can't be undone."
         )
         XCTAssertEqual(prompt.confirmButtonTitle, "Delete 1 Entry")
     }
 
     func testWordingForALimitOfOne() {
         let prompt = HistoryCapChangePrompt(fileEntryCount: 4, newLimit: 1, otherAppName: nil)
-        XCTAssertEqual(
-            prompt.informativeText,
-            "History holds 4 entries; a limit of 1 keeps the newest entry. The 3 oldest entries and their audio will be deleted. This can't be undone."
-        )
+        XCTAssertEqual(prompt.title, "Delete 3 oldest entries?")
+        XCTAssertEqual(prompt.informativeText, "Their audio is deleted too. This can't be undone.")
     }
 
     func testWordingForALimitOfZero() {
@@ -107,7 +105,7 @@ final class HistoryCapChangeTests: XCTestCase {
         XCTAssertEqual(all.title, "Delete all 30 entries?")
         XCTAssertEqual(
             all.informativeText,
-            "History holds 30 entries; a limit of 0 keeps none. All 30 entries and their audio will be deleted. This can't be undone."
+            "Their audio is deleted too. This can't be undone."
         )
         XCTAssertEqual(all.confirmButtonTitle, "Delete 30 Entries")
 
@@ -115,7 +113,7 @@ final class HistoryCapChangeTests: XCTestCase {
         XCTAssertEqual(only.title, "Delete the only entry?")
         XCTAssertEqual(
             only.informativeText,
-            "History holds 1 entry; a limit of 0 keeps none. The entry and its audio will be deleted. This can't be undone."
+            "Its audio is deleted too. This can't be undone."
         )
         XCTAssertEqual(only.confirmButtonTitle, "Delete 1 Entry")
     }
@@ -124,16 +122,16 @@ final class HistoryCapChangeTests: XCTestCase {
         let shared = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 25, otherAppName: "WhisperKey Dev")
         XCTAssertEqual(
             shared.informativeText,
-            "History holds 30 entries; a limit of 25 keeps the newest 25. The 5 oldest entries and their audio will be deleted. This can't be undone. WhisperKey Dev shares this history, so they disappear there too."
+            "Their audio is deleted too. This can't be undone. WhisperKey Dev loses them too."
         )
         let sharedOne = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 29, otherAppName: "WhisperKey")
         XCTAssertTrue(
-            sharedOne.informativeText.hasSuffix(" WhisperKey shares this history, so it disappears there too."),
+            sharedOne.informativeText.hasSuffix(" WhisperKey loses it too."),
             sharedOne.informativeText
         )
 
         let alone = HistoryCapChangePrompt(fileEntryCount: 30, newLimit: 25, otherAppName: nil)
-        XCTAssertFalse(alone.informativeText.contains("shares this history"), alone.informativeText)
+        XCTAssertFalse(alone.informativeText.contains("loses"), alone.informativeText)
     }
 
     func testEvaluateCarriesTheOtherAppIntoThePrompt() {
