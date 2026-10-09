@@ -2,14 +2,21 @@
 # Build and package WhisperKey for distribution.
 #
 # Prerequisites (one-time, see RELEASING.md):
-#   - Default (Developer ID) mode: Developer ID Application certificate,
-#     WHISPERKEY_TEAM_ID, and a notarytool keychain profile.
-#   - Temporary ad-hoc mode: WHISPERKEY_RELEASE_MODE=ad-hoc.
+#   - Default (Developer ID) mode: Developer ID Application certificate and
+#     WHISPERKEY_TEAM_ID. A notarytool keychain profile is used when it works.
+#   - Ad-hoc mode, for when the certificate itself is unavailable:
+#     WHISPERKEY_RELEASE_MODE=ad-hoc.
 #   - VERSION must be passed as the first argument (e.g. ./scripts/release.sh 1.0.0)
+#
+# Developer ID mode always signs with Developer ID and the hardened runtime,
+# then attempts notarization. A missing or rejected notarytool profile, or a
+# failed submit or staple, is a warning: the build completes signed but not
+# notarized, with an INSTALL.txt in the DMG explaining the one-time approval.
 #
 # Output:
 #   build/export/WhisperKey.app
 #   build/WhisperKey-<VERSION>.dmg
+#   build/notarization.txt  one word: notarized, not-notarized or ad-hoc
 
 set -euo pipefail
 
@@ -54,6 +61,8 @@ ZIP_PATH="$BUILD_DIR/WhisperKey-$VERSION.zip"
 NOTARY_PROFILE="${WHISPERKEY_NOTARY_PROFILE:-WhisperKey-Notary}"
 SIGN_IDENTITY="${WHISPERKEY_SIGN_IDENTITY:-}"
 KEYCHAIN="${WHISPERKEY_KEYCHAIN:-login.keychain-db}"
+NOTARIZE=0
+NOTARIZATION_FILE="$BUILD_DIR/notarization.txt"
 
 if [[ "$RELEASE_MODE" == "developer-id" ]]; then
     TEAM_ID="${WHISPERKEY_TEAM_ID:-}"
@@ -75,12 +84,25 @@ if [[ "$RELEASE_MODE" == "developer-id" ]]; then
     fi
     echo "Using signing identity: $SIGN_IDENTITY"
 
-    # Verify the saved notarytool credential profile exists.
-    if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --keychain "$KEYCHAIN" >/dev/null 2>&1; then
-        echo "ERROR: notarytool profile '$NOTARY_PROFILE' is not stored." >&2
-        echo "Run: xcrun notarytool store-credentials $NOTARY_PROFILE \\" >&2
+    # notarytool takes --keychain only as a path; `security` also accepts a bare
+    # keychain name such as the default login.keychain-db.
+    NOTARY_KEYCHAIN="$KEYCHAIN"
+    if [[ "$NOTARY_KEYCHAIN" != */* ]]; then
+        NOTARY_KEYCHAIN="$HOME/Library/Keychains/$NOTARY_KEYCHAIN"
+    fi
+
+    # Check that the saved notarytool profile exists and Apple accepts it.
+    # Either failure leaves the build signed but not notarized.
+    if NOTARY_CHECK_OUTPUT=$(xcrun notarytool history \
+        --keychain-profile "$NOTARY_PROFILE" \
+        --keychain "$NOTARY_KEYCHAIN" 2>&1); then
+        NOTARIZE=1
+    else
+        NOTARIZE=0
+        echo "WARNING: notarytool profile '$NOTARY_PROFILE' is missing or rejected; the build will be signed with Developer ID but not notarized." >&2
+        echo "notarytool: $(grep -m1 -i 'error' <<<"$NOTARY_CHECK_OUTPUT" || head -1 <<<"$NOTARY_CHECK_OUTPUT")" >&2
+        echo "If the profile is missing, store it with: xcrun notarytool store-credentials $NOTARY_PROFILE \\" >&2
         echo "         --apple-id <APPLE_ID> --team-id $TEAM_ID --password <APP_SPECIFIC_PASSWORD>" >&2
-        exit 1
     fi
 else
     echo "Using temporary ad-hoc release mode; Apple notarization will be skipped."
@@ -107,6 +129,11 @@ cat > "$EXPORT_OPTIONS_PLIST" <<PLIST
 </plist>
 PLIST
 fi
+
+# The scheme's "Install to /Applications" build phase also runs on archive. This
+# script installs the exported app itself at the end (or skips that with
+# WHISPERKEY_SKIP_INSTALL=1), so the archive must never install anything.
+export WHISPERKEY_SKIP_APPLICATIONS_INSTALL=1
 
 echo "==> Archiving Release build..."
 XCODEBUILD_ARGS=(
@@ -155,18 +182,25 @@ echo "==> Verifying app signature..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 codesign --display --verbose=2 "$APP_PATH" 2>&1 | head -10
 
-if [[ "$RELEASE_MODE" == "developer-id" ]]; then
+APP_NOTARIZED=0
+if [[ "$RELEASE_MODE" == "developer-id" && "$NOTARIZE" == "1" ]]; then
     echo "==> Zipping app for notarization..."
     ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 
     echo "==> Submitting app to notarytool (this can take several minutes)..."
-    xcrun notarytool submit "$ZIP_PATH" \
+    if ! xcrun notarytool submit "$ZIP_PATH" \
         --keychain-profile "$NOTARY_PROFILE" \
-        --keychain "$KEYCHAIN" \
-        --wait
-
-    echo "==> Stapling app..."
-    xcrun stapler staple "$APP_PATH"
+        --keychain "$NOTARY_KEYCHAIN" \
+        --wait; then
+        echo "WARNING: App notarization failed; continuing signed with Developer ID, not notarized." >&2
+    else
+        echo "==> Stapling app..."
+        if ! xcrun stapler staple "$APP_PATH"; then
+            echo "WARNING: Stapling the app failed; continuing signed with Developer ID, not notarized." >&2
+        else
+            APP_NOTARIZED=1
+        fi
+    fi
 fi
 
 echo "==> Creating DMG..."
@@ -188,6 +222,21 @@ This build is not notarized by Apple. To open it once:
 
 After that one-time approval, WhisperKey opens normally.
 EOF
+elif [[ "$APP_NOTARIZED" != "1" ]]; then
+    cat > "$DMG_STAGING/INSTALL.txt" <<'EOF'
+WhisperKey release, signed but not notarized
+
+This build is signed with the developer's Developer ID certificate but is
+not notarized by Apple. If you downloaded it in a browser, macOS asks once
+before the first launch:
+
+1. Drag WhisperKey.app to Applications.
+2. Try to open WhisperKey.app.
+3. Open System Settings > Privacy & Security and click Open Anyway.
+4. Confirm Open.
+
+After that one-time approval, WhisperKey opens normally.
+EOF
 fi
 hdiutil create \
     -volname WhisperKey \
@@ -201,21 +250,38 @@ if [[ "$RELEASE_MODE" == "developer-id" ]]; then
     echo "==> Signing DMG..."
     codesign --sign "$SIGN_IDENTITY" --timestamp "$DMG_PATH"
 
-    echo "==> Submitting DMG to notarytool..."
-    xcrun notarytool submit "$DMG_PATH" \
-        --keychain-profile "$NOTARY_PROFILE" \
-        --keychain "$KEYCHAIN" \
-        --wait
+    DMG_NOTARIZED=0
+    if [[ "$APP_NOTARIZED" == "1" ]]; then
+        echo "==> Submitting DMG to notarytool..."
+        if ! xcrun notarytool submit "$DMG_PATH" \
+            --keychain-profile "$NOTARY_PROFILE" \
+            --keychain "$NOTARY_KEYCHAIN" \
+            --wait; then
+            echo "WARNING: DMG notarization failed; the app inside is notarized, the DMG is not." >&2
+        else
+            echo "==> Stapling DMG..."
+            if ! xcrun stapler staple "$DMG_PATH"; then
+                echo "WARNING: Stapling the DMG failed; the app inside is notarized, the DMG is not." >&2
+            else
+                DMG_NOTARIZED=1
+            fi
+        fi
+    fi
 
-    echo "==> Stapling DMG..."
-    xcrun stapler staple "$DMG_PATH"
-
-    echo "==> Final Gatekeeper verification..."
-    spctl --assess --verbose=4 --type install "$DMG_PATH"
-    spctl --assess --verbose=4 --type execute "$APP_PATH"
+    if [[ "$APP_NOTARIZED" == "1" && "$DMG_NOTARIZED" == "1" ]]; then
+        NOTARIZATION_RESULT="notarized"
+        echo "==> Final Gatekeeper verification..."
+        spctl --assess --verbose=4 --type install "$DMG_PATH"
+        spctl --assess --verbose=4 --type execute "$APP_PATH"
+    else
+        NOTARIZATION_RESULT="not-notarized"
+        echo "==> Skipping Gatekeeper assessment: it rejects a Developer ID build that is not notarized."
+    fi
 else
+    NOTARIZATION_RESULT="ad-hoc"
     echo "==> Ad-hoc build verified. Gatekeeper approval is required on each user's Mac."
 fi
+echo "$NOTARIZATION_RESULT" > "$NOTARIZATION_FILE"
 
 if [[ "${WHISPERKEY_SKIP_INSTALL:-0}" == "1" ]]; then
     echo "==> Skipping install to /Applications (WHISPERKEY_SKIP_INSTALL=1)."
@@ -225,11 +291,22 @@ else
 fi
 
 echo
-echo "Done. Artifacts:"
+echo "==> Designated requirement of $APP_PATH:"
+codesign -d -r- "$APP_PATH" 2>&1
+
+case "$NOTARIZATION_RESULT" in
+    notarized) RELEASE_TITLE="WhisperKey v$VERSION" ;;
+    not-notarized) RELEASE_TITLE="WhisperKey v$VERSION (not notarized)" ;;
+    *) RELEASE_TITLE="WhisperKey v$VERSION (temporary ad-hoc build)" ;;
+esac
+
+echo
+echo "Done ($NOTARIZATION_RESULT). Artifacts:"
 echo "  $APP_PATH"
 echo "  $DMG_PATH"
+echo "  $NOTARIZATION_FILE"
 if [[ "${WHISPERKEY_SKIP_INSTALL:-0}" != "1" ]]; then
     echo "  /Applications/WhisperKey.app"
 fi
 echo
-echo "Next: gh release create v$VERSION $DMG_PATH --title \"WhisperKey v$VERSION\" --notes-file <changelog>"
+echo "Next: gh release create v$VERSION $DMG_PATH --title \"$RELEASE_TITLE\" --notes-file <changelog>"
