@@ -127,7 +127,9 @@ scripts/install-release.sh 1.3.1
 The script downloads the release DMG with `gh`, refuses an app that is not
 signed with Developer ID, quits the running `/Applications/WhisperKey.app`,
 replaces it, relaunches it, removes `com.apple.quarantine` from the installed
-bundle if present, and prints the designated requirement. `gh` downloads without
+bundle if present, and prints the designated requirement. It also quits a
+running WhisperKey Dev, wherever its bundle lives, and does not relaunch it, so
+only the release app holds the global hotkey afterwards. `gh` downloads without
 the quarantine attribute, so a signed, unnotarized app launches without a
 Gatekeeper prompt.
 
