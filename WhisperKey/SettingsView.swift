@@ -1465,6 +1465,8 @@ enum HistorySizeConfirmation {
         alert.addButton(withTitle: prompt.confirmButtonTitle)
         alert.addButton(withTitle: HistoryCapChangePrompt.cancelButtonTitle)
         alert.buttons.first?.hasDestructiveAction = true
+        // A solid red fill: the destructive flag alone draws only pale red on glass.
+        alert.buttons.first?.bezelColor = .systemRed
         alert.buttons.first?.keyEquivalent = "\r"
         alert.buttons.dropFirst().first?.keyEquivalent = "\u{1b}"
         return alert
