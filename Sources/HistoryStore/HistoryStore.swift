@@ -566,6 +566,14 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Entries in the shared file right now, including those beyond this cap that the
+    /// other app shows: what lowering the cap would trim. Reads the file first if it
+    /// changed, which also refreshes `entries`.
+    public var fileEntryCount: Int {
+        reloadFromDisk()
+        return file.contents.count
+    }
+
     public var fileURL: URL { url }
     public var audioDirectoryURL: URL { audioDirectory }
 
