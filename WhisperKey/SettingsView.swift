@@ -640,7 +640,7 @@ private struct HeaderOutputToggle: View {
     }
 }
 
-struct HeaderVerticalDivider: View {
+private struct HeaderVerticalDivider: View {
     var body: some View {
         Rectangle()
             .fill(HeaderSurfaceColor.divider)
