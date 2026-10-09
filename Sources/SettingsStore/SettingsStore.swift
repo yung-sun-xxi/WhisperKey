@@ -92,6 +92,13 @@ public final class SettingsStore: ObservableObject {
     private let defaults: UserDefaults
     private let installMarkerDefaults: UserDefaults?
     private var loading = true
+    /// Reads the API keys off the main thread. A Keychain access prompt holds the read
+    /// for as long as the user leaves it unanswered, and the app has to reach the menu
+    /// bar meanwhile.
+    private var apiKeyLoad: Task<Void, Never>?
+    /// Keys the user set or deleted before that read finished. The read's older value
+    /// must not overwrite them.
+    private var editedAPIKeys: Set<TranscriptionProviderID> = []
 
     @Published public var provider: TranscriptionProviderID {
         didSet { if !loading { defaults.set(provider.rawValue, forKey: DefaultsKey.provider) } }
@@ -234,12 +241,14 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
+    /// Empty until the background Keychain read finishes; a key still loading is a
+    /// missing key.
     @Published public var openAIAPIKey: String {
-        didSet { if !loading { persistAPIKey(openAIAPIKey, for: .openai) } }
+        didSet { if !loading { editedAPIKeys.insert(.openai); persistAPIKey(openAIAPIKey, for: .openai) } }
     }
 
     @Published public var groqAPIKey: String {
-        didSet { if !loading { persistAPIKey(groqAPIKey, for: .groq) } }
+        didSet { if !loading { editedAPIKeys.insert(.groq); persistAPIKey(groqAPIKey, for: .groq) } }
     }
 
     public init(keychain: KeychainStorage = KeychainStore(), defaults: UserDefaults = .standard) {
@@ -284,10 +293,15 @@ public final class SettingsStore: ObservableObject {
         let storedEntryCount = (defaults.object(forKey: DefaultsKey.quickPasteEntryCount) as? Int)
             ?? Self.defaultQuickPasteEntryCount
         self.quickPasteEntryCount = Self.clampQuickPasteEntryCount(storedEntryCount)
-        self.openAIAPIKey = Self.loadAPIKey(for: .openai, keychain: keychain)
-        self.groqAPIKey = Self.loadAPIKey(for: .groq, keychain: keychain)
+        self.openAIAPIKey = ""
+        self.groqAPIKey = ""
 
         self.loading = false
+
+        apiKeyLoad = Task { @MainActor [weak self, keychain] in
+            let keys = await Self.readAPIKeys(from: keychain)
+            self?.applyLoadedAPIKeys(keys)
+        }
     }
 
     private static func clampHistoryMax(_ value: Int) -> Int {
@@ -346,7 +360,41 @@ public final class SettingsStore: ObservableObject {
         )
     }
 
-    private static func loadAPIKey(for id: TranscriptionProviderID, keychain: KeychainStorage) -> String {
+    /// Returns once the API keys read at launch have been applied.
+    public func waitForAPIKeys() async {
+        await apiKeyLoad?.value
+    }
+
+    /// Runs the reads on a dispatch queue rather than the cooperative pool, because a
+    /// pending Keychain prompt can hold the calling thread for minutes.
+    nonisolated private static func readAPIKeys(
+        from keychain: KeychainStorage
+    ) async -> [TranscriptionProviderID: String] {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var keys: [TranscriptionProviderID: String] = [:]
+                for id in TranscriptionProviderID.allCases {
+                    keys[id] = loadAPIKey(for: id, keychain: keychain)
+                }
+                continuation.resume(returning: keys)
+            }
+        }
+    }
+
+    private func applyLoadedAPIKeys(_ keys: [TranscriptionProviderID: String]) {
+        loading = true
+        defer { loading = false }
+        for (id, key) in keys where !editedAPIKeys.contains(id) {
+            switch id {
+            case .openai:
+                openAIAPIKey = key
+            case .groq:
+                groqAPIKey = key
+            }
+        }
+    }
+
+    nonisolated private static func loadAPIKey(for id: TranscriptionProviderID, keychain: KeychainStorage) -> String {
         if let value = (try? keychain.read(service: id.keychainService, account: id.keychainAccount)), !value.isEmpty {
             return value
         }
