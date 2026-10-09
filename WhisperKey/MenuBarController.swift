@@ -2,6 +2,9 @@ import AppKit
 import Combine
 import os
 import SwiftUI
+#if DEBUG
+import DevBuildMarker
+#endif
 
 enum MenuBarLayout {
     static let popoverWidth: CGFloat = 306
@@ -291,9 +294,14 @@ final class MenuBarController: NSObject {
             stopBlinkTimer(resetBlink: true)
         }
 
-        // Icon only: a square item, as before. With a title the item takes the
+        // Icon only: a square item, as before, when the icon fits the square. An icon
+        // wider than the bar is tall (the dev build's icon with its D) takes its natural
+        // width instead of being clipped or scaled down. With a title the item takes the
         // button's natural width, title (or the spinner's slot) left of the icon.
-        let length = title.length == 0 ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        let iconFitsSquare = (button.image?.size.width ?? 0) <= NSStatusBar.system.thickness
+        let length = title.length == 0 && iconFitsSquare
+            ? NSStatusItem.squareLength
+            : NSStatusItem.variableLength
         if statusItem.length != length {
             statusItem.length = length
         }
@@ -320,7 +328,12 @@ final class MenuBarController: NSObject {
             image.size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
         }
         image.isTemplate = true
+        #if DEBUG
+        // The dev app carries a D beside the icon, drawn into the image itself (#149).
+        return DevBuildMarker.markedMenuBarImage(image)
+        #else
         return image
+        #endif
     }
 
     /// Puts the spinner into the slot the button reserved for the invisible title,
