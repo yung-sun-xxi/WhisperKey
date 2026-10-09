@@ -23,9 +23,10 @@ final class SettingsStoreTests: XCTestCase {
         super.tearDown()
     }
 
-    func testDefaultsWhenEmpty() {
+    func testDefaultsWhenEmpty() async {
         let keychain = InMemoryKeychain()
         let store = SettingsStore(keychain: keychain, defaults: defaults)
+        await store.waitForAPIKeys()
         XCTAssertEqual(store.provider, .openai)
         XCTAssertEqual(store.openAIModel, .gptTranscribe)
         XCTAssertEqual(store.language, .auto)
@@ -58,7 +59,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.groqModel.rawValue, "whisper-large-v3-turbo")
     }
 
-    func testValuesPersistAcrossInstances() {
+    func testValuesPersistAcrossInstances() async {
         let keychain = InMemoryKeychain()
         let first = SettingsStore(keychain: keychain, defaults: defaults)
         first.openAIModel = .gpt4oMiniTranscribe
@@ -73,6 +74,7 @@ final class SettingsStoreTests: XCTestCase {
         first.openAIAPIKey = "sk-persisted"
 
         let second = SettingsStore(keychain: keychain, defaults: defaults)
+        await second.waitForAPIKeys()
         XCTAssertEqual(second.openAIModel, .gpt4oMiniTranscribe)
         XCTAssertEqual(second.language, .russian)
         XCTAssertEqual(second.triggerKey, .rightShift)
@@ -137,11 +139,12 @@ final class SettingsStoreTests: XCTestCase {
         )
     }
 
-    func testOpenAIAPIKeyUsesOnlyProviderSpecificKeychainEntry() throws {
+    func testOpenAIAPIKeyUsesOnlyProviderSpecificKeychainEntry() async throws {
         let keychain = InMemoryKeychain()
         try keychain.write("sk-legacy", service: "WhisperKey", account: "OPENAI_API_KEY")
 
         let store = SettingsStore(keychain: keychain, defaults: defaults)
+        await store.waitForAPIKeys()
         XCTAssertEqual(store.openAIAPIKey, "")
         XCTAssertNil(
             try keychain.read(
@@ -197,8 +200,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.currentTranscriptionModelID, "gpt-transcribe")
     }
 
-    func testMakeProviderReturnsNilWhenKeyEmpty() {
+    func testMakeProviderReturnsNilWhenKeyEmpty() async {
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        await store.waitForAPIKeys()
         XCTAssertNil(store.makeTranscriptionProvider())
     }
 
@@ -281,8 +285,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(provider.model, .whisperLargeV3)
     }
 
-    func testMakeProviderReturnsNilWhenGroqSelectedWithEmptyKey() {
+    func testMakeProviderReturnsNilWhenGroqSelectedWithEmptyKey() async {
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        await store.waitForAPIKeys()
         store.provider = .groq
         XCTAssertNil(store.makeTranscriptionProvider())
     }
@@ -310,6 +315,49 @@ final class SettingsStoreTests: XCTestCase {
         }
         XCTAssertEqual(provider.apiKey, "sk-x")
         XCTAssertEqual(provider.model, .gpt4oMiniTranscribe)
+    }
+
+    // MARK: - API keys load off the main thread
+
+    /// A pending Keychain prompt blocks the read for as long as the user leaves it
+    /// unanswered. The store must come up anyway, with the keys missing until then.
+    func testInitReturnsWhileTheKeychainReadIsBlockedAndTheKeysArriveAfter() async {
+        let keychain = BlockingKeychain(values: [.openai: "sk-stored", .groq: "gsk-stored"])
+
+        let store = SettingsStore(keychain: keychain, defaults: defaults)
+
+        XCTAssertEqual(keychain.readsTimedOut, 0, "init waited for the blocked read")
+        XCTAssertEqual(keychain.readsOnMainThread, 0, "the keychain was read on the main thread")
+        XCTAssertEqual(store.openAIAPIKey, "", "a key still loading is a missing key")
+        XCTAssertEqual(store.groqAPIKey, "")
+        XCTAssertNil(store.makeTranscriptionProvider())
+
+        keychain.release()
+        await store.waitForAPIKeys()
+
+        XCTAssertEqual(store.openAIAPIKey, "sk-stored")
+        XCTAssertEqual(store.groqAPIKey, "gsk-stored")
+        XCTAssertEqual(keychain.writeCount, 0, "a loaded key is not written back")
+        XCTAssertEqual(keychain.deleteCount, 0)
+        XCTAssertEqual(keychain.readsTimedOut, 0)
+    }
+
+    /// The user types a key while the prompt is still up. When the read finally returns
+    /// the old value, it must not overwrite what the user typed.
+    func testKeyEditedWhileTheKeychainReadIsBlockedSurvivesTheLoad() async {
+        let keychain = BlockingKeychain(values: [.openai: "sk-stored", .groq: "gsk-stored"])
+        let store = SettingsStore(keychain: keychain, defaults: defaults)
+        await fulfillment(of: [keychain.firstReadStarted], timeout: 5)
+
+        store.openAIAPIKey = "sk-typed"
+        store.deleteAPIKey(for: .groq)
+        keychain.release()
+        await store.waitForAPIKeys()
+
+        XCTAssertEqual(store.openAIAPIKey, "sk-typed")
+        XCTAssertEqual(keychain.storedValue(for: .openai), "sk-typed")
+        XCTAssertEqual(store.groqAPIKey, "")
+        XCTAssertNil(keychain.storedValue(for: .groq))
     }
 
     // MARK: - Quick paste
@@ -413,6 +461,81 @@ final class SettingsStoreTests: XCTestCase {
                 visibleEntryCount: 4
             )
         )
+    }
+}
+
+/// A keychain whose reads hold until `release()`, standing in for a Keychain access
+/// prompt nobody has answered yet. A read takes its value when it is called, as the
+/// real query would, and then waits. A read still held after a second gives up and
+/// counts as timed out, so a test that blocks the main thread fails instead of hanging.
+private final class BlockingKeychain: KeychainStorage, @unchecked Sendable {
+    let firstReadStarted: XCTestExpectation
+
+    private let lock = NSLock()
+    private let gate = NSCondition()
+    private var released = false
+    private var storage: [TranscriptionProviderID: String]
+    private var _readsTimedOut = 0
+    private var _readsOnMainThread = 0
+    private var _writeCount = 0
+    private var _deleteCount = 0
+
+    init(values: [TranscriptionProviderID: String]) {
+        storage = values
+        firstReadStarted = XCTestExpectation(description: "keychain read started")
+        firstReadStarted.assertForOverFulfill = false
+    }
+
+    var readsTimedOut: Int { lock.withLock { _readsTimedOut } }
+    var readsOnMainThread: Int { lock.withLock { _readsOnMainThread } }
+    var writeCount: Int { lock.withLock { _writeCount } }
+    var deleteCount: Int { lock.withLock { _deleteCount } }
+
+    func storedValue(for id: TranscriptionProviderID) -> String? {
+        lock.withLock { storage[id] }
+    }
+
+    func release() {
+        gate.lock()
+        released = true
+        gate.broadcast()
+        gate.unlock()
+    }
+
+    func read(service: String, account: String) throws -> String? {
+        let value: String? = lock.withLock {
+            if Thread.isMainThread { _readsOnMainThread += 1 }
+            return Self.id(service: service, account: account).flatMap { storage[$0] }
+        }
+        firstReadStarted.fulfill()
+
+        gate.lock()
+        let deadline = Date().addingTimeInterval(1)
+        while !released, gate.wait(until: deadline) {}
+        let timedOut = !released
+        gate.unlock()
+        if timedOut { lock.withLock { _readsTimedOut += 1 } }
+        return value
+    }
+
+    func write(_ value: String, service: String, account: String) throws {
+        lock.withLock {
+            _writeCount += 1
+            if let id = Self.id(service: service, account: account) { storage[id] = value }
+        }
+    }
+
+    func delete(service: String, account: String) throws {
+        lock.withLock {
+            _deleteCount += 1
+            if let id = Self.id(service: service, account: account) { storage[id] = nil }
+        }
+    }
+
+    private static func id(service: String, account: String) -> TranscriptionProviderID? {
+        TranscriptionProviderID.allCases.first {
+            $0.keychainService == service && $0.keychainAccount == account
+        }
     }
 }
 
