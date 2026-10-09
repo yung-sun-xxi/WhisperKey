@@ -122,6 +122,7 @@ final class MenuBarController: NSObject {
         if closeRelatedWindows {
             SettingsWindowController.hide()
             HistoryFullWindowController.hide()
+            UsageBreakdownWindowController.hide()
         }
         statusItem.button?.state = .off
         Self.log.info("closePopover complete reason=\(reason, privacy: .public) visibleAfter=\(self.panel.isVisible, privacy: .public) isKeyAfter=\(self.panel.isKeyWindow, privacy: .public)")

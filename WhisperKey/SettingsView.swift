@@ -8,7 +8,7 @@ import TranscriptionProvider
 import HistoryStore
 import UsageStatsStore
 
-private enum SettingsWindowLayout {
+enum SettingsWindowLayout {
     static let contentWidth: CGFloat = 460
     static let contentPadding: CGFloat = 18
     static let settingsRowColumnSpacing: CGFloat = 12
@@ -400,7 +400,10 @@ private struct CommandCenterHeader: View {
         VStack(alignment: .leading, spacing: 10) {
             headerRow
 
-            UsageSummaryRow(summary: summary)
+            HStack(spacing: 6) {
+                UsageSummaryRow(summary: summary)
+                usageBreakdownButton
+            }
 
             HeaderPeriodPicker(selection: $settings.usageStatsRange)
 
@@ -461,12 +464,24 @@ private struct CommandCenterHeader: View {
         }
     }
 
+    /// Every provider and model in the period, not just the selected one (#139).
     private var summary: UsageSummary {
-        usageStats.summary(
-            providerID: settings.currentTranscriptionProviderID,
-            modelID: settings.currentTranscriptionModelID,
-            range: settings.usageStatsRange
-        )
+        usageStats.totalSummary(range: settings.usageStatsRange)
+    }
+
+    private var usageBreakdownButton: some View {
+        Button {
+            UsageBreakdownWindowController.show(usageStats: usageStats, settings: settings)
+        } label: {
+            Image(systemName: "list.bullet")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(PopoverTypography.secondaryColor)
+                .frame(width: 16, height: 41)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Usage by model")
+        .accessibilityLabel("Usage by model")
     }
 
     private var cancelStatusButton: some View {
@@ -625,7 +640,7 @@ private struct HeaderOutputToggle: View {
     }
 }
 
-private struct HeaderVerticalDivider: View {
+struct HeaderVerticalDivider: View {
     var body: some View {
         Rectangle()
             .fill(HeaderSurfaceColor.divider)
@@ -633,7 +648,7 @@ private struct HeaderVerticalDivider: View {
     }
 }
 
-private enum HeaderSurfaceColor {
+enum HeaderSurfaceColor {
     static let bar = Color.primary.opacity(0.075)
     static let divider = Color.primary.opacity(0.14)
 }
