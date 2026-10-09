@@ -194,6 +194,150 @@ final class UsageStatsStoreTests: XCTestCase {
         XCTAssertNil(summary.estimatedCost)
     }
 
+    // MARK: - Total across models / per-model breakdown
+
+    private let miniKey = ProviderModelKey(providerID: "openai", modelID: "gpt-4o-mini-transcribe")
+    private let transcribeKey = ProviderModelKey(providerID: "openai", modelID: "gpt-transcribe")
+    private let groqKey = ProviderModelKey(providerID: "groq", modelID: "whisper-large-v3")
+
+    @discardableResult
+    private func record(
+        _ store: UsageStatsStore,
+        _ key: ProviderModelKey,
+        words: Int,
+        seconds: TimeInterval,
+        price: Double?,
+        currency: String?,
+        at createdAt: Date
+    ) -> UsageEntry {
+        store.record(
+            providerID: key.providerID,
+            modelID: key.modelID,
+            wordCount: words,
+            audioDurationSeconds: seconds,
+            estimatedPriceAtTime: price,
+            currency: currency,
+            now: createdAt
+        )
+    }
+
+    /// The issue's case: 32.9 h on one model and 2.3 h on another read as two
+    /// different "totals". The total must be their sum, and the breakdown must
+    /// list both, longest first, whatever order they were recorded in.
+    func testTotalSummarySumsEveryModelAndBreakdownListsEachLongestFirst() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 8, hour: 15))!
+        let store = UsageStatsStore(url: makeURL())
+
+        // The shorter model is recorded first so insertion order is not duration order.
+        record(store, transcribeKey, words: 1_000, seconds: 4_000, price: 0.4, currency: "USD", at: date(3, calendar: calendar, now: now))
+        record(store, miniKey, words: 50_000, seconds: 60_000, price: 3.0, currency: "USD", at: date(200, calendar: calendar, now: now))
+        record(store, transcribeKey, words: 1_300, seconds: 4_280, price: 0.43, currency: "USD", at: date(1, calendar: calendar, now: now))
+        record(store, miniKey, words: 48_000, seconds: 58_440, price: 2.92, currency: "USD", at: date(10, calendar: calendar, now: now))
+
+        let total = store.totalSummary(range: .allTime, now: now, calendar: calendar)
+        XCTAssertEqual(total.wordCount, 100_300)
+        XCTAssertEqual(total.audioDurationSeconds, 126_720) // 35.2 h = 32.9 h + 2.3 h
+        XCTAssertEqual(total.estimatedCost ?? -1, 6.75, accuracy: 1e-9)
+        XCTAssertEqual(total.currency, "USD")
+
+        let rows = store.breakdown(range: .allTime, now: now, calendar: calendar)
+        XCTAssertEqual(rows.map(\.key), [miniKey, transcribeKey])
+        XCTAssertEqual(rows.first?.summary.audioDurationSeconds, 118_440) // 32.9 h
+        XCTAssertEqual(rows.first?.summary.wordCount, 98_000)
+        XCTAssertEqual(rows.first?.summary.estimatedCost ?? -1, 5.92, accuracy: 1e-9)
+        XCTAssertEqual(rows.last?.summary.audioDurationSeconds, 8_280) // 2.3 h
+        XCTAssertEqual(rows.last?.summary.wordCount, 2_300)
+        XCTAssertEqual(rows.last?.summary.estimatedCost ?? -1, 0.83, accuracy: 1e-9)
+
+        XCTAssertEqual(rows.reduce(0) { $0 + $1.summary.wordCount }, total.wordCount)
+        XCTAssertEqual(rows.reduce(0.0) { $0 + $1.summary.audioDurationSeconds }, total.audioDurationSeconds)
+    }
+
+    func testBreakdownBreaksDurationTiesByProviderThenModel() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 8, hour: 15))!
+        let store = UsageStatsStore(url: makeURL())
+
+        record(store, transcribeKey, words: 1, seconds: 60, price: 0.01, currency: "USD", at: date(0, calendar: calendar, now: now))
+        record(store, groqKey, words: 1, seconds: 60, price: 0.01, currency: "USD", at: date(0, calendar: calendar, now: now))
+        record(store, miniKey, words: 1, seconds: 60, price: 0.01, currency: "USD", at: date(0, calendar: calendar, now: now))
+
+        let rows = store.breakdown(range: .today, now: now, calendar: calendar)
+        XCTAssertEqual(rows.map(\.key), [groqKey, miniKey, transcribeKey])
+    }
+
+    /// A period that spans two models: entries before the period's start drop
+    /// out of the total and out of their model's row, and a model whose entries
+    /// all fall outside the period gets no row.
+    func testTotalAndBreakdownHonourTheRangeAcrossModels() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 8, hour: 15))!
+        let store = UsageStatsStore(url: makeURL())
+
+        record(store, miniKey, words: 10, seconds: 600, price: 0.03, currency: "USD", at: date(0, calendar: calendar, now: now))
+        record(store, miniKey, words: 999, seconds: 99_999, price: 9.99, currency: "USD", at: date(10, calendar: calendar, now: now))
+        record(store, transcribeKey, words: 20, seconds: 300, price: 0.02, currency: "USD", at: date(6, calendar: calendar, now: now))
+        record(store, transcribeKey, words: 888, seconds: 88_888, price: 8.88, currency: "USD", at: date(7, calendar: calendar, now: now))
+        record(store, groqKey, words: 777, seconds: 77_777, price: 7.77, currency: "USD", at: date(20, calendar: calendar, now: now))
+
+        let total = store.totalSummary(range: .last7Days, now: now, calendar: calendar)
+        XCTAssertEqual(total.wordCount, 30)
+        XCTAssertEqual(total.audioDurationSeconds, 900)
+        XCTAssertEqual(total.estimatedCost ?? -1, 0.05, accuracy: 1e-9)
+
+        let rows = store.breakdown(range: .last7Days, now: now, calendar: calendar)
+        XCTAssertEqual(rows.map(\.key), [miniKey, transcribeKey])
+        XCTAssertEqual(rows.map(\.summary.wordCount), [10, 20])
+        XCTAssertEqual(rows.map(\.summary.audioDurationSeconds), [600, 300])
+    }
+
+    func testTotalDropsCostAcrossMixedCurrenciesWhileEachRowKeepsItsOwn() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 8, hour: 15))!
+        let store = UsageStatsStore(url: makeURL())
+
+        record(store, miniKey, words: 10, seconds: 600, price: 0.03, currency: "USD", at: date(0, calendar: calendar, now: now))
+        record(store, groqKey, words: 5, seconds: 300, price: 0.02, currency: "EUR", at: date(0, calendar: calendar, now: now))
+
+        let total = store.totalSummary(range: .today, now: now, calendar: calendar)
+        XCTAssertEqual(total.wordCount, 15)
+        XCTAssertNil(total.estimatedCost)
+        XCTAssertNil(total.currency)
+
+        let rows = store.breakdown(range: .today, now: now, calendar: calendar)
+        XCTAssertEqual(rows.map(\.key), [miniKey, groqKey])
+        XCTAssertEqual(rows.map(\.summary.estimatedCost), [0.03, 0.02])
+        XCTAssertEqual(rows.map(\.summary.currency), ["USD", "EUR"])
+    }
+
+    func testTotalDropsCostWhenOneModelIsUnpricedWhileThePricedRowKeepsIt() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 8, hour: 15))!
+        let store = UsageStatsStore(url: makeURL())
+
+        record(store, miniKey, words: 10, seconds: 600, price: 0.03, currency: "USD", at: date(0, calendar: calendar, now: now))
+        record(store, groqKey, words: 5, seconds: 300, price: nil, currency: nil, at: date(0, calendar: calendar, now: now))
+
+        let total = store.totalSummary(range: .today, now: now, calendar: calendar)
+        XCTAssertEqual(total.wordCount, 15)
+        XCTAssertEqual(total.audioDurationSeconds, 900)
+        XCTAssertNil(total.estimatedCost)
+
+        let rows = store.breakdown(range: .today, now: now, calendar: calendar)
+        XCTAssertEqual(rows.map(\.key), [miniKey, groqKey])
+        XCTAssertEqual(rows.first?.summary.estimatedCost, 0.03)
+        XCTAssertEqual(rows.first?.summary.currency, "USD")
+        XCTAssertNil(rows.last?.summary.estimatedCost)
+    }
+
+    func testTotalAndBreakdownOfAnEmptyStore() {
+        let store = UsageStatsStore(url: makeURL())
+
+        XCTAssertEqual(store.totalSummary(range: .allTime), .empty)
+        XCTAssertEqual(store.breakdown(range: .allTime), [])
+    }
+
     // MARK: - Reset
 
     func testResetCountersDeletesSelectedProviderModelOnly() {

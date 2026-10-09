@@ -93,6 +93,19 @@ public struct UsageSummary: Equatable, Sendable {
     )
 }
 
+/// One provider+model's usage over a period, as listed in the breakdown window.
+public struct UsageBreakdownRow: Equatable, Sendable, Identifiable {
+    public let key: ProviderModelKey
+    public let summary: UsageSummary
+
+    public var id: ProviderModelKey { key }
+
+    public init(key: ProviderModelKey, summary: UsageSummary) {
+        self.key = key
+        self.summary = summary
+    }
+}
+
 public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
     @Published public private(set) var entries: [UsageEntry] = []
 
@@ -149,6 +162,39 @@ public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
         return Self.summarize(filtered)
     }
 
+    /// Usage across every provider and model in the range. The cost is summed only
+    /// when every entry in the range is priced in one currency; otherwise it is nil.
+    public func totalSummary(
+        range: UsageStatsRange,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> UsageSummary {
+        Self.summarize(entries(in: range, now: now, calendar: calendar))
+    }
+
+    /// One row per provider+model with entries in the range, longest audio first,
+    /// ties broken by provider then model. Each row applies the cost rule on its own.
+    public func breakdown(
+        range: UsageStatsRange,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [UsageBreakdownRow] {
+        let grouped = Dictionary(grouping: entries(in: range, now: now, calendar: calendar)) { entry in
+            ProviderModelKey(providerID: entry.providerID, modelID: entry.modelID)
+        }
+        return grouped
+            .map { key, entries in UsageBreakdownRow(key: key, summary: Self.summarize(entries)) }
+            .sorted { lhs, rhs in
+                if lhs.summary.audioDurationSeconds != rhs.summary.audioDurationSeconds {
+                    return lhs.summary.audioDurationSeconds > rhs.summary.audioDurationSeconds
+                }
+                if lhs.key.providerID != rhs.key.providerID {
+                    return lhs.key.providerID < rhs.key.providerID
+                }
+                return lhs.key.modelID < rhs.key.modelID
+            }
+    }
+
     public func resetCounters(for keys: Set<ProviderModelKey>) {
         guard !keys.isEmpty else { return }
         let updated = entries.filter { entry in
@@ -173,12 +219,16 @@ public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
         now: Date,
         calendar: Calendar
     ) -> [UsageEntry] {
-        let lowerBound = Self.lowerBound(for: range, now: now, calendar: calendar)
-        return entries.filter { entry in
-            guard entry.providerID == providerID, entry.modelID == modelID else { return false }
-            guard let lowerBound else { return true }
-            return entry.createdAt >= lowerBound
+        entries(in: range, now: now, calendar: calendar).filter { entry in
+            entry.providerID == providerID && entry.modelID == modelID
         }
+    }
+
+    private func entries(in range: UsageStatsRange, now: Date, calendar: Calendar) -> [UsageEntry] {
+        guard let lowerBound = Self.lowerBound(for: range, now: now, calendar: calendar) else {
+            return entries
+        }
+        return entries.filter { $0.createdAt >= lowerBound }
     }
 
     static func lowerBound(for range: UsageStatsRange, now: Date, calendar: Calendar) -> Date? {
