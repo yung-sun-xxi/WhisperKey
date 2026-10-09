@@ -1,9 +1,10 @@
 # Releasing WhisperKey
 
-This document describes the normal Developer ID-signed, notarized release path
-and the temporary ad-hoc fallback for when the Developer ID certificate is
-unavailable. Releases are manual; WhisperKey does not include an in-app
-auto-update mechanism.
+This document describes the normal Developer ID-signed release path, which
+notarizes when Apple accepts and otherwise ships signed but not notarized, and
+the temporary ad-hoc fallback for when the Developer ID certificate itself is
+unavailable. WhisperKey does not include an in-app auto-update mechanism; a new
+release reaches the owner's Mac through `scripts/install-release.sh`.
 
 ## Signing Inputs
 
@@ -84,12 +85,64 @@ The script:
 - Submits the app to Apple notarization and staples the result.
 - Builds and signs a DMG.
 - Submits the DMG to Apple notarization and staples the result.
-- Runs final Gatekeeper checks with `spctl`.
-- Installs the notarized app into `/Applications/WhisperKey.app`.
+- Runs final Gatekeeper checks with `spctl` (notarized builds only).
+- Writes `build/notarization.txt`: `notarized`, `not-notarized` or `ad-hoc`.
+- Installs the app into `/Applications/WhisperKey.app`.
+- Prints the app's designated requirement.
+
+## Signed but not notarized
+
+Notarization is attempted, never required. If the notarytool profile is missing
+or Apple rejects it (for example `HTTP status code: 403. A required agreement
+is missing or has expired`), or a submit or staple fails,
+`release.sh` prints a warning and carries on:
+
+- the app and the DMG stay signed with Developer ID and the hardened runtime;
+- `spctl --assess` is skipped, because it rejects an unnotarized Developer ID
+  build by design;
+- the DMG gets an `INSTALL.txt` describing the one-time **Open Anyway**;
+- `build/notarization.txt` says `not-notarized`, and the release title ends in
+  `(not notarized)`.
+
+When Apple accepts the profile again, the same command produces a notarized
+release with no change.
+
+The designated requirement does not depend on notarization. It names the bundle
+identifier and the Developer ID certificate, not the build's cdhash:
+
+```text
+identifier "yung-sun-xxi.WhisperKey" and anchor apple generic and ... certificate leaf[subject.OU] = UGLRY9ACZ6
+```
+
+So macOS sees every Developer ID release as the same app: Microphone,
+Accessibility and Keychain access granted to one version survive installing the
+next, notarized or not.
+
+## Installing a Release on the Owner's Mac
+
+```sh
+scripts/install-release.sh 1.3.1
+```
+
+The script downloads the release DMG with `gh`, refuses an app that is not
+signed with Developer ID, quits the running `/Applications/WhisperKey.app`,
+replaces it, relaunches it, removes `com.apple.quarantine` from the installed
+bundle if present, and prints the designated requirement. `gh` downloads without
+the quarantine attribute, so a signed, unnotarized app launches without a
+Gatekeeper prompt.
+
+This is the last step of every release: the agent runs it after the release
+workflow publishes the DMG. The owner downloads nothing.
 
 ## Temporary ad-hoc releases
 
-Use this only when the Developer ID certificate is unavailable or revoked.
+Use this only when the Developer ID certificate itself is unavailable or
+revoked. Notarization being unavailable is not a reason: Developer ID mode
+already ships signed but not notarized then, and keeps the designated
+requirement stable. An ad-hoc signature's designated requirement is its cdhash,
+new in every build, so each ad-hoc version costs the Microphone and
+Accessibility grants, and `scripts/install-release.sh` refuses it.
+
 The script builds without the unavailable Developer ID certificate, then applies
 an ad-hoc signature so the app bundle is internally consistent. It does not
 submit anything to Apple notarization.
@@ -107,17 +160,16 @@ Gatekeeper treat the app as compromised and move it to the Trash.
 
 Outputs:
 
-- `build/export/WhisperKey.app` - signed, notarized, stapled app.
-- `build/WhisperKey-<VERSION>.dmg` - signed, notarized, stapled DMG.
+- `build/export/WhisperKey.app` - signed app; notarized and stapled when
+  notarization succeeded.
+- `build/WhisperKey-<VERSION>.dmg` - signed DMG; notarized and stapled when
+  notarization succeeded.
+- `build/notarization.txt` - `notarized`, `not-notarized` or `ad-hoc`.
 - `/Applications/WhisperKey.app` - installed app.
 
-Publish:
-
-```sh
-gh release create v1.0.0 build/WhisperKey-1.0.0.dmg \
-    --title "WhisperKey v1.0.0" \
-    --notes-file <changelog-file>
-```
+Publish by hand only when the workflow below is unavailable. The script's last
+line prints the `gh release create` command with the title that matches
+`build/notarization.txt`.
 
 ## Automated Releases (GitHub Actions)
 
@@ -133,6 +185,11 @@ inside the job, imports the Developer ID identity and the notarytool profile
 into it from repository secrets, signs and notarizes, and deletes it in a
 post-step that also restores the user keychain search list. Nothing persists on
 the runner between runs, and the owner has no second keychain password to know.
+
+If Apple rejects the notarytool credentials while the job stores the profile,
+the step emits a warning and the job goes on; `release.sh` then builds the
+release signed but not notarized. A missing secret or any failure in creating
+the keychain or importing the certificate still fails the job.
 
 ### Repository secrets and variables
 
@@ -180,17 +237,41 @@ git tag v1.2.0 && git push origin v1.2.0
 gh workflow run release.yml -f version=1.2.0
 ```
 
-The job creates its temporary signing keychain, builds/signs/notarizes via
-`release.sh` (with `WHISPERKEY_SKIP_INSTALL=1`, so it does not touch
-`/Applications`), removes the keychain, and attaches the DMG to the release.
+The job creates its temporary signing keychain, builds, signs and (when Apple
+accepts) notarizes via `release.sh` (with `WHISPERKEY_SKIP_INSTALL=1`, so it
+does not touch `/Applications`), removes the keychain, and attaches the DMG to
+the release. The release title comes from `build/notarization.txt`, so a tag
+push and a dispatch name the same outcome the same way:
 
-A tag build uses `developer-id` mode and notarizes through Apple. Dispatching
-manually accepts either mode through the `release_mode` input; `ad-hoc` is a
-fallback for when the Developer ID certificate or notarization is unavailable.
+| `build/notarization.txt` | Release title |
+|------|------|
+| `notarized` | `WhisperKey v<VERSION>` |
+| `not-notarized` | `WhisperKey v<VERSION> (not notarized)` |
+| `ad-hoc` | `WhisperKey v<VERSION> (temporary ad-hoc build)` |
+
+A tag build uses `developer-id` mode. Dispatching manually accepts either mode
+through the `release_mode` input; `ad-hoc` is a fallback for when the Developer
+ID certificate is unavailable, not for when notarization is.
+
+Once the release is published, the agent installs it on the owner's Mac:
+
+```sh
+scripts/install-release.sh 1.2.0
+```
 
 ## If Notarization Fails
 
-Pull the human-readable log:
+A failed notarization no longer stops a release: it ships signed but not
+notarized (see above). What to do depends on where it failed.
+
+**Apple rejects the credentials** (the profile check or `store-credentials`
+fails, for example the 403 about a missing agreement). This is an account
+problem, not a build problem. Releases keep shipping `(not notarized)`, and
+notarized ones resume by themselves once Apple accepts the profile. Nothing in
+the repository needs to change.
+
+**Apple rejects the submission** (`notarytool submit` returns `Invalid`). Pull
+the human-readable log:
 
 ```sh
 xcrun notarytool log <submission-id> \

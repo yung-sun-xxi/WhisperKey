@@ -100,11 +100,22 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
 
-          xcrun notarytool store-credentials WhisperKey-Notary \
-            --apple-id "$NOTARY_APPLE_ID" \
-            --team-id "$WHISPERKEY_TEAM_ID" \
-            --password "$NOTARY_APP_SPECIFIC_PASSWORD" \
-            --keychain "$KEYCHAIN" >/dev/null
+          # store-credentials validates the profile with Apple. A rejection
+          # (currently 403 "A required agreement is missing or has expired")
+          # does not stop the release: release.sh then finds no profile and
+          # ships the build signed with Developer ID but not notarized.
+          if NOTARY_OUTPUT=$(xcrun notarytool store-credentials WhisperKey-Notary \
+              --apple-id "$NOTARY_APPLE_ID" \
+              --team-id "$WHISPERKEY_TEAM_ID" \
+              --password "$NOTARY_APP_SPECIFIC_PASSWORD" \
+              --keychain "$KEYCHAIN" 2>&1); then
+            echo "Stored the WhisperKey-Notary profile in the job keychain."
+          else
+            REASON=$(grep -m1 -i 'error' <<<"$NOTARY_OUTPUT" || head -1 <<<"$NOTARY_OUTPUT")
+            REASON=${REASON%.}
+            REASON=${REASON//'%'/'%25'}
+            echo "::warning title=Notarization unavailable::notarytool store-credentials failed: ${REASON:-no output}. The release will be signed with Developer ID but not notarized."
+          fi
 
           # xcodebuild resolves CODE_SIGN_IDENTITY through the search list only
           # (OTHER_CODE_SIGN_FLAGS=--keychain does not help), so the keychain
@@ -113,7 +124,7 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(cat "$SAVED_LIST")
           security find-identity -v -p codesigning "$KEYCHAIN"
 
-      - name: Build, sign, notarize, package
+      - name: Build, sign, package
         env:
           WHISPERKEY_TEAM_ID: ${{ vars.WHISPERKEY_TEAM_ID }}
           WHISPERKEY_NOTARY_PROFILE: WhisperKey-Notary
@@ -146,19 +157,43 @@ jobs:
             echo "Expected artifact not found: $DMG" >&2
             exit 1
           fi
+          # release.sh records what the build actually is, so a tag push and a
+          # dispatch get the same title for the same outcome.
+          NOTARIZATION_FILE="build/notarization.txt"
+          if [ ! -f "$NOTARIZATION_FILE" ]; then
+            echo "::error::$NOTARIZATION_FILE not found; scripts/release.sh writes it at the end of every build."
+            exit 1
+          fi
+          NOTARIZATION=$(tr -d '[:space:]' < "$NOTARIZATION_FILE")
+          case "$NOTARIZATION" in
+            notarized)
+              TITLE="WhisperKey v$VERSION"
+              NOTES=""
+              ;;
+            not-notarized)
+              TITLE="WhisperKey v$VERSION (not notarized)"
+              NOTES=$(printf 'Signed with Developer ID, not notarized by Apple.\n\nThe owner installs it with `scripts/install-release.sh %s`. A DMG downloaded in a browser needs **Open Anyway** once, in System Settings → Privacy & Security.' "$VERSION")
+              ;;
+            ad-hoc)
+              TITLE="WhisperKey v$VERSION (temporary ad-hoc build)"
+              NOTES=$'⚠️ This temporary build is not notarized by Apple.\n\nAfter installing WhisperKey, open System Settings → Privacy & Security and choose **Open Anyway** once. Future launches work normally.'
+              ;;
+            *)
+              echo "::error::$NOTARIZATION_FILE says '$NOTARIZATION'; expected notarized, not-notarized or ad-hoc."
+              exit 1
+              ;;
+          esac
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG exists; replacing the DMG asset."
             gh release upload "$TAG" "$DMG" --clobber
           else
-            echo "Creating release $TAG."
-            if [ "${{ steps.mode.outputs.mode }}" = "ad-hoc" ]; then
-              gh release create "$TAG" "$DMG" \
-                --title "WhisperKey v$VERSION (temporary ad-hoc build)" \
-                --notes $'⚠️ This temporary build is not notarized by Apple.\n\nAfter installing WhisperKey, open System Settings → Privacy & Security and choose **Open Anyway** once. Future launches work normally.' \
-                --generate-notes
-            else
-              gh release create "$TAG" "$DMG" \
-                --title "WhisperKey v$VERSION" \
-                --generate-notes
+            echo "Creating release $TAG: $TITLE"
+            NOTES_ARGS=()
+            if [ -n "$NOTES" ]; then
+              NOTES_ARGS=(--notes "$NOTES")
             fi
+            gh release create "$TAG" "$DMG" \
+              --title "$TITLE" \
+              ${NOTES_ARGS[@]+"${NOTES_ARGS[@]}"} \
+              --generate-notes
           fi
