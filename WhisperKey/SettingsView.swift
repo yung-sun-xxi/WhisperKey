@@ -1316,9 +1316,22 @@ private struct QuickPasteSettingsPane: View {
 }
 
 private struct GeneralSettingsPane: View {
+    /// How long History size must stay still before it is applied or asked about, so
+    /// holding the stepper or typing a number yields one decision for the final value.
+    private static let historySizeSettleNanoseconds: UInt64 = 800_000_000
+
     @ObservedObject var settings: SettingsStore
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var ownerWindow: NSWindow?
+    /// What the History size field and stepper show. The setting itself changes only
+    /// once the draft settles and, when that would delete entries, the user confirms (#146).
+    @State private var historySizeDraft: Int
+    @State private var historySizeCommitTask: Task<Void, Never>?
+
+    init(settings: SettingsStore) {
+        _settings = ObservedObject(wrappedValue: settings)
+        _historySizeDraft = State(initialValue: settings.historyMaxEntries)
+    }
 
     var body: some View {
         SettingsPaneStack {
@@ -1327,12 +1340,12 @@ private struct GeneralSettingsPane: View {
             }
             SettingsRow("History size") {
                 HStack(spacing: 6) {
-                    TextField("", value: $settings.historyMaxEntries, format: .number)
+                    TextField("", value: $historySizeDraft, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 64)
                         .settingsControlFrame()
                     Stepper("",
-                            value: $settings.historyMaxEntries,
+                            value: $historySizeDraft,
                             in: SettingsStore.historyMaxEntriesRange,
                             step: 1)
                         .labelsHidden()
@@ -1369,6 +1382,126 @@ private struct GeneralSettingsPane: View {
                 ownerWindow = window
             }
         }
+        .onChange(of: historySizeDraft) {
+            scheduleHistorySizeCommit()
+        }
+        .onChange(of: settings.historyMaxEntries) { _, newValue in
+            historySizeDraft = newValue
+        }
+        .onDisappear {
+            flushPendingHistorySize()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SettingsWindowController.willCloseNotification)) { _ in
+            flushPendingHistorySize()
+        }
+    }
+
+    private func scheduleHistorySizeCommit() {
+        historySizeCommitTask?.cancel()
+        historySizeCommitTask = nil
+        guard historySizeDraft != settings.historyMaxEntries else { return }
+
+        historySizeCommitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Self.historySizeSettleNanoseconds)
+            guard !Task.isCancelled else { return }
+            historySizeCommitTask = nil
+            commitHistorySizeDraft()
+        }
+    }
+
+    private func commitHistorySizeDraft() {
+        switch historySizeDecision() {
+        case .apply(let limit):
+            applyHistorySize(limit)
+        case .confirm(let prompt):
+            HistorySizeConfirmation.present(prompt, from: ownerWindow) { confirmed in
+                if confirmed {
+                    applyHistorySize(prompt.newLimit)
+                } else {
+                    historySizeDraft = settings.historyMaxEntries
+                }
+            }
+        }
+    }
+
+    /// The pane is going away with a change still settling: a change that deletes nothing
+    /// is applied, one that would delete entries is dropped rather than asked about.
+    private func flushPendingHistorySize() {
+        guard let pending = historySizeCommitTask else { return }
+        pending.cancel()
+        historySizeCommitTask = nil
+        if case .apply(let limit) = historySizeDecision() {
+            applyHistorySize(limit)
+        } else {
+            historySizeDraft = settings.historyMaxEntries
+        }
+    }
+
+    private func historySizeDecision() -> HistoryCapChange {
+        HistoryCapChange.evaluate(
+            currentLimit: settings.historyMaxEntries,
+            proposedLimit: historySizeDraft,
+            fileEntryCount: coordinator.history.fileEntryCount,
+            otherAppName: HistorySizeConfirmation.installedCounterpartName()
+        )
+    }
+
+    /// `AppCoordinator` forwards the setting to `HistoryStore.setMaxEntries`, which trims.
+    private func applyHistorySize(_ limit: Int) {
+        settings.historyMaxEntries = limit
+        historySizeDraft = settings.historyMaxEntries
+    }
+}
+
+/// The question asked before lowering History size deletes entries (#146).
+@MainActor
+enum HistorySizeConfirmation {
+    /// The alert, configured but not shown, so it can also be rendered on its own.
+    static func makeAlert(prompt: HistoryCapChangePrompt) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.informativeText
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: prompt.confirmButtonTitle)
+        alert.addButton(withTitle: HistoryCapChangePrompt.cancelButtonTitle)
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.buttons.first?.keyEquivalent = "\r"
+        alert.buttons.dropFirst().first?.keyEquivalent = "\u{1b}"
+        return alert
+    }
+
+    /// Shows the alert as a sheet on the settings window; `completion` gets true only for
+    /// the delete button, and false when there is no window to show it on.
+    static func present(
+        _ prompt: HistoryCapChangePrompt,
+        from ownerWindow: NSWindow?,
+        completion: @escaping @MainActor (Bool) -> Void
+    ) {
+        let window: NSWindow?
+        if let ownerWindow, !ownerWindow.styleMask.contains(.borderless) {
+            window = ownerWindow
+        } else {
+            window = SettingsWindowController.relatedWindow
+        }
+        guard let window else {
+            completion(false)
+            return
+        }
+
+        makeAlert(prompt: prompt).beginSheetModal(for: window) { response in
+            Task { @MainActor in
+                completion(response == .alertFirstButtonReturn)
+            }
+        }
+    }
+
+    /// The other WhisperKey app's name when it is installed on this Mac, since the two
+    /// share the history file.
+    static func installedCounterpartName() -> String? {
+        guard let counterpart = HistorySharingApp.counterpart(ofBundleIdentifier: Bundle.main.bundleIdentifier),
+              NSWorkspace.shared.urlForApplication(withBundleIdentifier: counterpart.bundleIdentifier) != nil
+        else { return nil }
+        return counterpart.name
     }
 }
 
