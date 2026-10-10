@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ThemeKit
 import SettingsStore
 import UsageStatsStore
 
@@ -20,7 +21,10 @@ enum UsageBreakdownWindowController {
             return
         }
 
-        let host = NSHostingController(rootView: UsageBreakdownView(usageStats: usageStats, settings: settings))
+        ThemeTokensSource.shared.follow(settings)
+        let host = NSHostingController(rootView: ThemedRoot("usageByModel") {
+            UsageBreakdownView(usageStats: usageStats, settings: settings)
+        })
         host.sizingOptions = [.preferredContentSize]
         let window = NSWindow(contentViewController: host)
         window.styleMask = [.titled, .closable]

@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import SwiftUI
+import ThemeKit
 
 private enum OnboardingWindowLayout {
     static let width: CGFloat = 520
@@ -70,7 +71,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
         let content = OnboardingView()
             .environmentObject(coordinator)
-        let hostingView = NSHostingView(rootView: content)
+        ThemeTokensSource.shared.follow(coordinator.settings)
+        let hostingView = NSHostingView(rootView: ThemedRoot("permissions") { content })
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: OnboardingWindowLayout.width, height: 1),
             styleMask: [.titled, .closable],

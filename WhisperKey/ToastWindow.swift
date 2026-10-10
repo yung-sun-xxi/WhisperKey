@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ThemeKit
 import ErrorToast
 import os
 
@@ -13,7 +14,7 @@ final class ToastWindow: NSPanel {
     private static let horizontalInset: CGFloat = max(12 - ToastView.margin, 0)
     private static let verticalInset: CGFloat = max(8 - ToastView.margin, 0)
 
-    private var hostingView: NSHostingView<ToastView>!
+    private var hostingView: NSHostingView<ThemedRoot<ToastView>>!
 
     init(
         content: ToastContent,
@@ -51,7 +52,7 @@ final class ToastWindow: NSPanel {
             onAction: onAction,
             onDismiss: onDismiss
         )
-        let hosting = NSHostingView(rootView: view)
+        let hosting = NSHostingView(rootView: ThemedRoot("toast") { view })
         hosting.translatesAutoresizingMaskIntoConstraints = false
         let container = HoverReportingView(frame: contentRect(forFrameRect: frame))
         container.onHoverChanged = onHoverChanged

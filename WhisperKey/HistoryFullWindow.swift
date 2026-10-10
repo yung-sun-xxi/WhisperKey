@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ThemeKit
 import HistoryStore
 
 @MainActor
@@ -20,7 +21,10 @@ enum HistoryFullWindowController {
             return
         }
 
-        let host = NSHostingController(rootView: HistoryFullView(history: history, coordinator: coordinator))
+        ThemeTokensSource.shared.follow(coordinator.settings)
+        let host = NSHostingController(rootView: ThemedRoot("fullHistory") {
+            HistoryFullView(history: history, coordinator: coordinator)
+        })
         let window = NSWindow(contentViewController: host)
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         window.title = "WhisperKey History"
