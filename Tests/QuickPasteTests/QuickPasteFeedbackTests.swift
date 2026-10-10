@@ -78,4 +78,36 @@ final class QuickPasteFeedbackTests: XCTestCase {
             "the popup pastes into password fields now; the refusal has another cause"
         )
     }
+
+    /// "Secure input" is the name in Apple's developer API. Nothing a user can open —
+    /// System Settings, Apple's user guides, this app — calls it that, so a message built
+    /// on the phrase explains the failure with words that cannot be looked up.
+    func testTheRefusalMessageAvoidsTheSecureInputTerm() {
+        XCTAssertFalse(
+            QuickPasteNotice.pasteRefused.message.lowercased().contains("secure input"),
+            "name what the user can observe, not the API term"
+        )
+    }
+
+    /// The notice appears in a banner that disappears on its own, so it has to be read in
+    /// one glance. 140 characters is about two lines of the banner.
+    func testEveryNoticeFitsInAGlance() {
+        for notice in [QuickPasteNotice.pasteRefused, .clipboardWriteFailed] {
+            XCTAssertLessThanOrEqual(
+                notice.message.count, 140,
+                "\(notice) is \(notice.message.count) characters"
+            )
+        }
+    }
+
+    /// A refused paste leaves nothing pasted and nothing on the clipboard, so the message
+    /// is the user's only lead. It has to say what to do next, not only what went wrong.
+    func testEveryNoticeSaysWhatToDoNext() {
+        for notice in [QuickPasteNotice.pasteRefused, .clipboardWriteFailed] {
+            XCTAssertTrue(
+                notice.message.contains("Try again") || notice.message.contains("try again"),
+                "\(notice) does not say what to do next"
+            )
+        }
+    }
 }
