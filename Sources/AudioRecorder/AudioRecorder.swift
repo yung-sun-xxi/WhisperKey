@@ -1088,6 +1088,58 @@ struct AudioOutputDeviceSnapshot: Equatable, Sendable {
     }
 }
 
+/// Whether a warm engine host can start the next capture, decided from plain
+/// values so the rule can be tested without CoreAudio.
+///
+/// `AVAudioEngineConfigurationChange` alone does not make a host stale: on
+/// macOS 27 every freshly prepared engine receives one about 40 ms later, with
+/// nothing about its input changed (#152). What a reused engine cannot
+/// survive is its input node's format moving away from the one its tap was
+/// installed with — installTap and start then throw an Obj-C exception, which
+/// crashed the app. So the node's format is compared every time, with or
+/// without the notification: the notification arrives after the hardware
+/// moved, and a begin can land in between.
+enum WarmEngineStaleness {
+    /// - Parameters:
+    ///   - configurationChanged: whether `AVAudioEngineConfigurationChange`
+    ///     arrived since the host was last judged. It does not decide
+    ///     anything by itself: it is passed so the rule states, and its tests
+    ///     prove, that a change which left the values below alone is reusable.
+    ///   - builtForOutput, currentOutput: the default output the engine was
+    ///     built for, and now.
+    ///   - inputChangeReason: why the derived input or its hardware format
+    ///     differs from what the engine was built for, or nil.
+    ///   - builtForNodeFormat: the input node format the tap was installed with.
+    ///   - currentNodeFormat: that node's format now, read the same way; nil
+    ///     when it could not be read.
+    static func reason(
+        configurationChanged: Bool,
+        builtForOutput: AudioOutputDeviceSnapshot?,
+        currentOutput: AudioOutputDeviceSnapshot?,
+        inputChangeReason: String?,
+        builtForNodeFormat: AVAudioFormat,
+        currentNodeFormat: AVAudioFormat?
+    ) -> String? {
+        guard currentOutput == builtForOutput else {
+            return "the default output changed from \(builtForOutput?.logDescription ?? "nil") to \(currentOutput?.logDescription ?? "nil")"
+        }
+        if let inputChangeReason {
+            return inputChangeReason
+        }
+        guard let currentNodeFormat else {
+            return "the engine input node format could not be read"
+        }
+        guard currentNodeFormat.isEqual(builtForNodeFormat) else {
+            return "the engine input node format changed from \(formatDescription(builtForNodeFormat)) to \(formatDescription(currentNodeFormat))"
+        }
+        return nil
+    }
+
+    static func formatDescription(_ format: AVAudioFormat) -> String {
+        "sampleRate=\(format.sampleRate) channelCount=\(format.channelCount) commonFormat=\(format.commonFormat.rawValue) interleaved=\(format.isInterleaved)"
+    }
+}
+
 /// Everything a successful capture start hands back to the `AudioRecorder`
 /// actor. Not `Sendable` by construction: it carries CoreAudio objects that
 /// only the recorder and the capture's own pipeline touch.
@@ -1283,7 +1335,11 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         let inputIsBluetooth: Bool
         let inputHardware: AudioInputHardwareFormat?
         let outputDevice: AudioOutputDeviceSnapshot?
+        /// The input node format the tap was installed with.
         let inputFormat: AVAudioFormat
+        /// Whether the input unit is bound to a derived input, which decides
+        /// how `inputFormat` was read from the node (see `performWarm`).
+        let isBoundToDerivedInput: Bool
     }
 
     // Touched only from `queue`.
@@ -1403,7 +1459,8 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
             guard !isRetiredNow, let engine else { return }
             engine.stop()
             // Re-prepared so the next start is only `engine.start()`. A host
-            // whose configuration changed is stale anyway; leave it alone.
+            // with a configuration change not yet judged is left alone: the
+            // next start judges it, and `start()` prepares it if reused.
             guard !configurationChangedNow else { return }
             if warmState?.inputIsBluetooth == true {
                 // A prepared engine on a Bluetooth mic is what prewarm avoids:
@@ -1455,7 +1512,7 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         configurationChanged = true
         let handler = configurationChangeHandler
         lock.unlock()
-        recorderLog.notice("engine host hostID=\(self.hostID, privacy: .public) received AVAudioEngineConfigurationChange; it will not be reused")
+        recorderLog.notice("engine host hostID=\(self.hostID, privacy: .public) received AVAudioEngineConfigurationChange; judged at the next start")
         handler?()
     }
 
@@ -1537,7 +1594,8 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
             inputIsBluetooth: route?.input?.isBluetooth ?? false,
             inputHardware: inputHardware,
             outputDevice: outputDevice,
-            inputFormat: inputFormat
+            inputFormat: inputFormat,
+            isBoundToDerivedInput: derivedInput != nil
         )
     }
 
@@ -1569,15 +1627,36 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
     /// derived input's hardware format. Runs on `queue`: these CoreAudio reads
     /// can hang, and the recorder's start deadline covers this queue, never
     /// the actor.
+    /// The rule itself is `WarmEngineStaleness`; this gathers its inputs.
     private func stalenessReason(of warm: WarmState) -> String? {
-        if configurationChangedNow {
-            return "the engine configuration changed"
+        let configurationChanged = configurationChangedNow
+        let reason = WarmEngineStaleness.reason(
+            configurationChanged: configurationChanged,
+            builtForOutput: warm.outputDevice,
+            currentOutput: AudioOutputDeviceSnapshot.currentDefault(),
+            inputChangeReason: inputChangeReason(of: warm),
+            builtForNodeFormat: warm.inputFormat,
+            currentNodeFormat: currentNodeFormat(of: warm)
+        )
+        if configurationChanged, reason == nil {
+            lock.lock()
+            self.configurationChanged = false
+            lock.unlock()
+            recorderLog.notice(
+                "engine host hostID=\(self.hostID, privacy: .public) configuration change left the input as built (\(WarmEngineStaleness.formatDescription(warm.inputFormat), privacy: .public)); reusing the host"
+            )
         }
-        let output = AudioOutputDeviceSnapshot.currentDefault()
-        guard output == warm.outputDevice else {
-            return "the default output changed from \(warm.outputDevice?.logDescription ?? "nil") to \(output?.logDescription ?? "nil")"
-        }
-        return inputChangeReason(of: warm)
+        return reason
+    }
+
+    /// The engine's input node format now, read the way `performWarm` read
+    /// it for the tap; nil when there is no engine or the format is invalid.
+    private func currentNodeFormat(of warm: WarmState) -> AVAudioFormat? {
+        guard let engine else { return nil }
+        let input = engine.inputNode
+        let format = warm.isBoundToDerivedInput ? input.inputFormat(forBus: 0) : input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else { return nil }
+        return format
     }
 
     /// Whether the input derived now, or its hardware format, differs from

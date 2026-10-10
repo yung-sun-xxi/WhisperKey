@@ -1408,3 +1408,86 @@ private actor HandlerCallCounter {
     private(set) var value: Int = 0
     func increment() { value += 1 }
 }
+
+/// The rule that decides whether a prewarmed engine host is reused (#152).
+final class WarmEngineStalenessTests: XCTestCase {
+    private let output = AudioOutputDeviceSnapshot(objectID: 42, sampleRate: 48_000)
+    private let mono48k = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)!
+
+    private func reason(
+        configurationChanged: Bool = false,
+        builtForOutput: AudioOutputDeviceSnapshot?? = nil,
+        currentOutput: AudioOutputDeviceSnapshot?? = nil,
+        inputChangeReason: String? = nil,
+        builtForNodeFormat: AVAudioFormat? = nil,
+        currentNodeFormat: AVAudioFormat?? = nil
+    ) -> String? {
+        WarmEngineStaleness.reason(
+            configurationChanged: configurationChanged,
+            builtForOutput: builtForOutput ?? output,
+            currentOutput: currentOutput ?? output,
+            inputChangeReason: inputChangeReason,
+            builtForNodeFormat: builtForNodeFormat ?? mono48k,
+            currentNodeFormat: currentNodeFormat ?? mono48k
+        )
+    }
+
+    func testAConfigurationChangeThatLeavesTheInputAsBuiltKeepsTheHost() {
+        XCTAssertNil(
+            reason(configurationChanged: true),
+            "a configuration change with the same output, input and node format must not make the host stale"
+        )
+    }
+
+    func testNothingChangedKeepsTheHost() {
+        XCTAssertNil(reason(configurationChanged: false))
+    }
+
+    func testAChangedDefaultOutputMakesTheHostStale() {
+        let other = AudioOutputDeviceSnapshot(objectID: 77, sampleRate: 44_100)
+        let result = reason(currentOutput: other)
+        XCTAssertEqual(
+            result,
+            "the default output changed from id=42 sampleRate=48000.0 to id=77 sampleRate=44100.0"
+        )
+    }
+
+    func testAChangedDefaultOutputAfterAConfigurationChangeMakesTheHostStale() {
+        let other = AudioOutputDeviceSnapshot(objectID: 77, sampleRate: 48_000)
+        XCTAssertNotNil(reason(configurationChanged: true, currentOutput: other))
+    }
+
+    func testAnInputChangeReasonIsTheStalenessReason() {
+        let input = "the derived input changed from A to B (rule)"
+        XCTAssertEqual(reason(inputChangeReason: input), input)
+        XCTAssertEqual(reason(configurationChanged: true, inputChangeReason: input), input)
+    }
+
+    func testAConfigurationChangeThatMovedTheNodeSampleRateMakesTheHostStale() {
+        let mono44k = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+        let result = reason(configurationChanged: true, currentNodeFormat: mono44k)
+        XCTAssertNotNil(result)
+        XCTAssertTrue(result?.contains("44100") == true, "the reason names the new format: \(result ?? "nil")")
+    }
+
+    func testAConfigurationChangeThatMovedTheNodeChannelCountMakesTheHostStale() {
+        let stereo48k = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)!
+        XCTAssertNotNil(reason(configurationChanged: true, currentNodeFormat: stereo48k))
+    }
+
+    func testAConfigurationChangeWithAnUnreadableNodeFormatMakesTheHostStale() {
+        XCTAssertEqual(
+            reason(configurationChanged: true, currentNodeFormat: .some(nil)),
+            "the engine input node format could not be read"
+        )
+    }
+
+    /// The notification reaches the host some 40 ms after the hardware moved,
+    /// so a begin can see the new format before the flag is set. A format
+    /// that differs from the tap's is stale with or without the flag.
+    func testANodeFormatChangeWithoutTheNotificationStillMakesTheHostStale() {
+        let mono44k = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+        XCTAssertNotNil(reason(configurationChanged: false, currentNodeFormat: mono44k))
+        XCTAssertNotNil(reason(configurationChanged: false, currentNodeFormat: .some(nil)))
+    }
+}
