@@ -51,6 +51,22 @@ public enum TranscriptionProviderID: String, CaseIterable, Codable, Sendable {
     public var keychainAccount: String { "apiKey" }
 }
 
+/// The app's look, chosen in General settings. Both themes render the existing light
+/// look for now; the Midnight colours arrive with #105. A third theme is a new case here.
+public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
+    case classic
+    case midnight
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .classic: return "Classic"
+        case .midnight: return "Midnight"
+        }
+    }
+}
+
 @MainActor
 public final class SettingsStore: ObservableObject {
     private enum DefaultsKey {
@@ -69,6 +85,7 @@ public final class SettingsStore: ObservableObject {
         static let pendingInstallWelcomeID = "WhisperKey.settings.pendingInstallWelcomeID"
         static let presentedInstallWelcomeID = "WhisperKey.settings.presentedInstallWelcomeID"
         static let usageStatsRange = "WhisperKey.settings.usageStatsRange"
+        static let theme = "WhisperKey.settings.theme"
         // The enabled key is the one #79 wrote by hand as a hidden flag, kept so anyone
         // who turned it on that way keeps the feature on.
         static let quickPasteEnabled = "WhisperKey.settings.quickPasteEnabled"
@@ -181,6 +198,10 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published public var theme: AppTheme {
+        didSet { if !loading { defaults.set(theme.rawValue, forKey: DefaultsKey.theme) } }
+    }
+
     /// The whole quick-paste popup, behind one switch. Default off.
     @Published public var quickPasteEnabled: Bool {
         didSet {
@@ -286,6 +307,8 @@ public final class SettingsStore: ObservableObject {
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.usageStatsRange = (defaults.string(forKey: DefaultsKey.usageStatsRange).flatMap(UsageStatsRange.init(rawValue:))) ?? .today
+        // Missing or unknown (a theme removed in a later version) falls back to Classic.
+        self.theme = (defaults.string(forKey: DefaultsKey.theme).flatMap(AppTheme.init(rawValue:))) ?? .classic
         self.quickPasteEnabled = (defaults.object(forKey: DefaultsKey.quickPasteEnabled) as? Bool) ?? false
         let storedHoldDuration = (defaults.object(forKey: DefaultsKey.quickPasteHoldDuration) as? Double)
             ?? Self.defaultQuickPasteHoldDuration
