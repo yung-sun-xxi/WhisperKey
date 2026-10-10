@@ -1,0 +1,327 @@
+import CoreGraphics
+import Foundation
+import XCTest
+@testable import ThemeKit
+
+/// Midnight against `docs/design/tokens.md`, read from the file itself, so a change to
+/// the sheet that the tokens do not follow turns this red.
+final class TokenSheetTests: XCTestCase {
+    private var sheet: TokenSheet!
+    private let midnight = ThemeTokens.midnight
+
+    override func setUpWithError() throws {
+        sheet = try TokenSheet.load()
+    }
+
+    // MARK: - Colours
+
+    func testGreysMatchTheSheet() throws {
+        let colors = midnight.colors
+        XCTAssertEqual(colors.bar, .hex(try sheet.hex("01")))
+        XCTAssertEqual(colors.surface, .hex(try sheet.hex("02")))
+        XCTAssertEqual(colors.settingsSurface, .hex(try sheet.hex("02")))
+        XCTAssertEqual(colors.card, .hex(try sheet.hex("03")))
+        XCTAssertEqual(colors.divider, .hex(try sheet.hex("03")))
+        XCTAssertEqual(colors.selectedRow, .hex(try sheet.hex("04")))
+        XCTAssertEqual(colors.raisedControl, .hex(try sheet.hex("04")))
+        XCTAssertEqual(colors.edge, .hex(try sheet.hex("05")))
+        XCTAssertEqual(colors.mutedEdge, .hex(try sheet.hex("06")))
+        XCTAssertEqual(colors.secondaryText, .hex(try sheet.hex("07")))
+        XCTAssertEqual(colors.navigationText, .hex(try sheet.hex("07n")))
+        XCTAssertEqual(colors.primaryText, .hex(try sheet.hex("08")))
+        XCTAssertEqual(colors.checkboxFill, .hex(try sheet.hex("08")))
+    }
+
+    func testBrandAndStateColoursMatchTheSheet() throws {
+        let colors = midnight.colors
+        XCTAssertEqual(colors.brand, .hex(try sheet.hex("red")))
+        XCTAssertEqual(colors.brandHover, .hex(try sheet.hex("red hover")))
+        XCTAssertEqual(colors.onBrand, .hex(try sheet.hex("on red")))
+        XCTAssertEqual(colors.recordingStop, .hex(try sheet.hex("red")))
+        XCTAssertEqual(colors.success, .hex(try sheet.hex("green")))
+        XCTAssertEqual(colors.offKnob, .hex(try sheet.hex("off knob")))
+
+        // "hatch `#8A909E` at 18% on `#1E2126`"
+        let failure = try sheet.hexes("failure")
+        XCTAssertEqual(failure.count, 2)
+        XCTAssertEqual(colors.failureHatch, .hex(failure[0], opacity: 0.18))
+        XCTAssertEqual(colors.failureFill, .hex(failure[1]))
+    }
+
+    /// The system red is macOS's, drawn in alerts, and never a WhisperKey token.
+    func testNoTokenIsTheSystemRed() throws {
+        let systemRed = try sheet.hex("system red")
+        let mirror = Mirror(reflecting: midnight.colors)
+        for child in mirror.children {
+            XCTAssertNotEqual(child.value as? ThemeColor, .hex(systemRed), child.label ?? "")
+        }
+    }
+
+    // MARK: - Type
+
+    func testTypeMatchesTheSheet() throws {
+        let type = midnight.type
+        XCTAssertEqual(try sheet.font(usage: "stat values"), font(type.statValue))
+        XCTAssertTrue(type.statValue.tabularDigits, "stat values are tabular")
+        XCTAssertEqual(try sheet.font(usage: "window title"), font(type.title))
+        XCTAssertEqual(try sheet.font(usage: "row labels"), font(type.body))
+        XCTAssertEqual(try sheet.font(usage: "status line"), font(type.small))
+        XCTAssertEqual(try sheet.font(usage: "timestamps"), font(type.caption))
+        XCTAssertEqual(try sheet.font(usage: "caps headers"), font(type.capsHeader))
+        XCTAssertEqual(type.capsHeader.trackingEm, 0.06, accuracy: 0.0001)
+        XCTAssertEqual(type.bodyLineHeight ?? 0, try sheet.number(after: "Body line-height"), accuracy: 0.0001)
+        // "Default button: red fill, 13/500 on-red label"
+        XCTAssertEqual(try sheet.fontInText(after: "**Default button**"), font(type.defaultButton))
+    }
+
+    /// The values the surfaces use and the sheet does not list (its section 2 and 3).
+    func testTypeGapsMatchTheMockups() throws {
+        let gaps = try sheet.section("Values the surfaces use that the sheet does not list")
+        let type = midnight.type
+        XCTAssertTrue(gaps.contains("(\"All\") is 11/500"))
+        XCTAssertEqual(font(type.segmentLabelOnBrand), FontSpec(size: 11, weight: 500))
+        XCTAssertTrue(gaps.contains("\"Hold\" segment are 12/500"))
+        XCTAssertEqual(font(type.labelOnBrand), FontSpec(size: 12, weight: 500))
+        XCTAssertTrue(gaps.contains("is 10/700"))
+        XCTAssertEqual(font(type.checkMark), FontSpec(size: 10, weight: 700))
+    }
+
+    // MARK: - Radii, sizes, spacing
+
+    func testRadiiMatchTheSheet() throws {
+        let radii = midnight.radii
+        XCTAssertEqual(try sheet.firstColumnNumber(usage: "window shell"), radii.window)
+        XCTAssertEqual(try sheet.firstColumnNumber(usage: "rows, cards"), radii.card)
+        XCTAssertEqual(try sheet.firstColumnNumber(usage: "rows, cards"), radii.row)
+        XCTAssertEqual(try sheet.firstColumnNumber(usage: "rows, cards"), radii.toggle)
+        XCTAssertEqual(try sheet.firstColumnNumber(usage: "keycaps, fields"), radii.control)
+        XCTAssertEqual(try sheet.firstColumnNumber(usage: "checkbox"), radii.checkbox)
+        for panel in [midnight.panels.popover, midnight.panels.quickPaste, midnight.panels.toast] {
+            XCTAssertEqual(try sheet.firstColumnNumber(usage: "panel shell"), panel.radius)
+        }
+    }
+
+    func testSizesMatchTheSheet() throws {
+        let sizes = midnight.sizes
+        XCTAssertEqual(try sheet.size("list row"), sizes.listRow)
+        XCTAssertEqual(try sheet.size("form row"), sizes.formRow)
+        XCTAssertEqual(try sheet.size("panel bar"), sizes.panelBar)
+        XCTAssertEqual(try sheet.size("titlebar"), sizes.titlebar)
+        XCTAssertEqual(try sheet.size("+ action bar"), sizes.actionBar)
+        XCTAssertEqual(try sheet.size("menu item"), sizes.menuItem)
+        XCTAssertEqual(try sheet.size("control"), sizes.control)
+        XCTAssertEqual(try sheet.size("keycap, badge"), sizes.keycap)
+        XCTAssertEqual(try sheet.sizePair("toggle"), sizes.toggle)
+        XCTAssertEqual(try sheet.size("+ checkbox"), sizes.checkbox)
+        XCTAssertEqual(try sheet.size("dot"), sizes.dot)
+        XCTAssertEqual(try sheet.sizePair("bar"), sizes.selectionBar)
+
+        let widths = try sheet.cell(firstColumn: "widths", column: 1)
+        XCTAssertTrue(widths.contains("panel \(Int(midnight.panels.popover.width))"), widths)
+        XCTAssertTrue(widths.contains("quick paste \(Int(midnight.panels.quickPaste.width))"), widths)
+        XCTAssertTrue(widths.contains("toast \(Int(midnight.panels.toast.width))"), widths)
+    }
+
+    func testSegmentSizesMatchTheMockups() throws {
+        let gaps = try sheet.section("Values the surfaces use that the sheet does not list")
+        let sizes = midnight.sizes
+        XCTAssertTrue(gaps.contains("segments are \(Int(sizes.periodSegment)) tall in a \(Int(sizes.periodTrack)) track"), gaps)
+        XCTAssertTrue(gaps.contains("segments are \(Int(sizes.modeSegment)) tall at radius \(Int(midnight.radii.modeSegment)) in a \(Int(sizes.modeTrack)) track"), gaps)
+    }
+
+    func testSpacingMatchesTheSheet() throws {
+        let spacing = midnight.spacing
+        XCTAssertEqual(try sheet.spacingSteps(), spacing.steps)
+        let edges = try sheet.section("Spacing and edges")
+        XCTAssertTrue(edges.contains("Text edge \(Int(spacing.panelTextEdge)) in panels, \(Int(spacing.windowTextEdge)) in windows"), edges)
+        XCTAssertTrue(edges.contains("Rows inset \(Int(spacing.rowInset)) from the shell with \(Int(spacing.rowPadding)) inside"), edges)
+    }
+
+    // MARK: - Panels and shadows
+
+    func testShadowsMatchTheMockups() throws {
+        let gaps = try sheet.section("Values the surfaces use that the sheet does not list")
+        let panel = try TokenSheet.shadow(in: gaps, after: "panels")
+        XCTAssertEqual(midnight.panels.popover.shadow, panel)
+        XCTAssertEqual(midnight.panels.quickPaste.shadow, panel)
+        XCTAssertEqual(midnight.panels.toast.shadow, panel)
+        XCTAssertEqual(midnight.shadows.window, try TokenSheet.shadow(in: gaps, after: "windows"))
+        XCTAssertEqual(midnight.shadows.menu, try TokenSheet.shadow(in: gaps, after: "actions menu"))
+        XCTAssertEqual(midnight.shadows.alert, try TokenSheet.shadow(in: gaps, after: "the mock alert"))
+    }
+
+    /// "02 surface. Panels at 95% + blur 30", edged in 05 ("every edge: shell").
+    func testPanelShellsAreOneShell() throws {
+        let surface = try sheet.hex("02")
+        let edge = try sheet.hex("05")
+        for panel in [midnight.panels.popover, midnight.panels.quickPaste, midnight.panels.toast] {
+            XCTAssertEqual(panel.background, .fill(.hex(surface, opacity: 0.95), blur: 30))
+            XCTAssertEqual(panel.edge, .hex(edge))
+            XCTAssertEqual(panel.edgeWidth, 1)
+        }
+        let usage = try sheet.cell(firstColumn: "02", column: 2)
+        XCTAssertTrue(usage.contains("Panels at 95% + blur 30"), usage)
+    }
+
+    private func font(_ font: ThemeFont) -> FontSpec {
+        FontSpec(size: font.size, weight: font.weight.rawValue)
+    }
+}
+
+// MARK: - Reading the sheet
+
+struct FontSpec: Equatable, CustomStringConvertible {
+    let size: CGFloat
+    let weight: Int
+    var description: String { "\(Int(size))/\(weight)" }
+}
+
+/// Just enough of a reader for `docs/design/tokens.md`: its tables, sections and the
+/// shadow strings. Every lookup throws when the sheet does not say what it looks for,
+/// so a renamed row fails loudly instead of matching nothing.
+struct TokenSheet {
+    struct Missing: Error, CustomStringConvertible {
+        let what: String
+        var description: String { "tokens.md has no \(what)" }
+    }
+
+    let text: String
+    /// Every table row, as trimmed cells with backticks removed.
+    let rows: [[String]]
+
+    static func load() throws -> TokenSheet {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // ThemeKitTests
+            .deletingLastPathComponent() // Tests
+            .deletingLastPathComponent() // repository
+            .appendingPathComponent("docs/design/tokens.md")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let rows = text.split(separator: "\n").compactMap { line -> [String]? in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("|"), !trimmed.hasPrefix("|---") else { return nil }
+            return trimmed
+                .split(separator: "|", omittingEmptySubsequences: false)
+                .dropFirst()
+                .dropLast()
+                .map { $0.replacingOccurrences(of: "`", with: "").trimmingCharacters(in: .whitespaces) }
+        }
+        return TokenSheet(text: text, rows: rows)
+    }
+
+    func cell(firstColumn key: String, column: Int) throws -> String {
+        guard let row = rows.first(where: { $0.first == key || $0.first == "+ \(key)" }), row.count > column else {
+            throw Missing(what: "row \"\(key)\"")
+        }
+        return row[column]
+    }
+
+    func hex(_ key: String) throws -> UInt32 {
+        let values = try hexes(key)
+        guard values.count == 1 else { throw Missing(what: "single hex for \"\(key)\"") }
+        return values[0]
+    }
+
+    func hexes(_ key: String) throws -> [UInt32] {
+        let value = try cell(firstColumn: key, column: 1)
+        let values = Self.matches(of: "#([0-9A-Fa-f]{6})", in: value).compactMap { UInt32($0[1], radix: 16) }
+        guard !values.isEmpty else { throw Missing(what: "hex for \"\(key)\"") }
+        return values
+    }
+
+    /// The type table: the row whose usage starts with `usage`, read as "15/600".
+    func font(usage: String) throws -> FontSpec {
+        guard let row = rows.first(where: { $0.count >= 3 && $0[2].lowercased().hasPrefix(usage.lowercased()) }) else {
+            throw Missing(what: "type row for \"\(usage)\"")
+        }
+        return try Self.font(in: row[0])
+    }
+
+    func fontInText(after marker: String) throws -> FontSpec {
+        guard let range = text.range(of: marker) else { throw Missing(what: marker) }
+        let line = text[range.upperBound...].prefix { $0 != "\n" }
+        return try Self.font(in: String(line))
+    }
+
+    static func font(in text: String) throws -> FontSpec {
+        guard let match = matches(of: "([0-9]+)/([0-9]{3})", in: text).first,
+              let size = Double(match[1]), let weight = Int(match[2]) else {
+            throw Missing(what: "size/weight in \"\(text)\"")
+        }
+        return FontSpec(size: CGFloat(size), weight: weight)
+    }
+
+    /// The radii table: the number in the first column of the row whose usage starts
+    /// with `usage`.
+    func firstColumnNumber(usage: String) throws -> CGFloat {
+        guard let row = rows.first(where: { $0.count == 2 && $0[1].lowercased().hasPrefix(usage.lowercased()) }),
+              let value = Double(row[0].replacingOccurrences(of: "+ ", with: "")) else {
+            throw Missing(what: "radius row for \"\(usage)\"")
+        }
+        return CGFloat(value)
+    }
+
+    /// The sizes table: the "Size" column of a named row.
+    func size(_ name: String) throws -> CGFloat {
+        guard let row = rows.first(where: { $0.count == 3 && $0[0] == name }), let value = Double(row[1]) else {
+            throw Missing(what: "size row \"\(name)\"")
+        }
+        return CGFloat(value)
+    }
+
+    func sizePair(_ name: String) throws -> CGSize {
+        guard let row = rows.first(where: { $0.count == 3 && $0[0] == name }) else {
+            throw Missing(what: "size row \"\(name)\"")
+        }
+        let parts = row[1].split(separator: "×").compactMap { Double($0) }
+        guard parts.count == 2 else { throw Missing(what: "W×H in \"\(row[1])\"") }
+        return CGSize(width: parts[0], height: parts[1])
+    }
+
+    func number(after marker: String) throws -> Double {
+        guard let range = text.range(of: marker),
+              let match = Self.matches(of: "([0-9]+(\\.[0-9]+)?)", in: String(text[range.upperBound...].prefix(20))).first,
+              let value = Double(match[1]) else {
+            throw Missing(what: "number after \"\(marker)\"")
+        }
+        return value
+    }
+
+    /// "Steps: **2, 3, 4, ...**."
+    func spacingSteps() throws -> [CGFloat] {
+        guard let match = Self.matches(of: "Steps: \\*\\*([0-9, ]+)\\*\\*", in: text).first else {
+            throw Missing(what: "spacing steps")
+        }
+        return match[1].split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }.map { CGFloat($0) }
+    }
+
+    /// The text of a `##` section, up to the next one.
+    func section(_ heading: String) throws -> String {
+        guard let start = text.range(of: "## \(heading)") else { throw Missing(what: "section \"\(heading)\"") }
+        let rest = text[start.upperBound...]
+        let end = rest.range(of: "\n## ")?.lowerBound ?? rest.endIndex
+        // Line breaks inside a paragraph are not meaningful; joining them lets a phrase
+        // that wraps in the file still be found.
+        return String(rest[..<end]).replacingOccurrences(of: "\n   ", with: " ").replacingOccurrences(of: "\n", with: " ")
+    }
+
+    /// The shadow that follows `label` in the gaps list, e.g.
+    /// "panels `0 22px 48px rgba(0,0,0,0.5)`".
+    static func shadow(in text: String, after label: String) throws -> ThemeShadow {
+        let pattern = "\(NSRegularExpression.escapedPattern(for: label)) `([0-9]+)(px)? ([0-9]+)px ([0-9]+)px rgba\\(0,0,0,([0-9.]+)\\)`"
+        guard let match = matches(of: pattern, in: text).first,
+              let x = Double(match[1]), let y = Double(match[3]), let blur = Double(match[4]), let alpha = Double(match[5]) else {
+            throw Missing(what: "shadow after \"\(label)\"")
+        }
+        return .drop(color: .hex(0x000000, opacity: alpha), blur: CGFloat(blur), x: CGFloat(x), y: CGFloat(y))
+    }
+
+    static func matches(of pattern: String, in text: String) -> [[String]] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.matches(in: text, range: range).map { result in
+            (0..<result.numberOfRanges).map { index in
+                Range(result.range(at: index), in: text).map { String(text[$0]) } ?? ""
+            }
+        }
+    }
+}

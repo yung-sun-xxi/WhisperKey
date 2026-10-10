@@ -22,6 +22,7 @@ let package = Package(
         .library(name: "ErrorToast", targets: ["ErrorToast"]),
         .library(name: "LoginItem", targets: ["LoginItem"]),
         .library(name: "SingleInstance", targets: ["SingleInstance"]),
+        .library(name: "ThemeKit", targets: ["ThemeKit"]),
     ],
     targets: [
         .target(name: "HotkeyEngine"),
@@ -39,6 +40,8 @@ let package = Package(
         .target(name: "ErrorToast", dependencies: ["TranscriptionProvider"]),
         .target(name: "LoginItem"),
         .target(name: "SingleInstance"),
+        // The look of each theme as values, and their delivery to every hosting root (#160).
+        .target(name: "ThemeKit", dependencies: ["SettingsStore"]),
         // Marks the Debug build (WhisperKey Dev) with a D. The whole module is compiled
         // only under DEBUG, so a Release build carries none of it (#149).
         .target(name: "DevBuildMarker"),
@@ -66,6 +69,7 @@ let package = Package(
                 "LoginItem",
                 "SingleInstance",
                 "DevBuildMarker",
+                "ThemeKit",
             ]
         ),
 
@@ -85,5 +89,6 @@ let package = Package(
         .testTarget(name: "LoginItemTests", dependencies: ["LoginItem"]),
         .testTarget(name: "SingleInstanceTests", dependencies: ["SingleInstance"]),
         .testTarget(name: "DevBuildMarkerTests", dependencies: ["DevBuildMarker"]),
+        .testTarget(name: "ThemeKitTests", dependencies: ["ThemeKit", "SettingsStore", "KeychainStore", "QuickPaste"]),
     ]
 )
