@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import os
 import SwiftUI
+import ThemeKit
 #if DEBUG
 import DevBuildMarker
 #endif
@@ -170,8 +171,11 @@ final class MenuBarController: NSObject {
     }
 
     private func configurePanel() {
+        ThemeTokensSource.shared.follow(coordinator.settings)
         hostingView.rootView = AnyView(
-            PopoverContent().environmentObject(coordinator)
+            ThemedRoot("popover") {
+                PopoverContent().environmentObject(coordinator)
+            }
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 

@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import SwiftUI
+import ThemeKit
 import HotkeyEngine
 import QuickPaste
 import SettingsStore
@@ -181,11 +182,14 @@ private final class SettingsContentViewController: NSTabViewController {
         tabStyle = .toolbar
         transitionOptions = []
 
+        ThemeTokensSource.shared.follow(coordinator.settings)
         for tab in SettingsTab.allCases {
             let paneController = NSHostingController(
                 rootView: AnyView(
-                    SettingsPane(tab: tab, settings: coordinator.settings)
-                        .environmentObject(coordinator)
+                    ThemedRoot("settings.\(tab.title)") {
+                        SettingsPane(tab: tab, settings: coordinator.settings)
+                            .environmentObject(coordinator)
+                    }
                 )
             )
             // Reports the SwiftUI content height back as the pane's preferred size, which
@@ -1777,7 +1781,7 @@ private enum UsageResetWindowController {
             onCancel: { hide() }
         )
 
-        let hostingView = NSHostingView(rootView: content)
+        let hostingView = NSHostingView(rootView: ThemedRoot("resetUsage") { content })
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 1),
             styleMask: [.titled, .closable],

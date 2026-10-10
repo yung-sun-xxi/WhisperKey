@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ThemeKit
 import HistoryStore
 
 @MainActor
@@ -20,7 +21,7 @@ enum HistoryReadWindowController {
             onRetry: onRetry,
             onClose: { close(id: entry.id) }
         )
-        let host = NSHostingController(rootView: contentView)
+        let host = NSHostingController(rootView: ThemedRoot("reader") { contentView })
 
         let window = NSWindow(contentViewController: host)
         window.styleMask = [.titled, .closable, .resizable]

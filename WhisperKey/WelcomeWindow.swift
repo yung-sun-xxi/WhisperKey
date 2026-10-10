@@ -1,6 +1,7 @@
 import AppKit
 import os
 import SwiftUI
+import ThemeKit
 
 @MainActor
 final class WelcomeWindowController: NSObject, NSWindowDelegate {
@@ -30,7 +31,8 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
                 self?.complete(openSettings: false)
             }
         )
-        let hostingView = NSHostingView(rootView: content)
+        ThemeTokensSource.shared.follow(coordinator.settings)
+        let hostingView = NSHostingView(rootView: ThemedRoot("welcome") { content })
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 390, height: 148),
             styleMask: [.titled, .closable],

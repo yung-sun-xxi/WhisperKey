@@ -2,6 +2,7 @@ import AppKit
 import ClipboardHistoryStore
 import QuickPaste
 import SwiftUI
+import ThemeKit
 
 /// What the quick-paste panel shows: the most recent clipboard entries, and which of them
 /// the pointer is currently over.
@@ -141,7 +142,7 @@ struct QuickPasteView: View {
 /// used by both the drawing and the choosing.
 @MainActor
 final class QuickPastePanel: NSPanel {
-    private var hostingView: NSHostingView<QuickPasteView>!
+    private var hostingView: NSHostingView<ThemedRoot<QuickPasteView>>!
     private var content: QuickPasteContent
 
     init(content: QuickPasteContent) {
@@ -166,7 +167,7 @@ final class QuickPastePanel: NSPanel {
         isOpaque = false
         ignoresMouseEvents = true
 
-        let hosting = NSHostingView(rootView: QuickPasteView(content: content))
+        let hosting = NSHostingView(rootView: Self.root(content))
         hosting.translatesAutoresizingMaskIntoConstraints = false
         let container = NSView(frame: contentRect(forFrameRect: frame))
         container.addSubview(hosting)
@@ -192,7 +193,11 @@ final class QuickPastePanel: NSPanel {
     func setHighlightedIndex(_ index: Int?) {
         guard content.highlightedIndex != index else { return }
         content.highlightedIndex = index
-        hostingView.rootView = QuickPasteView(content: content)
+        hostingView.rootView = Self.root(content)
+    }
+
+    private static func root(_ content: QuickPasteContent) -> ThemedRoot<QuickPasteView> {
+        ThemedRoot("quickPaste") { QuickPasteView(content: content) }
     }
 
     /// Long enough to read as an appearance rather than a flash, short enough that the
