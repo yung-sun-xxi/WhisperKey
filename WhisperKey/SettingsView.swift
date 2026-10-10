@@ -1639,37 +1639,37 @@ private enum APIKeyDeletionConfirmation {
     }
 }
 
-/// The Theme row: one clickable swatch per theme, the selected one outlined in the
-/// accent colour. Both themes render the existing light look until #105 lands; the
-/// swatches only preview what each will be.
+/// The Theme row: one chip per theme — a small swatch and the theme's name — the selected
+/// chip outlined in the accent colour. The chips fit the standard row height, so the row
+/// keeps the pane's rhythm. Both themes render the existing light look until #105 lands;
+/// the swatches only preview what each will be.
 private struct ThemePicker: View {
-    private static let swatchSize: CGFloat = 40
-    private static let swatchCornerRadius: CGFloat = 8
+    private static let swatchSize: CGFloat = 14
+    private static let swatchCornerRadius: CGFloat = 4
     private static let swatchBorderWidth: CGFloat = 1
+    private static let swatchToNameSpacing: CGFloat = 6
+    private static let chipHorizontalPadding: CGFloat = 7
+    private static let chipCornerRadius: CGFloat = 6
     private static let selectionOutlineWidth: CGFloat = 2
-    /// Gap between the swatch's edge and the selection outline drawn around it.
-    private static let selectionOutlineInset: CGFloat = 3
-    private static let tileSpacing: CGFloat = 12
-    private static let swatchToNameSpacing: CGFloat = 4
+    private static let chipSpacing: CGFloat = 8
 
     @Binding var selection: AppTheme
 
     var body: some View {
-        HStack(spacing: Self.tileSpacing) {
+        HStack(spacing: Self.chipSpacing) {
             ForEach(AppTheme.allCases) { theme in
-                tile(for: theme)
+                chip(for: theme)
             }
         }
     }
 
-    private func tile(for theme: AppTheme) -> some View {
+    private func chip(for theme: AppTheme) -> some View {
         let isSelected = theme == selection
-        let outlineRadius = Self.swatchCornerRadius + Self.selectionOutlineInset
 
         return Button {
             selection = theme
         } label: {
-            VStack(spacing: Self.swatchToNameSpacing) {
+            HStack(spacing: Self.swatchToNameSpacing) {
                 RoundedRectangle(cornerRadius: Self.swatchCornerRadius, style: .continuous)
                     .fill(Self.swatchFill(for: theme))
                     .overlay {
@@ -1677,17 +1677,17 @@ private struct ThemePicker: View {
                             .strokeBorder(Self.swatchBorder(for: theme), lineWidth: Self.swatchBorderWidth)
                     }
                     .frame(width: Self.swatchSize, height: Self.swatchSize)
-                    .padding(Self.selectionOutlineInset)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: outlineRadius, style: .continuous)
-                            .strokeBorder(
-                                isSelected ? Color.accentColor : Color.clear,
-                                lineWidth: Self.selectionOutlineWidth
-                            )
-                    }
                 Text(theme.displayName)
-                    .font(.caption)
-                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, Self.chipHorizontalPadding)
+            .frame(height: SettingsWindowLayout.settingsControlHeight)
+            .overlay {
+                RoundedRectangle(cornerRadius: Self.chipCornerRadius, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.accentColor : Color.primary.opacity(0.15),
+                        lineWidth: isSelected ? Self.selectionOutlineWidth : 1
+                    )
             }
             .contentShape(Rectangle())
         }
