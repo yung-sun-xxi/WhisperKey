@@ -1335,6 +1335,9 @@ private struct GeneralSettingsPane: View {
 
     var body: some View {
         SettingsPaneStack {
+            SettingsRow("Theme") {
+                ThemePicker(selection: $settings.theme)
+            }
             SettingsRow("Launch at login") {
                 LaunchAtLoginToggle()
             }
@@ -1633,6 +1636,82 @@ private enum APIKeyDeletionConfirmation {
         }
 
         return SettingsWindowController.relatedWindow
+    }
+}
+
+/// The Theme row: one clickable swatch per theme, the selected one outlined in the
+/// accent colour. Both themes render the existing light look until #105 lands; the
+/// swatches only preview what each will be.
+private struct ThemePicker: View {
+    private static let swatchSize: CGFloat = 40
+    private static let swatchCornerRadius: CGFloat = 8
+    private static let swatchBorderWidth: CGFloat = 1
+    private static let selectionOutlineWidth: CGFloat = 2
+    /// Gap between the swatch's edge and the selection outline drawn around it.
+    private static let selectionOutlineInset: CGFloat = 3
+    private static let tileSpacing: CGFloat = 12
+    private static let swatchToNameSpacing: CGFloat = 4
+
+    @Binding var selection: AppTheme
+
+    var body: some View {
+        HStack(spacing: Self.tileSpacing) {
+            ForEach(AppTheme.allCases) { theme in
+                tile(for: theme)
+            }
+        }
+    }
+
+    private func tile(for theme: AppTheme) -> some View {
+        let isSelected = theme == selection
+        let outlineRadius = Self.swatchCornerRadius + Self.selectionOutlineInset
+
+        return Button {
+            selection = theme
+        } label: {
+            VStack(spacing: Self.swatchToNameSpacing) {
+                RoundedRectangle(cornerRadius: Self.swatchCornerRadius, style: .continuous)
+                    .fill(Self.swatchFill(for: theme))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Self.swatchCornerRadius, style: .continuous)
+                            .strokeBorder(Self.swatchBorder(for: theme), lineWidth: Self.swatchBorderWidth)
+                    }
+                    .frame(width: Self.swatchSize, height: Self.swatchSize)
+                    .padding(Self.selectionOutlineInset)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: outlineRadius, style: .continuous)
+                            .strokeBorder(
+                                isSelected ? Color.accentColor : Color.clear,
+                                lineWidth: Self.selectionOutlineWidth
+                            )
+                    }
+                Text(theme.displayName)
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(theme.displayName)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private static func swatchFill(for theme: AppTheme) -> Color {
+        switch theme {
+        case .classic:
+            Color(white: 0.96)
+        case .midnight:
+            Color(red: 0.11, green: 0.12, blue: 0.15)
+        }
+    }
+
+    private static func swatchBorder(for theme: AppTheme) -> Color {
+        switch theme {
+        case .classic:
+            Color(white: 0.78)
+        case .midnight:
+            Color(white: 0.30)
+        }
     }
 }
 
