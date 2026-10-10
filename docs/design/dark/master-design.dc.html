@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+  body { margin:0; background:#0E1013; }
+  a { color:#E8EAEF; }
+  a:hover { color:#E24631; }
+</style>
+</helmet>
+<section style="background:#0E1013;padding:56px 56px 80px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Helvetica,sans-serif;-webkit-font-smoothing:antialiased;box-sizing:border-box;min-width:1680px">
+
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:22px;font-weight:600;letter-spacing:-0.01em;color:#E8EAEF">WhisperKey — master design file</div>
+    <div style="font-size:12px;color:#9BA1AF">dark · real size · brand red #E24631</div>
+  </div>
+  <div style="margin-top:6px;font-size:13px;color:#9BA1AF;max-width:720px;line-height:1.45;text-wrap:pretty">Everything below is drawn from this sheet and nothing else. Items marked + were added this round because a surface needed them.</div>
+
+  <!-- TOKEN SHEET -->
+  <div data-screen-label="Token sheet" style="margin-top:28px;border:1px solid #23262D;border-radius:10px;padding:22px 24px 24px;display:grid;grid-template-columns:1.2fr 1.1fr 0.9fr 1fr 1.25fr;gap:32px">
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:12px">GREYS</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#14161A;border:1px solid #3B4150;box-sizing:border-box;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">01 #14161A</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">bars: status, footer, titlebar, tab well, action bar. Type on red</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#1A1C21;border:1px solid #3B4150;box-sizing:border-box;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">02 #1A1C21</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">surface. Panels at 95% + blur 30, windows solid</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#23262D;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">03 #23262D</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">cards, controls, tracks. Dividers on 02</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#2E323B;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">04 #2E323B</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">hover and selected row, inactive keycap, off track. + a control sitting on a 03 card</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#3B4150;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">05 #3B4150</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">every edge: shell, control outline, active keycap, divider on 03</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#5A6070;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">06 #5A6070</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">dashed failure edge, traffic lights. + unchecked checkbox edge. Never text</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#9BA1AF;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">07 #9BA1AF</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">secondary type. 6.4:1 on 02</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#B4BAC6;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">07n #B4BAC6</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">navigation at rest: inactive tabs and segments</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#E8EAEF;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">08 #E8EAEF</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">primary type. + checked checkbox fill</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#0E1013;border:1px solid #3B4150;box-sizing:border-box;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">+ 00 #0E1013</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">desktop behind this board. Presentation only, not in the app</div></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:12px">BRAND · STATE · SYSTEM</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#E24631;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">red #E24631</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">oklch 0.60 0.196 31°. Trigger caps, active segment and tab, toggle on, 2pt selected-row bar. + default button</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#D0331F;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">red hover #D0331F</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">hover and pressed on any red fill</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#E24631;display:flex;align-items:center;justify-content:center;font-size:11px;color:#14161A;flex:none">⌥</div><div><div style="font-size:12px;color:#E8EAEF">on red #14161A</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">all type and glyphs on red, 4.4:1</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#1A1C21;border:1px solid #3B4150;box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:6px;height:6px;border-radius:3px;background:#78BE20"></div></div><div><div style="font-size:12px;color:#E8EAEF">green #78BE20</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">6pt dot only: Connected, Saved. + Granted</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background-color:#1E2126;background-image:repeating-linear-gradient(135deg,rgba(138,144,158,0.4) 0 3px,rgba(138,144,158,0) 3px 7px);border:1px dashed #5A6070;box-sizing:border-box;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">failure</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">hatch #8A909E at 18% on #1E2126, 1px dashed 06. Failed row, rejected key. + Needs access badge</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#FF3B30;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">system red #FF3B30</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">drawn by macOS in alerts. Never on a WhisperKey surface</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#2E323B;flex:none;position:relative"><div style="position:absolute;top:5px;left:4px;width:12px;height:12px;border-radius:6px;background:#8A909E"></div></div><div><div style="font-size:12px;color:#E8EAEF">off knob #8A909E</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">off-toggle knob and hatch stroke. Shapes only</div></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:12px">TYPE · SF</div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div><div style="font-size:15px;font-weight:600;color:#E8EAEF">15/600 · 90k</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">stat values, tabular</div></div>
+        <div><div style="font-size:13px;font-weight:600;color:#E8EAEF">13/600 · Settings</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">window title, alert title. + in-window heading</div></div>
+        <div><div style="font-size:13px;color:#E8EAEF">13/400 · Launch at login</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">row labels, values, buttons, body text. Body line-height 1.45</div></div>
+        <div><div style="font-size:12px;color:#E8EAEF">12/400 · Full history</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">status line, footer, tabs. + description lines in 07</div></div>
+        <div><div style="font-size:11px;color:#E8EAEF">11/400 · 14m · ⌘K</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">timestamps, keycaps, units, badges</div></div>
+        <div><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#E8EAEF">11/500 · RECENT</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">caps headers, 0.06em. Floor is 11</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:12px">RADII · SIZES</div>
+      <div style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:#E8EAEF;line-height:1.4">
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:12px;border:1px solid #5A6070;flex:none"></div>12 · panel shell (popover, quick paste, toast)</div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:10px;border:1px solid #5A6070;flex:none"></div>10 · window shell, actions menu</div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:8px;border:1px solid #5A6070;flex:none"></div>8 · rows, cards, tracks, toggles</div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:6px;border:1px solid #5A6070;flex:none"></div>6 · keycaps, fields, buttons, badges</div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:4px;border:1px solid #5A6070;flex:none"></div>+ 4 · checkbox</div>
+        <div style="height:1px;background:#23262D;margin:5px 0"></div>
+        <div><span style="color:#9BA1AF">list row</span> 34 <span style="color:#9BA1AF">· popover, quick paste, full history, checklist</span></div>
+        <div><span style="color:#9BA1AF">form row</span> 40 <span style="color:#9BA1AF">· Settings</span></div>
+        <div><span style="color:#9BA1AF">panel bar</span> 36 · <span style="color:#9BA1AF">titlebar</span> 44 · <span style="color:#9BA1AF">+ action bar</span> 48</div>
+        <div><span style="color:#9BA1AF">menu item</span> 30 · <span style="color:#9BA1AF">control</span> 26 · <span style="color:#9BA1AF">keycap, badge</span> 18</div>
+        <div><span style="color:#9BA1AF">toggle</span> 28×16 · <span style="color:#9BA1AF">+ checkbox</span> 14 · <span style="color:#9BA1AF">dot</span> 6 · <span style="color:#9BA1AF">bar</span> 2×18</div>
+        <div><span style="color:#9BA1AF">widths</span> panel 320 · quick paste 328 · toast 380</div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:12px">SPACING · EDGES</div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:2px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">2</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:3px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">3</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:4px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">4</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:6px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">6</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:8px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">8</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:10px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">10</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:14px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">14</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:16px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">16</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:20px;height:14px;background:#5A6070"></div><div style="font-size:11px;color:#9BA1AF">20</div></div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#E8EAEF;line-height:1.5">Text edge 16 in panels, 20 in windows. Rows inset 8 from the shell with 8 inside. Stat tile inset 9×10 stays as drawn.</div>
+      <div style="margin-top:16px;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:8px">+ ADDED THIS ROUND</div>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#E8EAEF;line-height:1.4">
+        <div><strong style="font-weight:600">Default button</strong> <span style="color:#9BA1AF">— red fill, 13/500 on-red label. Welcome only</span></div>
+        <div><strong style="font-weight:600">Disabled control</strong> <span style="color:#9BA1AF">— no fill, 05 edge, 07 label</span></div>
+        <div><strong style="font-weight:600">Checkbox</strong> <span style="color:#9BA1AF">— 14, radius 4. Off: 06 edge on 02. On and mixed: 08 fill, 01 mark</span></div>
+        <div><strong style="font-weight:600">Action bar</strong> <span style="color:#9BA1AF">— 48 on 01, the panel footer at window scale</span></div>
+        <div><strong style="font-weight:600">Row names</strong> <span style="color:#9BA1AF">— 34 is now “list row”, 40 “form row”</span></div>
+        <div><strong style="font-weight:600">Green, failure</strong> <span style="color:#9BA1AF">— extended to Granted and Needs access</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MENU BAR POPOVER + SETTINGS -->
+  <div style="margin-top:56px;display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:15px;font-weight:600;color:#E8EAEF">Menu bar popover and Settings</div>
+    <div style="font-size:12px;color:#9BA1AF">popover 320 under the menu bar · Settings 580, four tabs</div>
+  </div>
+  <div style="margin-top:22px">
+    <div style="display:flex;gap:44px;align-items:flex-start">
+
+      <!-- ── POPOVER ──────────────────────────────────────── -->
+      <div style="width:320px;flex:none" data-screen-label="Popover">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">POPOVER · 320 WIDE</div>
+        <sc-if value="{{ showNotch }}" hint-placeholder-val="{{ true }}">
+          <div style="width:0;height:0;margin-left:24px;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:8px solid #1A1C21"></div>
+        </sc-if>
+        <div style="width:320px;background:rgba(26,28,33,0.95);backdrop-filter:blur(30px);border:1px solid #3B4150;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.5);overflow:hidden">
+
+          <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 16px;background:#14161A">
+            <div style="display:flex;gap:3px;flex:none">
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#E24631;font-size:11px;color:#14161A;display:flex;align-items:center;justify-content:center">⌥</div>
+              <div style="min-width:18px;height:18px;padding:0 5px;border-radius:6px;background:#E24631;font-size:11px;color:#14161A;display:flex;align-items:center;justify-content:center">Space</div>
+            </div>
+            <div style="font-size:12px;color:#E8EAEF">Ready · hold to dictate</div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 16px;border-top:1px solid #23262D;border-bottom:1px solid #23262D">
+            <div style="flex:1;min-width:0;font-size:12px;color:#9BA1AF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-transcribe</div>
+            <div style="display:flex;align-items:center;gap:6px;flex:none">
+              <div style="font-size:11px;color:#9BA1AF">Connected</div>
+              <div style="width:6px;height:6px;border-radius:3px;background:#78BE20"></div>
+            </div>
+          </div>
+
+          <div style="padding:14px 16px 0">
+            <div style="font-size:11px;font-weight:500;color:#9BA1AF;letter-spacing:0.06em;margin-bottom:8px">USAGE</div>
+            <div style="display:flex;background:#23262D;border-radius:8px;overflow:hidden;cursor:default" style-hover="background:#2E323B">
+              <div style="flex:1;padding:9px 10px;text-align:center">
+                <div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">90k</div>
+                <div style="font-size:11px;color:#9BA1AF;margin-top:2px">words</div>
+              </div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center">
+                <div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">17h 18m</div>
+                <div style="font-size:11px;color:#9BA1AF;margin-top:2px">audio</div>
+              </div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center">
+                <div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">~$3.1</div>
+              </div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="width:26px;flex:none;display:flex;align-items:center;justify-content:center"><div style="width:6px;height:6px;border-top:1.5px solid #9BA1AF;border-right:1.5px solid #9BA1AF;transform:rotate(45deg);margin-left:-3px"></div></div>
+            </div>
+            <div style="display:flex;gap:2px;background:#23262D;border-radius:8px;padding:2px;margin-top:8px">
+              <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">Today</div>
+              <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">7d</div>
+              <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">30d</div>
+              <div style="flex:1;text-align:center;font-size:11px;font-weight:500;color:#14161A;line-height:24px;border-radius:6px;background:#E24631">All</div>
+            </div>
+          </div>
+
+          <div style="padding:10px 8px 0">
+            <div style="display:flex;align-items:center;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Clipboard</div>
+              <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
+            </div>
+            <div style="display:flex;align-items:center;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Auto-paste</div>
+              <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;height:34px;padding:0 16px">
+            <div style="flex:1;font-size:11px;font-weight:500;color:#9BA1AF;letter-spacing:0.06em">RECENT</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums">7</div>
+          </div>
+
+          <div style="padding:0 8px 8px">
+            <div style="position:relative;display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px;background:#2E323B">
+              <div style="position:absolute;left:0;top:8px;width:2px;height:18px;border-radius:1px;background:#E24631"></div>
+              <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Что касается их вопросов... Вопрос один…</div>
+              <div style="display:flex;align-items:center;gap:6px;flex:none">
+                <div style="font-size:11px;color:#9BA1AF">Paste</div>
+                <div style="display:flex;gap:3px">
+                  <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#3B4150;font-size:11px;color:#E8EAEF;display:flex;align-items:center;justify-content:center">⌘</div>
+                  <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#3B4150;font-size:11px;color:#E8EAEF;display:flex;align-items:center;justify-content:center">↩</div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Прогон закончился, анализирую его.</div>
+              <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums">14m</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">В summary мне не очень нравится после…</div>
+              <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums">1h</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Я понял, короче, это будет очень долго, я…</div>
+              <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums">2h</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Мне кажется, или если мы начинаем дик…</div>
+              <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums">3h</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px;background-color:#1E2126;background-image:repeating-linear-gradient(135deg,rgba(138,144,158,0.18) 0 4px,rgba(138,144,158,0) 4px 9px)">
+              <div style="flex:1;min-width:0;font-size:13px;color:#9BA1AF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">No speech detected</div>
+              <div style="display:flex;align-items:center;gap:4px;flex:none">
+                <div style="font-size:11px;color:#E8EAEF;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #5A6070">Retry</div>
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;justify-content:center">⌘R</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Не получается сделать, как ты говоришь....</div>
+              <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums">Yst</div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;height:36px;padding:0 16px;border-top:1px solid #23262D;background:#14161A">
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:12px;color:#E8EAEF">Full history</div>
+              <sc-if value="{{ showKeycaps }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:3px">
+                  <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;justify-content:center">⌘</div>
+                  <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;justify-content:center">F</div>
+                </div>
+              </sc-if>
+            </div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:12px;color:#E8EAEF">Actions</div>
+              <div style="display:flex;gap:3px">
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#3B4150;font-size:11px;color:#E8EAEF;display:flex;align-items:center;justify-content:center">⌘</div>
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#3B4150;font-size:11px;color:#E8EAEF;display:flex;align-items:center;justify-content:center">K</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="width:212px;margin-left:104px;margin-top:-4px;background:#23262D;border:1px solid #3B4150;border-radius:10px;box-shadow:0 18px 36px rgba(0,0,0,0.5);padding:8px 8px 6px;box-sizing:border-box">
+          <div style="font-size:11px;font-weight:500;color:#9BA1AF;letter-spacing:0.06em;padding:0 8px 6px">ACTIONS</div>
+          <div style="display:flex;align-items:center;height:30px;padding:0 8px;border-radius:8px;background:#2E323B">
+            <div style="flex:1;font-size:12px;color:#E8EAEF">Clear history…</div>
+            <div style="display:flex;gap:3px">
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#3B4150;font-size:11px;color:#E8EAEF;display:flex;align-items:center;justify-content:center">⌘</div>
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#3B4150;font-size:11px;color:#E8EAEF;display:flex;align-items:center;justify-content:center">⌫</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;height:30px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;font-size:12px;color:#E8EAEF">Settings</div>
+            <div style="display:flex;gap:3px">
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;justify-content:center">⌘</div>
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;justify-content:center">,</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;height:30px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;font-size:12px;color:#E8EAEF">Quit WhisperKey</div>
+            <div style="display:flex;gap:3px">
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;justify-content:center">⌘</div>
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;justify-content:center">Q</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:28px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">STATUS LINE · TWO STATES</div>
+          <div style="width:320px;border:1px solid #3B4150;border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 16px;background:#14161A">
+              <div style="display:flex;gap:3px;flex:none">
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#E24631;font-size:11px;color:#14161A;display:flex;align-items:center;justify-content:center">⌥</div>
+                <div style="min-width:18px;height:18px;padding:0 5px;border-radius:6px;background:#E24631;font-size:11px;color:#14161A;display:flex;align-items:center;justify-content:center">Space</div>
+              </div>
+              <div style="font-size:12px;color:#E8EAEF">Ready · hold to dictate</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 16px;background:#14161A;border-top:1px solid #23262D">
+              <div style="display:flex;align-items:flex-end;gap:2px;height:14px;flex:none">
+                <div style="width:2px;height:6px;border-radius:1px;background:#E24631"></div>
+                <div style="width:2px;height:12px;border-radius:1px;background:#E24631"></div>
+                <div style="width:2px;height:8px;border-radius:1px;background:#E24631"></div>
+                <div style="width:2px;height:14px;border-radius:1px;background:#E24631"></div>
+              </div>
+              <div style="font-size:12px;color:#E24631;flex:1">Recording · 0:04</div>
+              <div style="display:flex;align-items:center;gap:6px;flex:none">
+                <div style="font-size:11px;color:#9BA1AF">Cancel</div>
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;justify-content:center">esc</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:28px" data-screen-label="Popover usage block">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">USAGE BLOCK · AT REST, HOVER</div>
+          <div style="width:320px;background:rgba(26,28,33,0.95);border:1px solid #3B4150;border-radius:12px;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;background:#23262D;border-radius:8px;overflow:hidden">
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">90k</div><div style="font-size:11px;color:#9BA1AF;margin-top:2px">words</div></div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">17h 18m</div><div style="font-size:11px;color:#9BA1AF;margin-top:2px">audio</div></div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">~$3.1</div></div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="width:26px;flex:none;display:flex;align-items:center;justify-content:center"><div style="width:6px;height:6px;border-top:1.5px solid #9BA1AF;border-right:1.5px solid #9BA1AF;transform:rotate(45deg);margin-left:-3px"></div></div>
+            </div>
+            <div style="display:flex;background:#2E323B;border-radius:8px;overflow:hidden">
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">90k</div><div style="font-size:11px;color:#9BA1AF;margin-top:2px">words</div></div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">17h 18m</div><div style="font-size:11px;color:#9BA1AF;margin-top:2px">audio</div></div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">~$3.1</div></div>
+              <div style="width:1px;background:#3B4150;margin:9px 0"></div>
+              <div style="width:26px;flex:none;display:flex;align-items:center;justify-content:center"><div style="width:6px;height:6px;border-top:1.5px solid #E8EAEF;border-right:1.5px solid #E8EAEF;transform:rotate(45deg);margin-left:-3px"></div></div>
+            </div>
+          </div>
+          <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty">Totals across every provider and model for the period. The whole block is one button that opens Usage by model; hover is the 04 row fill and the chevron turns 08. The chevron's 26 segment sits outside the three stats so they stay equal width.</div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:22px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Where the red goes, and why.</strong></div>
+        <div style="margin-top:8px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">1 · The trigger caps</strong>, filled, top-left. The one thing the app does is start listening, so the brand sits on the key that starts it — and turns into red type when it is listening.</div>
+        <div style="margin-top:6px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">2 · The active period segment.</strong> The only choice in the usage block; filled red says which number you are reading.</div>
+        <div style="margin-top:6px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">3 · Toggle on-state.</strong> Binary settings read at a glance from the fill alone, with no label to parse.</div>
+        <div style="margin-top:6px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">4 · A 2pt bar on the selected row.</strong> Marks where Return will land, structurally, so the keycaps can stay grey and the history reads as text.</div>
+        <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty">Retry and the failed row stay greyscale: hatch fill, grey label, dashed outline. Failure is a state, not a brand moment.</div>
+        </sc-if>
+      </div>
+
+      <!-- ── SETTINGS ─────────────────────────────────────── -->
+      <div style="width:580px;flex:none">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">SETTINGS WINDOW · 580 WIDE</div>
+
+        <div style="width:580px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box" data-screen-label="Settings General">
+          <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+            <div style="display:flex;gap:8px">
+              <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+              <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+              <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+            </div>
+            <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">WhisperKey Settings</div>
+          </div>
+          <div style="padding:14px 20px;background:#14161A;border-top:1px solid #23262D">
+            <div style="display:flex;gap:2px;background:#23262D;border-radius:8px;padding:2px">
+              <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:#14161A;line-height:26px;border-radius:6px;background:#E24631">General</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Recording</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Transcription</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Quick paste</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #23262D;padding:10px 20px 16px">
+            <div style="display:flex;align-items:center;height:40px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Launch at login</div>
+              <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;height:40px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">History size</div>
+              <div style="display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box">
+                <div style="font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">30</div>
+                <div style="font-size:11px;color:#9BA1AF">entries</div>
+              </div>
+              <div style="width:22px;height:26px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+                <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:4px solid #9BA1AF"></div>
+                <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #9BA1AF"></div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;height:40px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Usage data</div>
+              <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Reset usage…</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="width:580px;margin-top:28px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box" data-screen-label="Settings Transcription">
+          <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+            <div style="display:flex;gap:8px">
+              <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+              <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+              <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+            </div>
+            <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">WhisperKey Settings</div>
+          </div>
+          <div style="padding:14px 20px;background:#14161A;border-top:1px solid #23262D">
+            <div style="display:flex;gap:2px;background:#23262D;border-radius:8px;padding:2px">
+              <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">General</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Recording</div>
+              <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:#14161A;line-height:26px;border-radius:6px;background:#E24631">Transcription</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Quick paste</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #23262D;padding:10px 20px 16px">
+            <div style="display:flex;align-items:center;height:40px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Provider</div>
+              <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;min-width:150px">
+                <div style="flex:1;font-size:13px;color:#E8EAEF">OpenAI</div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:3.5px solid #9BA1AF"></div>
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-top:3.5px solid #9BA1AF"></div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;height:40px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Model</div>
+              <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;min-width:150px">
+                <div style="flex:1;font-size:13px;color:#E8EAEF">gpt-transcribe</div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:3.5px solid #9BA1AF"></div>
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-top:3.5px solid #9BA1AF"></div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;height:40px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">API key</div>
+              <div style="display:flex;align-items:center;gap:5px;flex:none">
+                <div style="width:6px;height:6px;border-radius:3px;background:#78BE20"></div>
+                <div style="font-size:11px;color:#9BA1AF">Saved</div>
+              </div>
+              <div style="width:150px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;display:flex;align-items:center;font-size:13px;color:#9BA1AF;letter-spacing:0.12em">•••••••••••</div>
+              <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Delete</div>
+            </div>
+            <div style="display:flex;align-items:center;height:40px">
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Language</div>
+              <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;min-width:150px">
+                <div style="flex:1;font-size:13px;color:#E8EAEF">Auto</div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:3.5px solid #9BA1AF"></div>
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-top:3.5px solid #9BA1AF"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:24px;margin-top:16px;align-items:flex-start">
+          <div style="width:278px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:8px">KEY REJECTED — SAME ROW</div>
+            <div style="background:#1A1C21;border:1px solid #3B4150;border-radius:10px;padding:2px 16px">
+              <div style="display:flex;align-items:center;gap:8px;height:40px">
+                <div style="flex:1;font-size:13px;color:#E8EAEF">API key</div>
+                <div style="font-size:11px;color:#E8EAEF;line-height:20px;padding:0 8px;border-radius:6px;border:1px dashed #5A6070">Rejected</div>
+                <div style="width:96px;height:26px;padding:0 10px;border-radius:6px;border:1px dashed #5A6070;box-sizing:border-box;display:flex;align-items:center;font-size:13px;color:#9BA1AF;letter-spacing:0.12em;background-color:#1E2126;background-image:repeating-linear-gradient(135deg,rgba(138,144,158,0.18) 0 4px,rgba(138,144,158,0) 4px 9px)">••••••</div>
+              </div>
+            </div>
+            <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty">Hatch and dash, exactly as the failed history row. No red — the key is broken, not dangerous.</div>
+            </sc-if>
+          </div>
+          <div style="width:278px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:8px">AT THE CLICK — macOS ALERT</div>
+            <div style="background:#0E1013;border-radius:10px;padding:20px;display:flex;justify-content:center">
+              <div style="width:230px;background:#23262D;border:1px solid #3B4150;border-radius:12px;box-shadow:0 20px 44px rgba(0,0,0,0.6);padding:18px 18px 14px;box-sizing:border-box;text-align:center">
+                <div style="font-size:13px;font-weight:600;color:#E8EAEF">Reset usage data?</div>
+                <div style="margin-top:6px;font-size:11px;line-height:1.45;color:#9BA1AF;text-wrap:pretty">Word, audio and cost totals return to zero. Your transcriptions are not affected.</div>
+                <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px">
+                  <div style="font-size:13px;font-weight:500;color:#fff;line-height:26px;border-radius:6px;background:#FF3B30">Reset usage</div>
+                  <div style="font-size:13px;color:#E8EAEF;line-height:26px;border-radius:6px;background:#2E323B;border:1px solid #3B4150">Cancel</div>
+                </div>
+              </div>
+            </div>
+            <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty">System red #FF3B30, drawn by macOS, on a sheet that covers the window. It never shares a screen with the brand orange-red.</div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="width:580px;margin-top:28px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">RECORDING · QUICK PASTE · SAME GRAMMAR</div>
+          <div style="display:flex;flex-direction:column;gap:28px">
+            <div style="width:580px;flex:none">
+              <div style="width:580px;box-shadow:0 24px 52px rgba(0,0,0,0.45);background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-sizing:border-box;overflow:hidden" data-screen-label="Settings Recording">
+                <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+                  <div style="display:flex;gap:8px">
+                    <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+                    <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+                    <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+                  </div>
+                  <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF">WhisperKey Settings</div>
+                </div>
+                <div style="padding:14px 20px;background:#14161A;border-top:1px solid #23262D">
+                  <div style="display:flex;gap:2px;background:#23262D;border-radius:8px;padding:2px">
+                    <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">General</div>
+                    <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:#14161A;line-height:26px;border-radius:6px;background:#E24631">Recording</div>
+                    <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Transcription</div>
+                    <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Quick paste</div>
+                  </div>
+                </div>
+                <div style="border-top:1px solid #23262D;padding:10px 20px 16px">
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Trigger</div>
+                    <div style="display:flex;gap:4px">
+                      <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">⌥</div>
+                      <div style="min-width:24px;height:24px;padding:0 8px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">Space</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Mode</div>
+                    <div style="display:flex;gap:2px;background:#23262D;border-radius:6px;padding:2px;width:150px">
+                      <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:#14161A;line-height:22px;border-radius:4px;background:#E24631">Hold</div>
+                      <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:22px;border-radius:4px">Toggle</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Esc cancels recording</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Sound effects</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Pause music while recording</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:#2E323B;position:relative"><div style="position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:6px;background:#8A909E"></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="width:580px;flex:none">
+              <div style="width:580px;box-shadow:0 24px 52px rgba(0,0,0,0.45);background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-sizing:border-box;overflow:hidden" data-screen-label="Settings Quick paste">
+                <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+                  <div style="display:flex;gap:8px">
+                    <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+                    <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+                    <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
+                  </div>
+                  <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF">WhisperKey Settings</div>
+                </div>
+                <div style="padding:14px 20px;background:#14161A;border-top:1px solid #23262D">
+                  <div style="display:flex;gap:2px;background:#23262D;border-radius:8px;padding:2px">
+                    <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">General</div>
+                    <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Recording</div>
+                    <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:26px;border-radius:6px">Transcription</div>
+                    <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:#14161A;line-height:26px;border-radius:6px;background:#E24631">Quick paste</div>
+                  </div>
+                </div>
+                <div style="border-top:1px solid #23262D;padding:10px 20px 16px">
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Show quick paste popup</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Trigger</div>
+                    <div style="display:flex;gap:4px">
+                      <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">⌘</div>
+                      <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">⇧</div>
+                      <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">V</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Hold trigger to keep open</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Entries</div>
+                    <div style="display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box">
+                      <div style="font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">10</div>
+                      <div style="font-size:11px;color:#9BA1AF">entries</div>
+                    </div>
+                    <div style="width:22px;height:26px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+                      <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:4px solid #9BA1AF"></div>
+                      <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #9BA1AF"></div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:40px">
+                    <div style="flex:1;font-size:13px;color:#E8EAEF">Paste history</div>
+                    <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Clear history…</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOATING PANELS -->
+  <div style="margin-top:56px;display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:15px;font-weight:600;color:#E8EAEF">Floating panels</div>
+    <div style="font-size:12px;color:#9BA1AF">the popover’s shell: 02 at 95% + blur, 05 edge, radius 12, no chrome</div>
+  </div>
+  <div style="margin-top:22px;display:flex;gap:56px;align-items:flex-start">
+
+    <div style="width:328px;flex:none" data-screen-label="Quick paste">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">1 · QUICK PASTE · 328</div>
+      <div style="width:328px;background:rgba(26,28,33,0.95);backdrop-filter:blur(30px);border:1px solid #3B4150;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.5);overflow:hidden;box-sizing:border-box;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+          <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Диалог «Вечерняя проверка готовности по…</div>
+          <div style="display:flex;align-items:flex-end;gap:2px;height:14px;flex:none">
+            <div style="width:2px;height:6px;border-radius:1px;background:#9BA1AF"></div>
+            <div style="width:2px;height:12px;border-radius:1px;background:#9BA1AF"></div>
+            <div style="width:2px;height:8px;border-radius:1px;background:#9BA1AF"></div>
+            <div style="width:2px;height:14px;border-radius:1px;background:#9BA1AF"></div>
+          </div>
+        </div>
+        <div style="position:relative;display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px;background:#2E323B">
+          <div style="position:absolute;left:0;top:8px;width:2px;height:18px;border-radius:1px;background:#E24631"></div>
+          <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Ручная проверка Открой в своём Chrome h…</div>
+          <div style="font-size:11px;color:#9BA1AF;flex:none">Release to paste</div>
+        </div>
+        <div style="display:flex;align-items:center;height:34px;padding:0 8px;border-radius:8px">
+          <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">https://www.linkedin.com/jobs/search/?keywords=design</div>
+        </div>
+        <div style="display:flex;align-items:center;height:34px;padding:0 8px;border-radius:8px">
+          <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">SELECT display_name, start_date, termination_date</div>
+        </div>
+        <div style="display:flex;align-items:center;height:34px;padding:0 8px;border-radius:8px">
+          <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Your posting says the team owns the metrics layer</div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> the popover shell, its 34 list row and its selection (04 fill + 2pt red bar); the dictated marker is the recording-line waveform in 07.</div>
+      </sc-if>
+    </div>
+
+    <div style="width:380px;flex:none;display:flex;flex-direction:column;gap:16px" data-screen-label="Toast">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:-6px">2 · TOAST · 380 · ERROR, NOTICE, PLAIN</div>
+
+      <div style="width:380px;background:rgba(26,28,33,0.95);backdrop-filter:blur(30px);border:1px solid #3B4150;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.5);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #9BA1AF"></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#9BA1AF">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">No response from OpenAI within 30 seconds. It may be your network or OpenAI; no response arrived, so WhisperKey cannot tell which</div>
+          <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Retry</div></div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9BA1AF;flex:none">✕</div>
+      </div>
+
+      <div style="width:380px;background:rgba(26,28,33,0.95);backdrop-filter:blur(30px);border:1px solid #3B4150;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.5);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #9BA1AF;position:relative"><div style="position:absolute;left:-3px;right:-3px;top:8px;height:1.5px;background:#9BA1AF;transform:rotate(-38deg)"></div></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#9BA1AF">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">Microphone access is required to record</div>
+          <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Open Settings</div></div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9BA1AF;flex:none">✕</div>
+      </div>
+
+      <div style="width:380px;background:rgba(26,28,33,0.95);backdrop-filter:blur(30px);border:1px solid #3B4150;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.5);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #9BA1AF;position:relative"><div style="position:absolute;left:-3px;right:-3px;top:8px;height:1.5px;background:#9BA1AF;transform:rotate(-38deg)"></div></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#9BA1AF">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#E8EAEF">No speech detected</div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9BA1AF;flex:none">✕</div>
+      </div>
+
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-top:8px;margin-bottom:-6px">2b · TOAST · QUICK PASTE · NOTICE</div>
+
+      <div style="width:380px;background:rgba(26,28,33,0.95);backdrop-filter:blur(30px);border:1px solid #3B4150;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.5);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #9BA1AF;position:relative"><div style="position:absolute;left:-3px;right:-3px;top:8px;height:1.5px;background:#9BA1AF;transform:rotate(-38deg)"></div></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#9BA1AF">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">Can’t paste here right now — macOS is blocking input from other apps. Try again in a moment, or paste into a different field</div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9BA1AF;flex:none">✕</div>
+      </div>
+
+      <div style="width:380px;background:rgba(26,28,33,0.95);backdrop-filter:blur(30px);border:1px solid #3B4150;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.5);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #9BA1AF;position:relative"><div style="position:absolute;left:-3px;right:-3px;top:8px;height:1.5px;background:#9BA1AF;transform:rotate(-38deg)"></div></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#9BA1AF">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">Couldn’t copy the entry, so nothing was pasted. Try again</div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9BA1AF;flex:none">✕</div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> the popover shell and Settings’ push button. The earlier round’s mic glyph stays, grey: slashed when nothing reached the mic, plain when the recording was made and transcription failed. Quick paste notices are the notice variant with no action: transient, no button. The app drops the final full stop, as on every toast.</div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- STANDARD WINDOWS -->
+  <div style="margin-top:64px;display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:15px;font-weight:600;color:#E8EAEF">Standard windows</div>
+    <div style="font-size:12px;color:#9BA1AF">Settings chrome: 44 titlebar on 01, grey traffic lights, 13/600 centred title, 02 body, radius 10</div>
+  </div>
+  <div style="margin-top:22px;display:flex;gap:48px;align-items:flex-start">
+
+    <div style="width:560px;flex:none" data-screen-label="Full history">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">3 · FULL HISTORY · 560 × 500</div>
+      <div style="width:560px;height:500px;display:flex;flex-direction:column;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;flex:none;display:flex;align-items:center;padding:0 16px;background:#14161A">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">WhisperKey History</div>
+        </div>
+        <div style="height:48px;flex:none;display:flex;align-items:center;gap:6px;padding:0 20px;background:#14161A;border-top:1px solid #23262D;box-sizing:border-box">
+          <div style="font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">30</div>
+          <div style="font-size:11px;color:#9BA1AF;flex:1">entries</div>
+          <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Clear history…</div>
+        </div>
+        <div style="flex:1;min-height:0;overflow:hidden;border-top:1px solid #23262D;padding:8px 12px">
+          <div style="position:relative;display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px;background:#2E323B">
+            <div style="position:absolute;left:0;top:8px;width:2px;height:18px;border-radius:1px;background:#E24631"></div>
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Что касается их вопросов... Вопрос один про DBT. Ну, скажем, да. Тут, короче, нечего</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:37</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Прогон закончился, анализирую его.</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:34</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">В summary мне не очень нравится последний абзац. Хотя, точнее, он состоит всего</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:33</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Я понял, короче, это будет очень долго, я сделаю сам. Смотри, ты должен сделать</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:21</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Мне кажется, или если мы начинаем диктовать, то NumPad должен закрываться, по</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:18</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px;background-color:#1E2126;background-image:repeating-linear-gradient(135deg,rgba(138,144,158,0.18) 0 4px,rgba(138,144,158,0) 4px 9px)">
+            <div style="flex:1;min-width:0;font-size:13px;color:#9BA1AF">No speech detected</div>
+            <div style="font-size:11px;color:#E8EAEF;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #5A6070;flex:none">Retry</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none;margin-left:2px">18 Sep 12:15</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Не получается сделать, как ты говоришь. Там очень много в этом списке, когда я</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:15</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Так, мы только что сделали тикет новый на дизайн, редизайн. Тебе нужно подготовить</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:10</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Первую вакансию, да, будем подаваться. Ее берем.</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:08</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Окей, давай так, давай так и сделаем, да.</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:07</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Хорошо, тогда я сначала посмотрю список, а потом вернусь к этому вопросу</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">17 Sep 19:42</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Давай перенесём созвон на четверг, если это удобно</div>
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums;flex:none">17 Sep 18:05</div>
+          </div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> Settings’ chrome, with the tab well turned into the count bar; the rows are the popover’s rows unchanged, only the timestamp is absolute.</div>
+      </sc-if>
+    </div>
+
+    <div style="width:480px;flex:none;display:flex;flex-direction:column;gap:40px">
+      <div data-screen-label="History reader">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">4 · HISTORY READER · 480 × 280</div>
+        <div style="width:480px;height:280px;display:flex;flex-direction:column;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+          <div style="position:relative;height:44px;flex:none;display:flex;align-items:center;padding:0 16px;background:#14161A">
+            <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+            <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">Transcription</div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:14px 20px;border-top:1px solid #23262D">
+            <div style="font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums">19 Sep 2026 at 9:22</div>
+            <div style="flex:1;min-height:0;background:#23262D;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">Погоди, а так зачем мы сразу так пишем про спонсоршип? Что если они готовы по B2B нанимать? Короче, не понимаю.</div>
+          </div>
+          <div style="height:48px;flex:none;display:flex;align-items:center;gap:8px;padding:0 20px;background:#14161A;border-top:1px solid #23262D;box-sizing:border-box">
+            <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Copy</div>
+            <div style="flex:1"></div>
+            <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Close</div>
+          </div>
+        </div>
+        <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:12px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> Settings’ chrome and buttons; the text sits in a 03 card like the usage block, and the popover footer returns as the action bar.</div>
+        </sc-if>
+      </div>
+
+      <div data-screen-label="Welcome">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">6 · WELCOME · 390</div>
+        <div style="width:390px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+          <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+            <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+            <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">Welcome to WhisperKey</div>
+          </div>
+          <div style="padding:16px 20px;border-top:1px solid #23262D;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">Go to Settings to set up your preferences, or you can do it later</div>
+          <div style="height:48px;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 20px;background:#14161A;border-top:1px solid #23262D;box-sizing:border-box">
+            <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Later</div>
+            <div style="font-size:13px;font-weight:500;color:#14161A;line-height:24px;padding:0 10px;border-radius:6px;background:#E24631;border:1px solid #E24631">Go to Settings</div>
+          </div>
+        </div>
+        <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:12px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> Settings’ chrome; the default button is the active tab’s red fill, placed rightmost per macOS so Return lands on it.</div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="width:420px;flex:none" data-screen-label="Reset usage">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">5 · RESET USAGE · 420</div>
+      <div style="width:420px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">Reset usage</div>
+        </div>
+        <div style="padding:14px 20px 16px;border-top:1px solid #23262D">
+          <div style="font-size:12px;line-height:1.45;color:#9BA1AF;text-wrap:pretty">Select models to clear. This will only delete usage data - transcription history is not affected.</div>
+          <div style="margin-top:14px;background:#23262D;border-radius:8px;padding:0 4px 4px">
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-bottom:1px solid #3B4150">
+              <div style="width:14px;height:14px;border-radius:4px;background:#E8EAEF;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:8px;height:2px;border-radius:1px;background:#14161A"></div></div>
+              <div style="font-size:13px;color:#E8EAEF">Select all</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px">
+              <div style="width:14px;height:14px;border-radius:4px;background:#E8EAEF;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#14161A;flex:none">✓</div>
+              <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-transcribe</div>
+              <div style="height:18px;padding:0 6px;border-radius:6px;background:#2E323B;font-size:11px;color:#9BA1AF;display:flex;align-items:center;flex:none">Current</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px">
+              <div style="width:14px;height:14px;border-radius:4px;background:#E8EAEF;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#14161A;flex:none">✓</div>
+              <div style="flex:1;min-width:0;font-size:13px;color:#E8EAEF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-4o-mini-transcribe</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px">
+              <div style="width:14px;height:14px;border-radius:4px;background:#1A1C21;border:1px solid #5A6070;box-sizing:border-box;flex:none"></div>
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Groq · whisper-large-v3</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px">
+              <div style="width:14px;height:14px;border-radius:4px;background:#1A1C21;border:1px solid #5A6070;box-sizing:border-box;flex:none"></div>
+              <div style="flex:1;font-size:13px;color:#E8EAEF">Groq · whisper-large-v3-turbo</div>
+            </div>
+          </div>
+        </div>
+        <div style="height:48px;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 20px;background:#14161A;border-top:1px solid #23262D;box-sizing:border-box">
+          <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Cancel</div>
+          <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Reset selected…</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+        <div style="font-size:11px;color:#9BA1AF">Nothing ticked</div>
+        <div style="height:48px;flex:1;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 20px;background:#14161A;border:1px solid #23262D;border-radius:8px;box-sizing:border-box">
+          <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Cancel</div>
+          <div style="font-size:13px;color:#9BA1AF;line-height:24px;padding:0 10px;border-radius:6px;background:transparent;border:1px solid #3B4150">Reset selected…</div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> Settings’ chrome and buttons, the usage block’s 03 card and hairline, and the keycap for the Current pill. Reset selected looks like Cancel; the macOS alert carries the warning.</div>
+      </sc-if>
+    </div>
+  </div>
+
+  <div style="margin-top:48px;display:flex;gap:48px;align-items:flex-start">
+    <div style="width:540px;flex:none" data-screen-label="Usage by model">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">8a · USAGE BY MODEL · 540 · FROM THE POPOVER’S USAGE BLOCK</div>
+      <div style="width:540px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">Usage by model</div>
+        </div>
+        <div style="padding:14px 20px;background:#14161A;border-top:1px solid #23262D">
+          <div style="display:flex;gap:2px;background:#23262D;border-radius:8px;padding:2px">
+            <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">Today</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">7d</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">30d</div>
+            <div style="flex:1;text-align:center;font-size:11px;font-weight:500;color:#14161A;line-height:24px;border-radius:6px;background:#E24631">All</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid #23262D;padding:14px 20px 20px">
+          <div style="background:#23262D;border-radius:8px;padding:0 4px 4px">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;border-bottom:1px solid #3B4150;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF">
+              <div>MODEL</div><div style="text-align:right">WORDS</div><div style="text-align:right">AUDIO</div><div style="text-align:right">COST</div>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-transcribe</div><div style="text-align:right">41k</div><div style="text-align:right">9h 02m</div><div style="text-align:right">~$1.6</div>
+            </div>
+            <div style="height:1px;background:#3B4150;margin:0 8px"></div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-4o-mini-transcribe</div><div style="text-align:right">38k</div><div style="text-align:right">6h 40m</div><div style="text-align:right">~$1.2</div>
+            </div>
+            <div style="height:1px;background:#3B4150;margin:0 8px"></div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Groq · whisper-large-v3-turbo</div><div style="text-align:right">11k</div><div style="text-align:right">1h 36m</div><div style="text-align:right">~$0.3</div>
+            </div>
+            <div style="height:1px;background:#3B4150;margin:0 -4px"></div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;font-size:13px;font-weight:600;color:#E8EAEF;font-variant-numeric:tabular-nums">
+              <div>Total</div><div style="text-align:right">90k</div><div style="text-align:right">17h 18m</div><div style="text-align:right">~$3.1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> Settings’ chrome with the popover’s period picker in the tab well, bound to the same setting; the usage block’s 03 card; Reset usage’s 34 row and 05 hairline. Rows sort longest audio first. Cost reads “-” when a model has no single-currency price. Floating, closable, 540 for every period.</div>
+      </sc-if>
+    </div>
+
+    <div style="width:540px;flex:none" data-screen-label="Usage by model empty">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">8b · USAGE BY MODEL · EMPTY PERIOD</div>
+      <div style="width:540px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">Usage by model</div>
+        </div>
+        <div style="padding:14px 20px;background:#14161A;border-top:1px solid #23262D">
+          <div style="display:flex;gap:2px;background:#23262D;border-radius:8px;padding:2px">
+            <div style="flex:1;text-align:center;font-size:11px;font-weight:500;color:#14161A;line-height:24px;border-radius:6px;background:#E24631">Today</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">7d</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">30d</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#B4BAC6;line-height:24px;border-radius:6px">All</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid #23262D;padding:14px 20px 20px">
+          <div style="background:#23262D;border-radius:8px;padding:40px 16px;text-align:center;font-size:13px;color:#9BA1AF">No usage in this period.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:48px;display:flex;gap:48px;align-items:flex-start">
+    <div style="width:520px;flex:none" data-screen-label="Permissions needs access">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">7a · PERMISSIONS · 520 · NEEDS ACCESS</div>
+      <div style="width:520px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">WhisperKey Permissions</div>
+        </div>
+        <div style="padding:16px 20px 20px;border-top:1px solid #23262D">
+          <div style="font-size:13px;font-weight:600;color:#E8EAEF">WhisperKey needs permissions</div>
+          <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#9BA1AF">Grant both permissions to record from the menu bar hotkey.</div>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="background:#23262D;border-radius:8px;padding:12px 14px 14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;font-size:13px;color:#E8EAEF">Microphone</div>
+                <div style="font-size:11px;color:#E8EAEF;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #5A6070;background-color:#1E2126;background-image:repeating-linear-gradient(135deg,rgba(138,144,158,0.18) 0 4px,rgba(138,144,158,0) 4px 9px)">Needs access</div>
+              </div>
+              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#9BA1AF">Used only while recording after the hotkey starts capture.</div>
+              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#2E323B;border:1px solid #3B4150">Open System Settings</div></div>
+            </div>
+            <div style="background:#23262D;border-radius:8px;padding:12px 14px 14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;font-size:13px;color:#E8EAEF">Accessibility</div>
+                <div style="font-size:11px;color:#E8EAEF;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #5A6070;background-color:#1E2126;background-image:repeating-linear-gradient(135deg,rgba(138,144,158,0.18) 0 4px,rgba(138,144,158,0) 4px 9px)">Needs access</div>
+              </div>
+              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#9BA1AF">Required for the global hotkey to work while other apps are focused.</div>
+              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#2E323B;border:1px solid #3B4150">Open System Settings</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:520px;flex:none" data-screen-label="Permissions granted">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">7b · PERMISSIONS · MICROPHONE GRANTED</div>
+      <div style="width:520px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">WhisperKey Permissions</div>
+        </div>
+        <div style="padding:16px 20px 20px;border-top:1px solid #23262D">
+          <div style="font-size:13px;font-weight:600;color:#E8EAEF">WhisperKey needs permissions</div>
+          <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#9BA1AF">Grant both permissions to record from the menu bar hotkey.</div>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="background:#23262D;border-radius:8px;padding:12px 14px 14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;font-size:13px;color:#E8EAEF">Microphone</div>
+                <div style="display:flex;align-items:center;gap:6px;height:18px"><div style="width:6px;height:6px;border-radius:3px;background:#78BE20"></div><div style="font-size:11px;color:#9BA1AF">Granted</div></div>
+              </div>
+              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#9BA1AF">Used only while recording after the hotkey starts capture.</div>
+              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#9BA1AF;line-height:24px;padding:0 10px;border-radius:6px;background:transparent;border:1px solid #3B4150">Open System Settings</div></div>
+            </div>
+            <div style="background:#23262D;border-radius:8px;padding:12px 14px 14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;font-size:13px;color:#E8EAEF">Accessibility</div>
+                <div style="font-size:11px;color:#E8EAEF;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #5A6070;background-color:#1E2126;background-image:repeating-linear-gradient(135deg,rgba(138,144,158,0.18) 0 4px,rgba(138,144,158,0) 4px 9px)">Needs access</div>
+              </div>
+              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#9BA1AF">Required for the global hotkey to work while other apps are focused.</div>
+              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#2E323B;border:1px solid #3B4150">Open System Settings</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+      <div style="width:300px;padding-top:26px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> Settings’ chrome and the API key row’s two states: the rejected-key badge (hatch + dash) for Needs access, the Saved dot and grey label for Granted. The button stays in place, disabled, so the card doesn’t jump.</div>
+    </sc-if>
+  </div>
+
+  <!-- ALERTS -->
+  <div style="margin-top:64px;display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:15px;font-weight:600;color:#E8EAEF">Alerts</div>
+    <div style="font-size:12px;color:#9BA1AF">text only; macOS draws them. Destructive button labels repeat the control that opened the alert</div>
+  </div>
+  <div data-screen-label="Alerts" style="margin-top:22px;display:grid;grid-template-columns:repeat(3,minmax(0,420px));gap:48px">
+
+    <div style="border-top:1px solid #3B4150;padding-top:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF">DELETE API KEY · from Settings › Delete</div>
+      <div style="margin-top:12px;font-size:13px;font-weight:600;color:#E8EAEF">Delete the saved API key?</div>
+      <div style="margin-top:4px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">The key is removed from this Mac. You’ll need to enter it again before you can transcribe.</div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#9BA1AF">
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#E8EAEF">Delete Key</div><div>destructive · system red</div></div>
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#E8EAEF">Cancel</div><div>default · Return and Esc</div></div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid #3B4150;padding-top:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF">CLEAR HISTORY · from Actions › Clear history…</div>
+      <div style="margin-top:12px;font-size:13px;font-weight:600;color:#E8EAEF">Clear all transcription history?</div>
+      <div style="margin-top:4px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">Every saved transcription is permanently removed from this Mac. This can’t be undone.</div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#9BA1AF">
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#E8EAEF">Clear History</div><div>destructive · system red</div></div>
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#E8EAEF">Cancel</div><div>default · Return and Esc</div></div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid #3B4150;padding-top:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF">API KEY VALIDATION · three outcomes, one button</div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#E8EAEF">API key saved</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#E8EAEF">{Provider} accepted the key.</div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#E8EAEF">{Provider} rejected this API key</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">Check that the whole key was pasted and that it’s still active in your {Provider} account.</div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#E8EAEF">Couldn’t verify the API key</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">{Provider} didn’t respond. Check your internet connection and try again.</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;font-size:12px;color:#9BA1AF"><div style="width:110px;color:#E8EAEF">OK</div><div>default · nothing destructive</div></div>
+    </div>
+
+    <div style="border-top:1px solid #3B4150;padding-top:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF">LOWER HISTORY SIZE · sheet on Settings › History size</div>
+      <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#9BA1AF">when the new size is below the current entry count</div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#E8EAEF">Delete 5 oldest entries?</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#E8EAEF">Their audio is deleted too. This can’t be undone.</div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#E8EAEF">Delete the oldest entry?</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#E8EAEF">Its audio is deleted too. This can’t be undone.</div>
+        </div>
+        <div style="font-size:12px;color:#9BA1AF">New size 0: <span style="color:#E8EAEF">Delete all 5 entries?</span> · <span style="color:#E8EAEF">Delete the only entry?</span></div>
+      </div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#9BA1AF">
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#E8EAEF">Delete 5 Entries</div><div>destructive · system red, filled · singular Delete 1 Entry</div></div>
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#E8EAEF">Cancel</div><div>Esc</div></div>
+      </div>
+      <div style="margin-top:14px;border:1px dashed #5A6070;border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF">OPEN · NOT DECIDED</div>
+        <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#E8EAEF;text-wrap:pretty">In the current build Delete N Entries takes Return. That conflicts with the rule below: Cancel holds the default slot, so Return never deletes.</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:18px;font-size:12px;color:#9BA1AF;line-height:1.5;max-width:900px;text-wrap:pretty">Title case on alert buttons follows macOS. Cancel holds the default slot in every destructive alert, so Return never deletes; the destructive button uses hasDestructiveAction and gets system red from macOS.</div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showNotch&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showKeycaps&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      showNotes: this.props.showNotes ?? true,
+      showNotch: this.props.showNotch ?? true,
+      showKeycaps: this.props.showKeycaps ?? true
+    };
+  }
+}
+</script>
+</body>
+</html>
