@@ -1639,16 +1639,14 @@ private enum APIKeyDeletionConfirmation {
     }
 }
 
-/// The Theme row: one chip per theme — a small swatch and the theme's name — the selected
+/// The Theme row: one chip per theme — the theme's icon and its name — the selected
 /// chip outlined in the accent colour. The chips fit the standard row height, so the row
 /// keeps the pane's rhythm. Both themes render the existing light look until #105 lands;
-/// the swatches only preview what each will be.
+/// the icons only preview what each will be.
 private struct ThemePicker: View {
-    private static let swatchSize: CGFloat = 14
-    private static let swatchCornerRadius: CGFloat = 4
-    private static let swatchBorderWidth: CGFloat = 1
-    private static let swatchToNameSpacing: CGFloat = 6
-    private static let chipHorizontalPadding: CGFloat = 7
+    private static let iconSize: CGFloat = 20
+    private static let iconToNameSpacing: CGFloat = 5
+    private static let chipHorizontalPadding: CGFloat = 6
     private static let chipCornerRadius: CGFloat = 6
     private static let selectionOutlineWidth: CGFloat = 2
     private static let chipSpacing: CGFloat = 8
@@ -1669,14 +1667,13 @@ private struct ThemePicker: View {
         return Button {
             selection = theme
         } label: {
-            HStack(spacing: Self.swatchToNameSpacing) {
-                RoundedRectangle(cornerRadius: Self.swatchCornerRadius, style: .continuous)
-                    .fill(Self.swatchFill(for: theme))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: Self.swatchCornerRadius, style: .continuous)
-                            .strokeBorder(Self.swatchBorder(for: theme), lineWidth: Self.swatchBorderWidth)
-                    }
-                    .frame(width: Self.swatchSize, height: Self.swatchSize)
+            HStack(spacing: Self.iconToNameSpacing) {
+                Image(Self.iconName(for: theme))
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: Self.iconSize, height: Self.iconSize)
+                    .accessibilityHidden(true)
                 Text(theme.displayName)
                     .foregroundStyle(.primary)
             }
@@ -1696,21 +1693,10 @@ private struct ThemePicker: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private static func swatchFill(for theme: AppTheme) -> Color {
+    private static func iconName(for theme: AppTheme) -> String {
         switch theme {
-        case .classic:
-            Color(white: 0.96)
-        case .midnight:
-            Color(red: 0.11, green: 0.12, blue: 0.15)
-        }
-    }
-
-    private static func swatchBorder(for theme: AppTheme) -> Color {
-        switch theme {
-        case .classic:
-            Color(white: 0.78)
-        case .midnight:
-            Color(white: 0.30)
+        case .classic: "ThemeIconClassic"
+        case .midnight: "ThemeIconMidnight"
         }
     }
 }
