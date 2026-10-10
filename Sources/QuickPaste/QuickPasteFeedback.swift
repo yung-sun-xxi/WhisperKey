@@ -20,9 +20,9 @@ public enum QuickPasteNotice: Equatable, Sendable {
     public var message: String {
         switch self {
         case .pasteRefused:
-            return "WhisperKey could not paste into the focused field while macOS secure input was on. The entry was not pasted, and your clipboard is unchanged."
+            return "Can't paste here right now — macOS is blocking input from other apps. Try again in a moment, or paste into a different field."
         case .clipboardWriteFailed:
-            return "WhisperKey could not put the entry on the clipboard, so nothing was pasted."
+            return "Couldn't copy the entry, so nothing was pasted. Try again."
         }
     }
 }
