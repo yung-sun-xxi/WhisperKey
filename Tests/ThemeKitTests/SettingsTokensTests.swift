@@ -63,44 +63,52 @@ final class SettingsTokensTests: XCTestCase {
     }
 
     /// Classic's band is taller by half the difference between Midnight's drawn bar and
-    /// the system titlebar, above and below, so both headers end at the same height.
+    /// Classic's titlebar band, above and below, so both headers end at the same height.
     func testClassicBandMakesUpTheSystemTitlebar() {
-        // Measured on macOS 27.0.1: a titled window's frame less its content rect.
+        // The system titlebar, measured on macOS 27.0.1: a titled window's frame less its
+        // content rect. Classic's band holds its place under the transparent titlebar.
         XCTAssertEqual(classic.sizes.titlebar, 32)
         XCTAssertEqual(
             classic.settingsWindow.tabWellPadding,
             midnight.settingsWindow.tabWellPadding + (midnight.sizes.titlebar - classic.sizes.titlebar) / 2
         )
         XCTAssertEqual(
-            classic.sizes.titlebar + SettingsWindowGeometry.headerHeight(classic),
+            SettingsWindowGeometry.headerHeight(classic),
             SettingsWindowGeometry.headerHeight(midnight)
         )
     }
 
     /// Every pane — rows 3 to 6, with or without the Quick paste hint — comes out one
-    /// frame in both themes, given the system titlebar the Classic tokens state.
+    /// frame in both themes.
     func testTheWindowIsOneHeightInBothThemes() {
-        let titlebar = classic.sizes.titlebar
         for rows in 0...8 {
             for hints in 0...1 {
                 XCTAssertEqual(
-                    SettingsWindowGeometry.frameHeight(classic, rows: rows, hintLines: hints, systemTitlebar: titlebar),
-                    SettingsWindowGeometry.frameHeight(midnight, rows: rows, hintLines: hints, systemTitlebar: titlebar),
+                    SettingsWindowGeometry.frameHeight(classic, rows: rows, hintLines: hints),
+                    SettingsWindowGeometry.frameHeight(midnight, rows: rows, hintLines: hints),
                     "rows \(rows), hints \(hints)"
+                )
+                XCTAssertEqual(
+                    SettingsWindowGeometry.frameHeight(classic, rows: rows, hintLines: hints),
+                    SettingsWindowGeometry.contentHeight(classic, rows: rows, hintLines: hints),
+                    "the frame is the content, rows \(rows), hints \(hints)"
                 )
             }
         }
     }
 
-    /// The sum written out once, for General's four rows: titlebar 44, tab well
-    /// 1 + 14 + (26 + 2 + 2) + 14 + 1 = 60, rows 10 + 4 × 32 + 16 = 154.
+    /// The sum written out once, for General's four rows: Midnight's titlebar 44, tab well
+    /// 1 + 14 + (26 + 2 + 2) + 14 + 1 = 60; Classic's band 32, tab well
+    /// 1 + 20 + 30 + 20 + 1 = 72; rows 10 + 4 × 32 + 16 = 154 in both.
     func testGeneralIsTwoHundredFiftyEightTall() {
         XCTAssertEqual(SettingsWindowGeometry.tabWellHeight(midnight), 60)
         XCTAssertEqual(SettingsWindowGeometry.headerHeight(midnight), 104)
+        XCTAssertEqual(SettingsWindowGeometry.tabWellHeight(classic), 72)
+        XCTAssertEqual(SettingsWindowGeometry.headerHeight(classic), 104)
         XCTAssertEqual(SettingsWindowGeometry.paneHeight(midnight, rows: 4), 154)
-        XCTAssertEqual(SettingsWindowGeometry.frameHeight(midnight, rows: 4, systemTitlebar: 32), 258)
-        XCTAssertEqual(SettingsWindowGeometry.frameHeight(classic, rows: 4, systemTitlebar: 32), 258)
-        XCTAssertEqual(SettingsWindowGeometry.contentHeight(classic, rows: 4), 226)
+        XCTAssertEqual(SettingsWindowGeometry.frameHeight(midnight, rows: 4), 258)
+        XCTAssertEqual(SettingsWindowGeometry.frameHeight(classic, rows: 4), 258)
+        XCTAssertEqual(SettingsWindowGeometry.contentHeight(classic, rows: 4), 258)
         // Quick paste on: five rows and the hint line.
         XCTAssertEqual(SettingsWindowGeometry.paneHeight(classic, rows: 5, hintLines: 1), 202)
     }
