@@ -45,7 +45,7 @@ public extension ThemeColor {
     }
 }
 
-/// The system colours Classic draws with today, named as the views name them.
+/// System colours, named as the views name them.
 public enum SystemColor: String, Hashable, Sendable {
     /// `Color.clear`: nothing painted, the material or window shows through.
     case clear
@@ -167,4 +167,14 @@ public struct ThemeFont: Hashable, Sendable {
 
     /// Letter spacing in points, for `.tracking(_:)`.
     public var tracking: CGFloat { size * trackingEm }
+}
+
+public extension WindowAppearance {
+    /// The `NSAppearance` a themed window takes.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .dark: return NSAppearance(named: .darkAqua)
+        case .light: return NSAppearance(named: .aqua)
+        }
+    }
 }

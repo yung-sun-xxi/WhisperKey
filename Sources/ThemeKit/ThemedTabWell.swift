@@ -16,11 +16,8 @@ public enum TabWellSelection {
 }
 
 /// The Settings window's tabs (#162): a band on `bar` holding a `card` track of equal
-/// segments, the active one filled with the brand. Both themes draw it at the same track
-/// metrics; Classic in its own colours and radii, as the popover's period picker, and
-/// with a taller band that makes up for its shorter system titlebar. A line in `divider`
-/// runs above the band and another below it. `SettingsWindowGeometry.tabWellHeight`
-/// states its height.
+/// segments, the active one filled with the brand. A line in `divider` runs above the
+/// band and another below it. `SettingsWindowGeometry.tabWellHeight` states its height.
 public struct ThemedTabWell: View {
     @Environment(\.themeTokens) private var tokens
     private let titles: [String]

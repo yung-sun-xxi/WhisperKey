@@ -109,8 +109,10 @@ enum SettingsWindowController {
         window.initialFirstResponder = contentController.focusParkingView
         window.delegate = delegate
         window.standardWindowButton(.zoomButton)?.isEnabled = false
-        // The theme's chrome and the selected pane's size, before the window is placed.
-        contentController.attachChrome(to: window)
+        // The system titlebar, in the window's background colour in every theme.
+        window.titlebarAppearsTransparent = true
+        // The theme's colours and the selected pane's size, before the window is placed.
+        contentController.attachTheme()
         window.center()
 
         return window
@@ -194,17 +196,16 @@ private final class SettingsTabSelection: ObservableObject {
     @Published var index = 0
 }
 
-/// The window's content: the header (the titlebar band, then the tab well) above the tab
-/// view controller that holds the panes. The window is as tall as the header plus the
-/// selected pane, and as wide as the theme says; it follows both, and the theme's window
-/// chrome, while open.
+/// The window's content: the tab well above the tab view controller that holds the panes,
+/// under the system titlebar. The content is as tall as the tab well plus the selected
+/// pane, and as wide as the theme says; it follows both, and the theme's colours, while
+/// open.
 private final class SettingsContentViewController: NSViewController {
     let focusParkingView = FirstResponderParkingView(frame: .zero)
 
     private let selection: SettingsTabSelection
     private let tabs: SettingsTabsController
     private let header: SettingsHeaderHostingView
-    private var chrome: ThemedWindowChrome?
     private var subscriptions: Set<AnyCancellable> = []
     private var isResizingWindow = false
 
@@ -223,10 +224,6 @@ private final class SettingsContentViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
 
         header.sizingOptions = [.intrinsicContentSize]
-        // The header's titlebar band takes the titlebar's place in both themes. Under the
-        // transparent titlebar the titlebar's safe area would push the header down by the
-        // system titlebar's height.
-        header.safeAreaRegions = []
         tabs.onSelectedPaneSizeChange = { [weak self] in
             self?.resizeWindowToSelectedPane()
         }
@@ -295,10 +292,10 @@ private final class SettingsContentViewController: NSViewController {
         view = container
     }
 
-    /// Gives the window the current theme's chrome and the selected pane's size.
-    func attachChrome(to window: NSWindow) {
-        chrome = ThemedWindowChrome(window: window)
+    /// Gives the window the current theme's colours and the selected pane's size.
+    func attachTheme() {
         applyTheme(ThemeTokensSource.shared.tokens)
+        resizeWindowToSelectedPane()
     }
 
     func selectTab(identifier: String) -> Bool {
@@ -316,14 +313,17 @@ private final class SettingsContentViewController: NSViewController {
     }
 
     private func applyTheme(_ tokens: ThemeTokens) {
-        chrome?.apply(tokens, background: tokens.colors.settingsSurface)
+        if let window = view.window {
+            // The transparent titlebar takes the background colour; the appearance makes
+            // the titlebar, menus and alerts match the palette.
+            window.backgroundColor = tokens.colors.settingsSurface.nsColor
+            window.appearance = tokens.windowAppearance.nsAppearance
+        }
         // Every pane takes the new theme now, the hidden ones too, so each reports its
         // new size before it is next shown.
         tabs.layOutEveryPane()
-        // Both themes give one size, so this changes nothing while the window is open; it
-        // sizes the window when the chrome is first attached. A later change in the
-        // header's or a pane's height resizes through their own callbacks.
-        resizeWindowToSelectedPane(tokens)
+        // No resize: the themes differ only in colours, so the size stays. A change in
+        // the header's or a pane's height resizes through their own callbacks.
     }
 
     private func windowContentSize(_ tokens: ThemeTokens) -> NSSize {
@@ -335,26 +335,26 @@ private final class SettingsContentViewController: NSViewController {
 
     /// Keeps the window's top-left corner where it is: resizing from the bottom-left
     /// would walk the window up the screen on every tab switch.
-    private func resizeWindowToSelectedPane(_ newTokens: ThemeTokens? = nil) {
+    private func resizeWindowToSelectedPane() {
         guard !isResizingWindow, let window = view.window else { return }
 
-        let size = windowContentSize(newTokens ?? ThemeTokensSource.shared.tokens)
+        let size = windowContentSize(ThemeTokensSource.shared.tokens)
         guard size.height > 1 else { return }
 
         isResizingWindow = true
         defer { isResizingWindow = false }
 
-        // The content runs under the titlebar in both themes, so the frame is the content.
+        // The system titlebar sits on top of the content.
+        let frameSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: size)).size
         var frame = window.frame
-        frame.origin.y = frame.maxY - size.height
-        frame.size = size
+        frame.origin.y = frame.maxY - frameSize.height
+        frame.size = frameSize
         if frame != window.frame {
             window.setFrame(frame, display: true)
         }
         #if DEBUG
         settingsWindowLog.info("window resized content=\(Int(size.width), privacy: .public)x\(Int(size.height), privacy: .public) frame=\(Int(window.frame.width), privacy: .public)x\(Int(window.frame.height), privacy: .public)")
         #endif
-        chrome?.placeTrafficLights()
     }
 }
 
@@ -459,8 +459,7 @@ private final class SettingsHeaderHostingView: NSHostingView<AnyView> {
     }
 }
 
-/// The titlebar band (Midnight's drawn bar, or Classic's empty band under the system
-/// title) and the tab well.
+/// The tab well, at the top of the content under the system titlebar.
 private struct SettingsHeader: View {
     @ObservedObject var selection: SettingsTabSelection
     @Environment(\.themeTokens) private var tokens
@@ -469,11 +468,8 @@ private struct SettingsHeader: View {
         #if DEBUG
         let _ = settingsWindowLog.info("header body theme=\(tokens.theme.rawValue, privacy: .public) selected=\(selection.index, privacy: .public) source=\(ThemeTokensSource.shared.tokens.theme.rawValue, privacy: .public)")
         #endif
-        VStack(spacing: 0) {
-            ThemedTitleBar(title: SettingsWindowLayout.windowTitle)
-            ThemedTabWell(titles: SettingsTab.allCases.map(\.title), selection: $selection.index)
-        }
-        .fixedSize(horizontal: false, vertical: true)
+        ThemedTabWell(titles: SettingsTab.allCases.map(\.title), selection: $selection.index)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -1644,7 +1640,6 @@ private enum APIKeyValidationState: Equatable {
 
     struct Status {
         let message: String
-        let systemImage: String?
         let tone: Tone
         let helpMessage: String?
     }
@@ -1656,23 +1651,20 @@ private enum APIKeyValidationState: Equatable {
         case .checking:
             return Status(
                 message: "Checking",
-                systemImage: "clock",
                 tone: .pending,
                 helpMessage: "Checking API key"
             )
         case .accepted(let message):
-            return Status(message: message, systemImage: nil, tone: .success, helpMessage: message)
+            return Status(message: message, tone: .success, helpMessage: message)
         case .rejected(let message):
             return Status(
                 message: "Invalid key",
-                systemImage: "xmark.circle.fill",
                 tone: .failure,
                 helpMessage: message
             )
         case .unavailable(let message):
             return Status(
                 message: "Not verified",
-                systemImage: "exclamationmark.triangle.fill",
                 tone: .caution,
                 helpMessage: message
             )
@@ -1685,8 +1677,7 @@ private enum APIKeyValidationState: Equatable {
     }
 }
 
-/// The API key's status beside its field. Classic: the status in its colour, with its
-/// symbol. Midnight: grey words; Saved carries the green dot, Invalid key a dashed
+/// The API key's status beside its field: grey words; Saved carries the green dot, Invalid key a dashed
 /// `mutedEdge` box, and nothing is red (#105 rules 1 and 2).
 private struct APIKeyValidationBadge: View {
     let status: APIKeyValidationState.Status
@@ -1694,6 +1685,7 @@ private struct APIKeyValidationBadge: View {
 
     var body: some View {
         content
+            .font(tokens.type.fieldCaption.font)
             .lineLimit(1)
             .truncationMode(.tail)
             .fixedSize(horizontal: true, vertical: false)
@@ -1703,36 +1695,6 @@ private struct APIKeyValidationBadge: View {
     }
 
     @ViewBuilder private var content: some View {
-        switch tokens.controls {
-        case .system:
-            systemContent
-                .font(tokens.type.fieldCaption.font)
-                .foregroundStyle(systemColor.color)
-                .frame(minHeight: tokens.controlMetrics.badgeHeight, alignment: .leading)
-        case .drawn:
-            drawnContent
-                .font(tokens.type.fieldCaption.font)
-        }
-    }
-
-    @ViewBuilder private var systemContent: some View {
-        if let systemImage = status.systemImage {
-            Label(status.message, systemImage: systemImage)
-        } else {
-            Text(status.message)
-        }
-    }
-
-    private var systemColor: ThemeColor {
-        switch status.tone {
-        case .pending: tokens.colors.secondaryText
-        case .success: tokens.colors.success
-        case .failure: tokens.colors.failureText
-        case .caution: tokens.colors.cautionText
-        }
-    }
-
-    @ViewBuilder private var drawnContent: some View {
         let metrics = tokens.controlMetrics
         switch status.tone {
         case .success:

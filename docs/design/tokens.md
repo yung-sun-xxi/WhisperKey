@@ -3,8 +3,7 @@
 Source of truth: the "Token sheet" section of [`dark/master-design.dc.html`](dark/master-design.dc.html).
 This file transcribes it; if the two disagree, the design file wins.
 
-The tokens apply to the **Midnight (dark) theme** only. The light **Classic** theme is the current
-system look and was not designed.
+The second theme (Classic) currently equals Midnight and will differ from it only in colours.
 
 Values and usage notes are copied as the sheet states them. A leading **+** marks an item the sheet
 says was added in the last design round because a surface needed it. Numbers without a unit are
