@@ -54,7 +54,7 @@ public extension ThemeTokens {
             checkMark: ThemeFont(size: 10, weight: .bold),
             // 11/400: units, badges.
             fieldCaption: ThemeFont(size: 11, weight: .regular),
-            // The design draws no glyph button; Classic's size.
+            // The design draws no glyph button; the size the app used before it.
             actionGlyph: ThemeFont(size: 14, weight: .semibold)
         ),
         radii: Radii(
@@ -105,8 +105,7 @@ public extension ThemeTokens {
             menu: .drop(color: .hex(0x000000, opacity: 0.5), blur: 36, x: 0, y: 18),
             alert: .drop(color: .hex(0x000000, opacity: 0.6), blur: 44, x: 0, y: 20)
         ),
-        controls: .drawn,
-        windowChrome: .drawn,
+        windowAppearance: .dark,
         // Not on the sheet: the controls of the Settings mockups (tokens.md, gaps item 11).
         controlMetrics: ControlMetrics(
             edgeWidth: 1,
@@ -152,14 +151,14 @@ public extension ThemeTokens {
             tabTrackPadding: 2,
             tabSegmentGap: 2,
             dividerWidth: 1,
-            // The mockup has no Theme row; the chips keep Classic's sizes at the
-            // control height.
+            // The mockup has no Theme row; the chips keep the app's earlier sizes at
+            // the control height.
             chipIcon: 20,
             chipIconGap: 5,
             chipPadding: 6,
             chipSelectedOutline: 2,
             chipSpacing: 8,
-            // Not in the mockup either; Classic's.
+            // Not in the mockup either; the app's earlier gap.
             errorLineGap: 4,
             // Not in the mockup: the Quick paste hint line, one height in both themes.
             hintLineHeight: 16

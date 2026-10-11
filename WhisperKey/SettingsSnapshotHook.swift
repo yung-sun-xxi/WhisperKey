@@ -88,9 +88,10 @@ enum SettingsSnapshotHook {
         try? report.write(to: directory.appendingPathComponent("done.txt"), atomically: true, encoding: .utf8)
     }
 
-    /// Switches the theme with Settings open and reports the window's frame before and
-    /// after, plus every frame the window passed through on the way (each move or resize
-    /// AppKit announced). A switch that keeps the window still reports no step at all.
+    /// Switches the theme with Settings open and reports the window's frame and its close
+    /// button's frame (window coordinates) before and after, plus every frame the window
+    /// passed through on the way (each move or resize AppKit announced). A switch that
+    /// keeps the window still reports no step at all.
     private static func switchTheme(to theme: AppTheme, settings: SettingsStore) async -> [String] {
         let window = SettingsWindowController.relatedWindow
         guard let window, window.isVisible, settings.theme != theme else {
@@ -100,6 +101,7 @@ enum SettingsSnapshotHook {
         }
 
         let before = window.frame
+        let closeBefore = closeButtonFrame(in: window)
         var steps: [NSRect] = []
         let center = NotificationCenter.default
         let observers = [NSWindow.didMoveNotification, NSWindow.didResizeNotification].map { name in
@@ -112,12 +114,21 @@ enum SettingsSnapshotHook {
         observers.forEach(center.removeObserver)
 
         let after = window.frame
-        var lines = ["switch to \(theme.rawValue): before \(describe(before)) after \(describe(after)) topLeft \(before.minX == after.minX && before.maxY == after.maxY ? "kept" : "MOVED")"]
+        let closeAfter = closeButtonFrame(in: window)
+        var lines = [
+            "switch to \(theme.rawValue): before \(describe(before)) after \(describe(after)) topLeft \(before.minX == after.minX && before.maxY == after.maxY ? "kept" : "MOVED")",
+            "  close button: before \(describe(closeBefore)) after \(describe(closeAfter)) \(closeBefore == closeAfter ? "same" : "MOVED")",
+        ]
         lines += steps.map { "  step \(describe($0))" }
         for line in lines {
             settingsWindowLog.info("hook \(line, privacy: .public)")
         }
         return lines
+    }
+
+    private static func closeButtonFrame(in window: NSWindow) -> NSRect {
+        guard let button = window.standardWindowButton(.closeButton) else { return .zero }
+        return button.convert(button.bounds, to: nil)
     }
 
     private static func describe(_ frame: NSRect) -> String {

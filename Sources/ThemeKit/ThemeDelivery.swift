@@ -43,7 +43,7 @@ private struct ThemeTokensKey: EnvironmentKey {
 
 public extension EnvironmentValues {
     /// The current theme's tokens. Every hosting root sets it through `ThemedRoot`;
-    /// a view outside one sees Classic.
+    /// a view outside one sees Classic's tokens.
     var themeTokens: ThemeTokens {
         get { self[ThemeTokensKey.self] }
         set { self[ThemeTokensKey.self] = newValue }

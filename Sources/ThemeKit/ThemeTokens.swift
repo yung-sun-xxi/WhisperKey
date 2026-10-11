@@ -14,8 +14,9 @@ import SettingsStore
 /// `ThemeColor.color` and `ThemeFont.font` turn them into SwiftUI values at the view.
 ///
 /// The names follow the roles of the Midnight token sheet (`docs/design/tokens.md`);
-/// each doc comment quotes the sheet's number or usage. Classic holds what the views
-/// draw today in that role, so moving a view onto a token changes nothing in Classic.
+/// each doc comment quotes the sheet's number or usage. The themes differ only in
+/// colours (decided 2026-10-11): one layout, one set of drawn controls, one window
+/// chrome. Classic is Midnight under its own id until it gets its own palette.
 public struct ThemeTokens: Equatable, Sendable {
     public var theme: AppTheme
     public var colors: Colors
@@ -25,11 +26,9 @@ public struct ThemeTokens: Equatable, Sendable {
     public var spacing: Spacing
     public var panels: Panels
     public var shadows: Shadows
-    /// Whether push buttons, toggles, pop-ups, segmented controls and number fields are
-    /// the system's controls or drawn from these tokens.
-    public var controls: Rendering
-    /// Whether a window keeps the system's titlebar or draws its own bar (#162).
-    public var windowChrome: Rendering
+    /// The appearance a themed window takes, so the system's titlebar, menus and alerts
+    /// match the palette.
+    public var windowAppearance: WindowAppearance
     /// The sizes of the drawn controls that the sheet does not name.
     public var controlMetrics: ControlMetrics
     /// The Settings window: its width, row area, tab well and Theme chips.
@@ -44,8 +43,7 @@ public struct ThemeTokens: Equatable, Sendable {
         spacing: Spacing,
         panels: Panels,
         shadows: Shadows,
-        controls: Rendering,
-        windowChrome: Rendering,
+        windowAppearance: WindowAppearance,
         controlMetrics: ControlMetrics,
         settingsWindow: SettingsWindowMetrics
     ) {
@@ -57,18 +55,17 @@ public struct ThemeTokens: Equatable, Sendable {
         self.spacing = spacing
         self.panels = panels
         self.shadows = shadows
-        self.controls = controls
-        self.windowChrome = windowChrome
+        self.windowAppearance = windowAppearance
         self.controlMetrics = controlMetrics
         self.settingsWindow = settingsWindow
     }
 }
 
-/// Who draws a control or a window's chrome: the system, as Classic does, or the view
-/// itself from the tokens, as Midnight does.
-public enum Rendering: String, Equatable, Sendable {
-    case system
-    case drawn
+/// The system appearance of a themed window: dark for a dark palette, light for a light
+/// one. Named here so the token stays free of AppKit; the window maps it.
+public enum WindowAppearance: String, Equatable, Sendable {
+    case dark
+    case light
 }
 
 public extension AppTheme {
@@ -89,8 +86,7 @@ public extension ThemeTokens {
         public var bar: ThemeColor
         /// 02. The surface of a window, solid.
         public var surface: ThemeColor
-        /// 02 as well in Midnight. Settings and Reset usage, which Classic paints with
-        /// the control background rather than the window background.
+        /// 02 as well in Midnight. Settings and Reset usage.
         public var settingsSurface: ThemeColor
         /// 03. Cards, controls, tracks.
         public var card: ThemeColor
@@ -129,15 +125,15 @@ public extension ThemeTokens {
         public var failureHatch: ThemeColor
         /// off knob. Off-toggle knob. Shapes only.
         public var offKnob: ThemeColor
-        /// The label of a destructive push button (Reset usage…). Red in Classic; in
-        /// Midnight it looks like its neighbours (#105 rule 2).
+        /// The label of a destructive push button (Reset usage…). It looks like its
+        /// neighbours (#105 rule 2).
         public var destructiveText: ThemeColor
-        /// A destructive glyph (the API key's trash). Red in Classic, 07 in Midnight.
+        /// A destructive glyph (the API key's trash). 07 in Midnight.
         public var destructiveGlyph: ThemeColor
-        /// Text that reports a failure: "Invalid key", the Launch at login error. Red in
-        /// Classic; 08 in Midnight, where a failure is a state, not a colour (rule 1).
+        /// Text that reports a failure: "Invalid key", the Launch at login error. 08 in
+        /// Midnight, where a failure is a state, not a colour (rule 1).
         public var failureText: ThemeColor
-        /// Text that reports a doubt: "Not verified". Orange in Classic, 07 in Midnight.
+        /// Text that reports a doubt: "Not verified". 07 in Midnight.
         public var cautionText: ThemeColor
         /// A glyph button at rest: the API key's validate shield.
         public var actionGlyph: ThemeColor
@@ -420,8 +416,8 @@ public extension ThemeTokens {
 // MARK: - Panels and shadows
 
 public extension ThemeTokens {
-    /// The three floating panels. The sheet gives them one shell (#105 rule 4); Classic
-    /// draws each its own way today, so each has its own value.
+    /// The three floating panels. The sheet gives them one shell (#105 rule 4); each
+    /// keeps its own value for its width.
     struct Panels: Equatable, Sendable {
         public var popover: PanelShell
         public var quickPaste: PanelShell
@@ -480,13 +476,13 @@ public struct PanelShell: Equatable, Sendable {
 
 /// What fills a floating panel.
 public enum PanelBackground: Equatable, Sendable {
-    /// An `NSVisualEffectView` blurring what lies behind the window, as Classic does.
+    /// An `NSVisualEffectView` blurring what lies behind the window.
     case material(PanelMaterial)
     /// A colour over a blur of the given radius: Midnight's 02 at 95%, blur 30.
     case fill(ThemeColor, blur: CGFloat)
 }
 
-/// The `NSVisualEffectView.Material` a Classic panel uses. Named here so the token stays
+/// The `NSVisualEffectView.Material` a panel uses. Named here so the token stays
 /// free of AppKit; the view maps it.
 public enum PanelMaterial: String, Equatable, Sendable {
     case popover
@@ -512,9 +508,7 @@ public enum ThemeShadow: Equatable, Sendable {
 
 public extension ThemeTokens {
     /// The sizes of the drawn controls (#162) that the sheet does not name. Heights come
-    /// from `sizes.control`, radii from `radii.control`; the rest is here. Where Classic
-    /// renders the system's control, its value is what the system draws or what the
-    /// view sets on it today, and is marked so.
+    /// from `sizes.control`, radii from `radii.control`; the rest is here.
     struct ControlMetrics: Equatable, Sendable {
         /// The outline of a control.
         public var edgeWidth: CGFloat
@@ -537,8 +531,7 @@ public extension ThemeTokens {
         /// The toggle's knob, and its inset from the track's edge.
         public var toggleKnob: CGFloat
         public var toggleKnobInset: CGFloat
-        /// The number's width: Classic's whole rounded field, Midnight's value inside
-        /// the box.
+        /// The number's width inside the box.
         public var numberFieldWidth: CGFloat
         /// Between a number and its unit.
         public var numberUnitGap: CGFloat
@@ -613,14 +606,12 @@ public extension ThemeTokens {
     }
 
     /// The Settings window (#162): its width, the tab well, the row area and the Theme
-    /// row's chips. Row height is `sizes.formRow`. The window is one size in both themes
-    /// (decided 2026-10-11): `SettingsWindowGeometry` adds these up and the tests hold
-    /// the two themes to the same frame.
+    /// row's chips. Row height is `sizes.formRow`. `SettingsWindowGeometry` adds these
+    /// up.
     struct SettingsWindowMetrics: Equatable, Sendable {
         /// The window's width.
         public var width: CGFloat
-        /// The text edge of the tab well and the rows. The Settings window's own, so
-        /// Classic's general `spacing.windowTextEdge` stays what its other windows use.
+        /// The text edge of the tab well and the rows.
         public var textEdge: CGFloat
         /// The row area's padding above the first row and below the last.
         public var rowAreaTop: CGFloat
