@@ -16,6 +16,7 @@ import SettingsStore
 @MainActor
 enum SettingsSnapshotHook {
     static let directoryArgument = "WKSettingsSnapshotDir"
+    static let keepOpenArgument = "WKSettingsSnapshotKeepOpen"
 
     /// Long enough for a pane switch, the window resize and a theme change to settle.
     private static let settleNanoseconds: UInt64 = 700_000_000
@@ -75,7 +76,13 @@ enum SettingsSnapshotHook {
         settings.theme = originalTheme
         settings.quickPasteEnabled = originalQuickPaste
         await settle()
-        SettingsWindowController.hide()
+        // `-WKSettingsSnapshotKeepOpen YES` leaves Settings open on its first pane, for
+        // measuring the open window (app-health: idle CPU, memory).
+        if UserDefaults.standard.bool(forKey: keepOpenArgument) {
+            _ = SettingsWindowController.selectTab(identifier: SettingsWindowController.tabIdentifiers[0])
+        } else {
+            SettingsWindowController.hide()
+        }
 
         log.append("restored theme=\(originalTheme.rawValue) quickPasteEnabled=\(originalQuickPaste)")
         let report = log.joined(separator: "\n") + "\n"
