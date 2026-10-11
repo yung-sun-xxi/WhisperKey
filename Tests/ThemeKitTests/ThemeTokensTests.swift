@@ -26,6 +26,10 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertNotEqual(classic.spacing, midnight.spacing)
         XCTAssertNotEqual(classic.panels, midnight.panels)
         XCTAssertNotEqual(classic.shadows, midnight.shadows)
+        XCTAssertNotEqual(classic.controls, midnight.controls)
+        XCTAssertNotEqual(classic.windowChrome, midnight.windowChrome)
+        XCTAssertNotEqual(classic.controlMetrics, midnight.controlMetrics)
+        XCTAssertNotEqual(classic.settingsWindow, midnight.settingsWindow)
     }
 
     /// Classic is the look the views draw today. These are the values held in package

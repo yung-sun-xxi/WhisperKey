@@ -53,7 +53,18 @@ public extension ThemeTokens {
             failureFill: .system(.clear),
             failureHatch: .system(.clear),
             // System-drawn: the switch's knob is white.
-            offKnob: .system(.white)
+            offKnob: .system(.white),
+            // Settings: Reset usage… and the API key's trash, both `.red` today.
+            destructiveText: .system(.red),
+            destructiveGlyph: .system(.red),
+            // Settings: "Invalid key" and the Launch at login error, `.red`.
+            failureText: .system(.red),
+            // Settings: "Not verified", `.orange`.
+            cautionText: .system(.orange),
+            // Settings: the validate shield at rest, `.primary`.
+            actionGlyph: .system(.primary),
+            // ThemePicker, an unselected chip.
+            chipEdge: .system(.primary, opacity: 0.15)
         ),
         type: TypeScale(
             // UsageMetricColumn's figures.
@@ -77,7 +88,11 @@ public extension ThemeTokens {
             defaultButton: ThemeFont(size: 13, weight: .regular),
             // No check mark is drawn by the app today; the system checkbox draws its
             // own. Kept at the Midnight value so the token is never empty.
-            checkMark: ThemeFont(size: 10, weight: .bold)
+            checkMark: ThemeFont(size: 10, weight: .bold),
+            // Settings: `.caption` and `.caption2`, both 10pt regular on macOS.
+            fieldCaption: ThemeFont(size: 10, weight: .regular),
+            // SettingsWindowLayout.settingsActionIconSize, semibold.
+            actionGlyph: ThemeFont(size: 14, weight: .semibold)
         ),
         radii: Radii(
             // System-drawn window corners.
@@ -176,6 +191,61 @@ public extension ThemeTokens {
             window: .system,
             menu: .system,
             alert: .system
+        ),
+        controls: .system,
+        windowChrome: .system,
+        // Classic renders the system's controls, so most of these are what the system
+        // draws ("system-drawn") or are not drawn at all ("unused"); the rest are the
+        // sizes the Settings views set on those controls today.
+        controlMetrics: ControlMetrics(
+            edgeWidth: 1,             // system-drawn
+            horizontalPadding: 10,    // unused: the system pads its own controls
+            popUpMinWidth: 0,         // the system pop-up fits its title
+            popUpTitleGap: 10,        // unused
+            popUpChevron: 3.5,        // unused
+            popUpChevronGap: 3,       // unused
+            segmentedWidth: 150,      // no segmented control today; Midnight's width
+            trackPadding: 2,          // unused
+            segmentGap: 2,            // unused
+            toggleKnob: 13,           // system-drawn small switch
+            toggleKnobInset: 1,       // system-drawn
+            numberFieldWidth: 64,     // the rounded-border number fields
+            numberUnitGap: 6,         // HStack(spacing: 6)
+            stepper: CGSize(width: 17, height: 20), // system-drawn small stepper
+            stepperGap: 6,            // HStack(spacing: 6)
+            stepperArrow: 4,          // unused
+            stepperArrowGap: 4,       // unused
+            secureFieldWidth: 108,    // the API key field
+            rowControlGap: 6,         // the API key row's HStack(spacing: 6)
+            badgeDotGap: 5,           // unused: Classic's badge is a Label
+            badgeHeight: 22,          // the badge's minHeight: settingsControlHeight
+            badgePadding: 0,          // Classic's badge has no box
+            failureDash: [3, 3]       // unused
+        ),
+        settingsWindow: SettingsWindowMetrics(
+            // SettingsWindowLayout.contentWidth.
+            width: 460,
+            // SettingsWindowLayout.contentPadding, all round.
+            rowAreaTop: 18,
+            rowAreaBottom: 18,
+            // SettingsWindowLayout.settingsRowSpacing and settingsRowColumnSpacing.
+            rowSpacing: 8,
+            labelSpacing: 12,
+            // No tab well today (the tabs were the toolbar's). Classic draws it as the
+            // popover's period picker: a 1.5 padded track, segments 21 tall, no gap.
+            tabWellPadding: 14,
+            tabSegmentHeight: 21,
+            tabTrackPadding: 1.5,
+            tabSegmentGap: 0,
+            dividerWidth: 1,
+            // ThemePicker's constants.
+            chipIcon: 20,
+            chipIconGap: 5,
+            chipPadding: 6,
+            chipSelectedOutline: 2,
+            chipSpacing: 8,
+            // LaunchAtLoginToggle's VStack(spacing: 4).
+            errorLineGap: 4
         )
     )
 }

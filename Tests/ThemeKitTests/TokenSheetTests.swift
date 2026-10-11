@@ -137,6 +137,53 @@ final class TokenSheetTests: XCTestCase {
         XCTAssertTrue(edges.contains("Rows inset \(Int(spacing.rowInset)) from the shell with \(Int(spacing.rowPadding)) inside"), edges)
     }
 
+    // MARK: - Settings window (#162)
+
+    /// Item 10 of the gaps list: the window, the tab well and the row area.
+    func testSettingsWindowMatchesTheMockups() throws {
+        let gaps = try sheet.section("Values the surfaces use that the sheet does not list")
+        let window = midnight.settingsWindow
+        XCTAssertTrue(gaps.contains("The window is \(n(window.width)) wide, its edge included"), gaps)
+        XCTAssertTrue(gaps.contains("The tab well band is padded \(n(window.tabWellPadding)) above and below, its track padded \(n(window.tabTrackPadding)) with a \(n(window.tabSegmentGap)) gap between segments \(n(window.tabSegmentHeight)) tall"), gaps)
+        XCTAssertTrue(gaps.contains("The row area is padded \(n(window.rowAreaTop)) at the top and \(n(window.rowAreaBottom)) at the bottom"), gaps)
+        // Rows are the sheet's form row, back to back, at the window text edge.
+        XCTAssertEqual(midnight.sizes.formRow, try sheet.size("form row"))
+        XCTAssertEqual(window.rowSpacing, 0)
+        XCTAssertTrue(try sheet.section("Spacing and edges").contains("\(n(midnight.spacing.windowTextEdge)) in windows"))
+        // "01 bars: ... titlebar, tab well"; "03 ... Dividers on 02".
+        XCTAssertTrue(try sheet.cell(firstColumn: "01", column: 2).contains("tab well"))
+        XCTAssertEqual(midnight.colors.bar, .hex(try sheet.hex("01")))
+        XCTAssertEqual(midnight.colors.divider, .hex(try sheet.hex("03")))
+        XCTAssertEqual(window.dividerWidth, 1)
+    }
+
+    /// Item 11 of the gaps list: the reusable controls.
+    func testSettingsControlsMatchTheMockups() throws {
+        let gaps = try sheet.section("Values the surfaces use that the sheet does not list")
+        let controls = midnight.controlMetrics
+        let sizes = midnight.sizes
+        XCTAssertTrue(gaps.contains("Push button: a \(n(sizes.control - 2 * controls.edgeWidth)) line inside a \(n(controls.edgeWidth))px 05 edge, padded \(n(controls.horizontalPadding))"), gaps)
+        XCTAssertTrue(gaps.contains("Pop-up: min width \(n(controls.popUpMinWidth)), padded \(n(controls.horizontalPadding)), a \(n(controls.popUpTitleGap)) gap before up and down chevrons of \(n(controls.popUpChevron)) with a \(n(controls.popUpChevronGap)) gap"), gaps)
+        XCTAssertTrue(gaps.contains("Segmented control: \(n(controls.segmentedWidth)) wide"), gaps)
+        XCTAssertTrue(gaps.contains("Number field: padded \(n(controls.horizontalPadding)), an \(n(controls.numberUnitGap)) gap before the unit, then a \(n(controls.stepper.width))×\(n(controls.stepper.height)) stepper \(n(controls.stepperGap)) apart with triangles of \(n(controls.stepperArrow)), \(n(controls.stepperArrowGap)) apart"), gaps)
+        XCTAssertTrue(gaps.contains("Toggle knob \(n(controls.toggleKnob)), inset \(n(controls.toggleKnobInset))"), gaps)
+        XCTAssertTrue(gaps.contains("API key field \(n(controls.secureFieldWidth)) wide, an \(n(controls.rowControlGap)) gap between the row's controls"), gaps)
+        XCTAssertTrue(gaps.contains("Saved badge: a \(n(controls.badgeDotGap)) gap after the dot"), gaps)
+        XCTAssertTrue(gaps.contains("Rejected badge: a \(n(controls.badgeHeight)) line padded \(n(controls.badgePadding)) in a \(n(controls.edgeWidth))px dashed 06 edge"), gaps)
+        XCTAssertFalse(controls.failureDash.isEmpty, "a dashed edge needs a dash pattern")
+
+        // The knob fills the toggle's height less its inset on both sides.
+        XCTAssertEqual(controls.toggleKnob + 2 * controls.toggleKnobInset, sizes.toggle.height)
+        // The segmented control is the sheet's "Hold / Toggle" track and segment.
+        XCTAssertEqual(sizes.modeSegment + 2 * controls.trackPadding, sizes.modeTrack)
+        // The stepper is as tall as a control.
+        XCTAssertEqual(controls.stepper.height, try sheet.size("control"))
+    }
+
+    private func n(_ value: CGFloat) -> String {
+        value == value.rounded() ? String(Int(value)) : String(Double(value))
+    }
+
     // MARK: - Panels and shadows
 
     func testShadowsMatchTheMockups() throws {

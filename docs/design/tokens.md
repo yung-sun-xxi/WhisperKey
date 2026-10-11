@@ -119,3 +119,12 @@ Values that follow from a sheet token (a 6pt dot at radius 3, a 2pt bar at radiu
    and 28 also occur. This scan is approximate: it also counts gaps between mockups and captions on
    the board, which are not app spacing.
 9. **Radius 7** on the 14×18 microphone glyph drawn in the toast; a glyph shape, not a control.
+10. **Settings window.** The window is 580 wide, its edge included. The tab well band is padded
+   14 above and below, its track padded 2 with a 2 gap between segments 26 tall. The row area
+   is padded 10 at the top and 16 at the bottom.
+11. **Settings controls.** Push button: a 24 line inside a 1px 05 edge, padded 10. Pop-up: min
+   width 150, padded 10, a 10 gap before up and down chevrons of 3.5 with a 3 gap. Segmented
+   control: 150 wide. Number field: padded 10, an 8 gap before the unit, then a 22×26 stepper
+   6 apart with triangles of 4, 4 apart. Toggle knob 12, inset 2. API key field 150 wide, an 8
+   gap between the row's controls. Saved badge: a 5 gap after the dot. Rejected badge: a 20
+   line padded 8 in a 1px dashed 06 edge.

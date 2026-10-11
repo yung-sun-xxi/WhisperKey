@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Combine
 import SwiftUI
 import ThemeKit
 import HotkeyEngine
@@ -12,17 +13,9 @@ import UsageStatsStore
 import DevBuildMarker
 #endif
 
+// MARK: - Themed Settings begin
+
 enum SettingsWindowLayout {
-    static let contentWidth: CGFloat = 460
-    static let contentPadding: CGFloat = 18
-    static let settingsRowColumnSpacing: CGFloat = 12
-    static let settingsRowSpacing: CGFloat = 8
-    static let settingsRowHeight: CGFloat = 24
-    static let settingsControlHeight: CGFloat = 22
-    static let settingsActionIconSize: CGFloat = 14
-    static let settingsRowLabelWidth: CGFloat = 136
-    static let settingsRowContentWidth: CGFloat = 276
-    static let backgroundColor = NSColor.controlBackgroundColor
     static let windowTitle = "WhisperKey Settings"
 }
 
@@ -103,15 +96,14 @@ enum SettingsWindowController {
         let window = SettingsWindow(contentViewController: contentController)
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.title = SettingsWindowLayout.windowTitle
-        window.toolbarStyle = .preference
-        window.setContentSize(contentController.windowContentSize)
         window.isReleasedWhenClosed = false
         window.level = .floating
-        window.backgroundColor = SettingsWindowLayout.backgroundColor
         window.initialFirstResponder = contentController.focusParkingView
-        window.center()
         window.delegate = delegate
         window.standardWindowButton(.zoomButton)?.isEnabled = false
+        // The theme's chrome and the selected pane's size, before the window is placed.
+        contentController.attachChrome(to: window)
+        window.center()
 
         return window
     }
@@ -187,21 +179,171 @@ private final class SettingsWindowDelegate: NSObject, NSWindowDelegate {
     }
 }
 
-/// One toolbar tab per pane, the way System Settings does it. Each pane is its own
-/// hosting controller, so the state a pane owns — the API key draft above all — is not
-/// rebuilt when the selection changes.
-private final class SettingsContentViewController: NSTabViewController {
+/// Which pane the tab well shows. The tab well writes it; the tab view controller under it
+/// follows.
+@MainActor
+private final class SettingsTabSelection: ObservableObject {
+    @Published var index = 0
+}
+
+/// The window's content: the header (the drawn titlebar in Midnight, then the tab well)
+/// above the tab view controller that holds the panes. The window is as tall as the
+/// header plus the selected pane, and as wide as the theme says; it follows both, and
+/// the theme's window chrome, while open.
+private final class SettingsContentViewController: NSViewController {
     let focusParkingView = FirstResponderParkingView(frame: .zero)
 
+    private let selection: SettingsTabSelection
+    private let tabs: SettingsTabsController
+    private let header: SettingsHeaderHostingView
+    private var chrome: ThemedWindowChrome?
+    private var subscriptions: Set<AnyCancellable> = []
     private var isResizingWindow = false
+
+    init(coordinator: AppCoordinator) {
+        ThemeTokensSource.shared.follow(coordinator.settings)
+
+        let selection = SettingsTabSelection()
+        self.selection = selection
+        tabs = SettingsTabsController(coordinator: coordinator)
+        header = SettingsHeaderHostingView(rootView: AnyView(
+            ThemedRoot("settings.header") {
+                SettingsHeader(selection: selection)
+            }
+        ))
+
+        super.init(nibName: nil, bundle: nil)
+
+        header.sizingOptions = [.intrinsicContentSize]
+        tabs.onSelectedPaneSizeChange = { [weak self] in
+            self?.resizeWindowToSelectedPane()
+        }
+        header.onIntrinsicSizeChange = { [weak self] in
+            self?.resizeWindowToSelectedPane()
+        }
+        selection.$index
+            .removeDuplicates()
+            .sink { [weak self] index in
+                self?.showPane(at: index)
+            }
+            .store(in: &subscriptions)
+        ThemeTokensSource.shared.$tokens
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] tokens in
+                self?.applyTheme(tokens)
+            }
+            .store(in: &subscriptions)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func loadView() {
+        let container = NSView()
+        addChild(tabs)
+        let paneView = tabs.view
+
+        for subview in [header, paneView, focusParkingView] {
+            subview.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(subview)
+        }
+        header.setContentHuggingPriority(.required, for: .vertical)
+        header.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            paneView.topAnchor.constraint(equalTo: header.bottomAnchor),
+            paneView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            paneView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            paneView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            focusParkingView.widthAnchor.constraint(equalToConstant: 0),
+            focusParkingView.heightAnchor.constraint(equalToConstant: 0),
+            focusParkingView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            focusParkingView.topAnchor.constraint(equalTo: container.topAnchor),
+        ])
+        view = container
+    }
+
+    /// Gives the window the current theme's chrome and the selected pane's size.
+    func attachChrome(to window: NSWindow) {
+        chrome = ThemedWindowChrome(window: window)
+        applyTheme(ThemeTokensSource.shared.tokens)
+    }
+
+    func selectTab(identifier: String) -> Bool {
+        guard let index = TabWellSelection.index(of: identifier, in: SettingsWindowController.tabIdentifiers) else {
+            return false
+        }
+        selection.index = index
+        return true
+    }
+
+    private func showPane(at index: Int) {
+        let index = TabWellSelection.clamped(index, count: tabs.tabViewItems.count)
+        guard tabs.selectedTabViewItemIndex != index else { return }
+        tabs.selectedTabViewItemIndex = index
+    }
+
+    /// `tokens` is the theme being switched to: the source publishes before it changes.
+    private func applyTheme(_ tokens: ThemeTokens) {
+        chrome?.apply(tokens, background: tokens.colors.settingsSurface)
+        resizeWindowToSelectedPane(tokens)
+        // The panes and the header redraw in the new theme on the next pass; size again
+        // once they have.
+        DispatchQueue.main.async { [weak self] in
+            self?.resizeWindowToSelectedPane()
+        }
+    }
+
+    private func windowContentSize(_ tokens: ThemeTokens) -> NSSize {
+        loadViewIfNeeded()
+        header.layoutSubtreeIfNeeded()
+        let height = header.fittingSize.height + tabs.selectedPaneHeight
+        return NSSize(width: tokens.settingsWindow.width, height: ceil(height))
+    }
+
+    /// Keeps the window's top-left corner where it is: resizing from the bottom-left
+    /// would walk the window up the screen on every tab switch.
+    private func resizeWindowToSelectedPane(_ newTokens: ThemeTokens? = nil) {
+        guard !isResizingWindow, let window = view.window else { return }
+
+        let size = windowContentSize(newTokens ?? ThemeTokensSource.shared.tokens)
+        guard size.height > 1 else { return }
+
+        isResizingWindow = true
+        defer { isResizingWindow = false }
+
+        let top = window.frame.maxY
+        window.setContentSize(size)
+
+        var frame = window.frame
+        if abs(frame.maxY - top) > 0.5 {
+            frame.origin.y = top - frame.height
+            window.setFrame(frame, display: true)
+        }
+        chrome?.placeTrafficLights()
+    }
+}
+
+/// The panes, one per tab, without tabs of their own: the tab well above picks them. Each
+/// pane is its own hosting controller, so the state a pane owns — the API key draft above
+/// all — is not rebuilt when the selection changes.
+private final class SettingsTabsController: NSTabViewController {
+    /// Called when the selected pane changes, or changes its height.
+    var onSelectedPaneSizeChange: (() -> Void)?
 
     init(coordinator: AppCoordinator) {
         super.init(nibName: nil, bundle: nil)
 
-        tabStyle = .toolbar
+        tabStyle = .unspecified
         transitionOptions = []
+        canPropagateSelectedChildViewControllerTitle = false
 
-        ThemeTokensSource.shared.follow(coordinator.settings)
         for tab in SettingsTab.allCases {
             let paneController = NSHostingController(
                 rootView: AnyView(
@@ -212,17 +354,13 @@ private final class SettingsContentViewController: NSTabViewController {
                 )
             )
             // Reports the SwiftUI content height back as the pane's preferred size, which
-            // is what drives the window resize below.
+            // is what drives the window resize.
             paneController.sizingOptions = [.preferredContentSize]
-            // A toolbar-style NSTabViewController takes the window title from the selected
-            // pane's controller, and shows "Untitled" when it has none. The toolbar already
-            // says which pane is showing, so every pane carries the window's own name.
             paneController.title = SettingsWindowLayout.windowTitle
 
             let item = NSTabViewItem(viewController: paneController)
             item.identifier = tab.identifier
             item.label = tab.title
-            item.image = NSImage(systemSymbolName: tab.symbolName, accessibilityDescription: tab.title)
             addTabViewItem(item)
         }
 
@@ -234,24 +372,10 @@ private final class SettingsContentViewController: NSTabViewController {
         nil
     }
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        focusParkingView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(focusParkingView)
-
-        NSLayoutConstraint.activate([
-            focusParkingView.widthAnchor.constraint(equalToConstant: 0),
-            focusParkingView.heightAnchor.constraint(equalToConstant: 0),
-            focusParkingView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            focusParkingView.topAnchor.constraint(equalTo: view.topAnchor),
-        ])
-    }
-
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         super.tabView(tabView, didSelect: tabViewItem)
 
-        resizeWindowToSelectedPane()
+        onSelectedPaneSizeChange?()
     }
 
     override func preferredContentSizeDidChange(for viewController: NSViewController) {
@@ -259,20 +383,18 @@ private final class SettingsContentViewController: NSTabViewController {
 
         guard viewController === selectedPaneController else { return }
 
-        resizeWindowToSelectedPane()
+        onSelectedPaneSizeChange?()
     }
 
-    func selectTab(identifier: String) -> Bool {
-        guard let index = tabViewItems.firstIndex(where: { ($0.identifier as? String) == identifier }) else {
-            return false
-        }
-        selectedTabViewItemIndex = index
-        return true
-    }
+    var selectedPaneHeight: CGFloat {
+        guard let paneController = selectedPaneController else { return 0 }
 
-    var windowContentSize: NSSize {
-        loadViewIfNeeded()
-        return contentSize(for: selectedPaneController)
+        paneController.loadViewIfNeeded()
+        let paneView = paneController.view
+        paneView.layoutSubtreeIfNeeded()
+
+        let preferredHeight = paneController.preferredContentSize.height
+        return preferredHeight > 1 ? preferredHeight : paneView.fittingSize.height
     }
 
     private var selectedPaneController: NSViewController? {
@@ -281,41 +403,30 @@ private final class SettingsContentViewController: NSTabViewController {
 
         return tabViewItems[index].viewController
     }
+}
 
-    private func contentSize(for paneController: NSViewController?) -> NSSize {
-        guard let paneController else {
-            return NSSize(width: SettingsWindowLayout.contentWidth, height: 1)
-        }
+/// Reports a change of the header's height, so the window follows it.
+private final class SettingsHeaderHostingView: NSHostingView<AnyView> {
+    var onIntrinsicSizeChange: (() -> Void)?
 
-        paneController.loadViewIfNeeded()
-        let paneView = paneController.view
-        paneView.layoutSubtreeIfNeeded()
+    override func invalidateIntrinsicContentSize() {
+        super.invalidateIntrinsicContentSize()
 
-        let preferredHeight = paneController.preferredContentSize.height
-        let height = preferredHeight > 1 ? preferredHeight : paneView.fittingSize.height
-
-        return NSSize(width: SettingsWindowLayout.contentWidth, height: ceil(height))
+        guard let onIntrinsicSizeChange else { return }
+        DispatchQueue.main.async(execute: onIntrinsicSizeChange)
     }
+}
 
-    /// Keeps the window's top-left corner where it is: resizing from the bottom-left
-    /// would walk the window up the screen on every tab switch.
-    private func resizeWindowToSelectedPane() {
-        guard !isResizingWindow, let window = view.window else { return }
+/// The drawn titlebar (Midnight only) and the tab well.
+private struct SettingsHeader: View {
+    @ObservedObject var selection: SettingsTabSelection
 
-        let size = contentSize(for: selectedPaneController)
-        guard size.height > 1 else { return }
-
-        isResizingWindow = true
-        defer { isResizingWindow = false }
-
-        let top = window.frame.maxY
-        window.setContentSize(size)
-
-        var frame = window.frame
-        guard abs(frame.maxY - top) > 0.5 else { return }
-
-        frame.origin.y = top - frame.height
-        window.setFrame(frame, display: true)
+    var body: some View {
+        VStack(spacing: 0) {
+            ThemedTitleBar(title: SettingsWindowLayout.windowTitle)
+            ThemedTabWell(titles: SettingsTab.allCases.map(\.title), selection: $selection.index)
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -335,6 +446,8 @@ private final class FirstResponderParkingView: NSView {
         true
     }
 }
+
+// MARK: - Themed Settings end
 
 struct PopoverContent: View {
     @EnvironmentObject private var coordinator: AppCoordinator
@@ -800,7 +913,9 @@ enum UsageLineFormatter {
     }
 }
 
-/// One pane per toolbar tab, in the order the toolbar shows them.
+// MARK: - Themed Settings begin
+
+/// One pane per tab, in the order the tab well shows them.
 private enum SettingsTab: CaseIterable {
     case general
     case recording
@@ -820,19 +935,6 @@ private enum SettingsTab: CaseIterable {
         }
     }
 
-    var symbolName: String {
-        switch self {
-        case .transcription:
-            return "waveform"
-        case .recording:
-            return "mic"
-        case .quickPaste:
-            return "list.clipboard"
-        case .general:
-            return "gearshape"
-        }
-    }
-
     var identifier: String {
         switch self {
         case .transcription:
@@ -847,18 +949,22 @@ private enum SettingsTab: CaseIterable {
     }
 }
 
-/// The chrome every pane shares: one width for all four, so the toolbar tabs do not
-/// shift horizontally when the selection changes.
+/// The row area every pane shares: one width for all four, the theme's padding and
+/// surface.
 private struct SettingsPane: View {
     let tab: SettingsTab
     @ObservedObject var settings: SettingsStore
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
+        let window = tokens.settingsWindow
         paneContent
-            .padding(SettingsWindowLayout.contentPadding)
-            .frame(width: SettingsWindowLayout.contentWidth, alignment: .topLeading)
+            .padding(.top, window.rowAreaTop)
+            .padding(.bottom, window.rowAreaBottom)
+            .padding(.horizontal, tokens.spacing.windowTextEdge)
+            .frame(width: window.width, alignment: .topLeading)
             .fixedSize(horizontal: false, vertical: true)
-            .background(Color(nsColor: SettingsWindowLayout.backgroundColor))
+            .background(tokens.colors.settingsSurface.color)
     }
 
     @ViewBuilder private var paneContent: some View {
@@ -876,6 +982,7 @@ private struct SettingsPane: View {
 }
 
 private struct SettingsPaneStack<Content: View>: View {
+    @Environment(\.themeTokens) private var tokens
     private let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -883,7 +990,7 @@ private struct SettingsPaneStack<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SettingsWindowLayout.settingsRowSpacing) {
+        VStack(alignment: .leading, spacing: tokens.settingsWindow.rowSpacing) {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -901,17 +1008,17 @@ private struct TranscriptionSettingsPane: View {
     /// reset runs once per window rather than once per appearance.
     @State private var hasPreparedAPIKeyInput = false
     @FocusState private var apiKeyFieldFocused: Bool
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
         SettingsPaneStack {
             SettingsRow("Provider") {
-                Picker("", selection: $settings.provider) {
-                    ForEach(TranscriptionProviderID.allCases, id: \.self) { id in
-                        Text(id.displayName).tag(id)
-                    }
-                }
-                .labelsHidden()
-                .settingsControlFrame()
+                ThemedPopUpPicker(
+                    "Provider",
+                    selection: $settings.provider,
+                    options: TranscriptionProviderID.allCases,
+                    title: \.displayName
+                )
             }
             SettingsRow("Model") {
                 modelPicker
@@ -920,13 +1027,12 @@ private struct TranscriptionSettingsPane: View {
                 apiKeyField
             }
             SettingsRow("Language") {
-                Picker("", selection: $settings.language) {
-                    ForEach(TranscriptionLanguage.allCases, id: \.self) { language in
-                        Text(language.displayName).tag(language)
-                    }
-                }
-                .labelsHidden()
-                .settingsControlFrame()
+                ThemedPopUpPicker(
+                    "Language",
+                    selection: $settings.language,
+                    options: TranscriptionLanguage.allCases,
+                    title: \.displayName
+                )
             }
         }
         .background {
@@ -965,26 +1071,24 @@ private struct TranscriptionSettingsPane: View {
     @ViewBuilder private var modelPicker: some View {
         switch settings.provider {
         case .openai:
-            Picker("", selection: $settings.openAIModel) {
-                ForEach(OpenAIProvider.Model.allCases, id: \.self) { model in
-                    Text(model.rawValue).tag(model)
-                }
-            }
-            .labelsHidden()
-            .settingsControlFrame()
+            ThemedPopUpPicker(
+                "Model",
+                selection: $settings.openAIModel,
+                options: OpenAIProvider.Model.allCases,
+                title: \.rawValue
+            )
         case .groq:
-            Picker("", selection: $settings.groqModel) {
-                ForEach(GroqProvider.Model.allCases, id: \.self) { model in
-                    Text(model.displayName).tag(model)
-                }
-            }
-            .labelsHidden()
-            .settingsControlFrame()
+            ThemedPopUpPicker(
+                "Model",
+                selection: $settings.groqModel,
+                options: GroqProvider.Model.allCases,
+                title: \.displayName
+            )
         }
     }
 
     @ViewBuilder private var apiKeyField: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: tokens.controlMetrics.rowControlGap) {
             if let status = apiKeyValidationState.status {
                 APIKeyValidationBadge(status: status)
             }
@@ -993,20 +1097,16 @@ private struct TranscriptionSettingsPane: View {
                 scheduleAPIKeyValidation(presentNotice: true, debounceNanoseconds: 0)
             } label: {
                 Image(systemName: "checkmark.shield")
-                    .font(.system(size: SettingsWindowLayout.settingsActionIconSize, weight: .semibold))
+                    .font(tokens.type.actionGlyph.font)
             }
             .buttonStyle(.borderless)
-            .settingsControlFrame()
-            .foregroundStyle(apiKeyValidationState.validationIconColor)
+            .settingsControlFrame(tokens)
+            .foregroundStyle((apiKeyValidationState.isAccepted ? tokens.colors.success : tokens.colors.actionGlyph).color)
             .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || apiKeyValidationState == .checking)
             .help("Validate and save API key")
             .accessibilityLabel("Validate and save API key")
 
-            SecureField(apiKeyPlaceholder, text: $apiKeyDraft)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 108)
-                .settingsControlFrame()
-                .focused($apiKeyFieldFocused)
+            ThemedSecureField(apiKeyPlaceholder, text: $apiKeyDraft, focus: $apiKeyFieldFocused)
                 .onSubmit {
                     scheduleAPIKeyValidation(presentNotice: true, debounceNanoseconds: 0)
                 }
@@ -1022,16 +1122,16 @@ private struct TranscriptionSettingsPane: View {
                     }
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: SettingsWindowLayout.settingsActionIconSize, weight: .semibold))
+                        .font(tokens.type.actionGlyph.font)
                 }
                 .buttonStyle(.borderless)
-                .settingsControlFrame()
-                .foregroundStyle(.red)
+                .settingsControlFrame(tokens)
+                .foregroundStyle(tokens.colors.destructiveGlyph.color)
                 .help("Delete saved API key")
                 .accessibilityLabel("Delete saved API key")
             }
         }
-        .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+        .frame(height: tokens.sizes.control, alignment: .center)
     }
 
     private var currentAPIKey: String {
@@ -1175,46 +1275,35 @@ private struct RecordingSettingsPane: View {
     var body: some View {
         SettingsPaneStack {
             SettingsRow("Trigger") {
-                Picker("", selection: $settings.triggerKey) {
-                    ForEach(TriggerKey.allCases, id: \.self) { trigger in
-                        Text(trigger.displayName).tag(trigger)
-                    }
-                }
-                .labelsHidden()
-                .settingsControlFrame()
+                ThemedPopUpPicker(
+                    "Trigger",
+                    selection: $settings.triggerKey,
+                    options: TriggerKey.allCases,
+                    title: \.displayName
+                )
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
             SettingsRow("Mode") {
-                Picker("", selection: $settings.triggerMode) {
-                    ForEach(TriggerMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .settingsControlFrame()
+                ThemedSegmentedPicker(
+                    "Mode",
+                    selection: $settings.triggerMode,
+                    options: TriggerMode.allCases,
+                    title: \.displayName
+                )
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
             SettingsRow("Esc to cancel record") {
-                Toggle("", isOn: $settings.escapeToCancelRecording)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
+                ThemedToggle("Esc to cancel record", isOn: $settings.escapeToCancelRecording)
                     .disabled(isRecording)
                     .help(isRecording ? "Stop recording to change." : "")
             }
             SettingsRow("Sound effects") {
-                Toggle("", isOn: $settings.soundEffectsEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
+                ThemedToggle("Sound effects", isOn: $settings.soundEffectsEnabled)
             }
             SettingsRow("Pause Apple Music while recording") {
-                Toggle("", isOn: $settings.pauseAppleMusicWhileRecording)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
+                ThemedToggle("Pause Apple Music while recording", isOn: $settings.pauseAppleMusicWhileRecording)
                     .help("Pauses Apple Music at the start of a recording and resumes it when the microphone stops.")
             }
         }
@@ -1224,6 +1313,7 @@ private struct RecordingSettingsPane: View {
 private struct QuickPasteSettingsPane: View {
     @ObservedObject var settings: SettingsStore
     @EnvironmentObject private var coordinator: AppCoordinator
+    @Environment(\.themeTokens) private var tokens
 
     /// Stated because it is invisible from the settings screen otherwise: dictated text
     /// only reaches the popup by way of the clipboard.
@@ -1261,10 +1351,7 @@ private struct QuickPasteSettingsPane: View {
     var body: some View {
         SettingsPaneStack {
             SettingsRow("Quick paste popup") {
-                Toggle("", isOn: $settings.quickPasteEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .settingsControlFrame()
+                ThemedToggle("Quick paste popup", isOn: $settings.quickPasteEnabled)
                     .help(Self.quickPasteHelp)
             }
             // Hidden rather than disabled while the feature is off: the window now
@@ -1272,14 +1359,12 @@ private struct QuickPasteSettingsPane: View {
             // longer falls off the bottom edge.
             if settings.quickPasteEnabled {
                 SettingsRow("Popup trigger") {
-                    Picker("", selection: $settings.quickPasteTriggerKey) {
-                        ForEach(TriggerKey.allCases, id: \.self) { trigger in
-                            Text(trigger.displayName)
-                                .tag(trigger)
-                        }
-                    }
-                    .labelsHidden()
-                    .settingsControlFrame()
+                    ThemedPopUpPicker(
+                        "Popup trigger",
+                        selection: $settings.quickPasteTriggerKey,
+                        options: TriggerKey.allCases,
+                        title: \.displayName
+                    )
                     .disabled(isRecording)
                     .help(
                         isRecording
@@ -1288,58 +1373,33 @@ private struct QuickPasteSettingsPane: View {
                     )
                 }
                 Text(quickPasteUsageHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(tokens.type.fieldCaption.font)
+                    .foregroundStyle(tokens.colors.secondaryText.color)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 SettingsRow("Popup hold") {
-                    HStack(spacing: 6) {
-                        TextField("", value: holdMilliseconds, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 64)
-                            .settingsControlFrame()
-                        Stepper("",
-                                value: holdMilliseconds,
-                                in: Self.holdMillisecondsRange,
-                                step: 50)
-                            .labelsHidden()
-                            .settingsControlFrame()
-                        Text("ms")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                    }
-                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                    ThemedNumberField(
+                        "Popup hold",
+                        value: holdMilliseconds,
+                        in: Self.holdMillisecondsRange,
+                        step: 50,
+                        unit: "ms"
+                    )
                 }
                 SettingsRow("Popup entries") {
-                    HStack(spacing: 6) {
-                        TextField("", value: $settings.quickPasteEntryCount, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 64)
-                            .settingsControlFrame()
-                        Stepper("",
-                                value: $settings.quickPasteEntryCount,
-                                in: SettingsStore.quickPasteEntryCountRange,
-                                step: 1)
-                            .labelsHidden()
-                            .settingsControlFrame()
-                        Text("entries")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                    }
-                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                    ThemedNumberField(
+                        "Popup entries",
+                        value: $settings.quickPasteEntryCount,
+                        in: SettingsStore.quickPasteEntryCountRange,
+                        step: 1,
+                        unit: "entries"
+                    )
                 }
                 SettingsRow("Clipboard history") {
-                    HStack {
-                        Spacer(minLength: 0)
-                        Button("Clear history") {
-                            coordinator.clearClipboardHistory()
-                        }
-                        .controlSize(.small)
-                        .help("Empties the list the popup shows. The clipboard itself is left alone.")
+                    ThemedPushButton("Clear history") {
+                        coordinator.clearClipboardHistory()
                     }
-                    .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                    .help("Empties the list the popup shows. The clipboard itself is left alone.")
                 }
             }
         }
@@ -1373,26 +1433,16 @@ private struct GeneralSettingsPane: View {
                 LaunchAtLoginToggle()
             }
             SettingsRow("History size") {
-                HStack(spacing: 6) {
-                    TextField("", value: $historySizeDraft, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 64)
-                        .settingsControlFrame()
-                    Stepper("",
-                            value: $historySizeDraft,
-                            in: SettingsStore.historyMaxEntriesRange,
-                            step: 1)
-                        .labelsHidden()
-                        .settingsControlFrame()
-                    Text("entries")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
-                }
-                .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                ThemedNumberField(
+                    "History size",
+                    value: $historySizeDraft,
+                    in: SettingsStore.historyMaxEntriesRange,
+                    step: 1,
+                    unit: "entries"
+                )
             }
-            HStack {
-                Button("Reset usage…", role: .destructive) {
+            SettingsRow("Usage data") {
+                ThemedPushButton("Reset usage…", role: .destructive) {
                     UsageResetWindowController.show(
                         currentKey: ProviderModelKey(
                             providerID: settings.provider.rawValue,
@@ -1404,12 +1454,7 @@ private struct GeneralSettingsPane: View {
                         }
                     )
                 }
-                .buttonStyle(.bordered)
-                .foregroundStyle(.red)
-                .controlSize(.small)
-                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background {
             WindowAccessor { window in
@@ -1538,10 +1583,18 @@ private enum APIKeyValidationState: Equatable {
     case rejected(String)
     case unavailable(String)
 
+    /// What a status says about the key, which picks its colour from the theme.
+    enum Tone {
+        case pending
+        case success
+        case failure
+        case caution
+    }
+
     struct Status {
         let message: String
         let systemImage: String?
-        let color: Color
+        let tone: Tone
         let helpMessage: String?
     }
 
@@ -1553,58 +1606,110 @@ private enum APIKeyValidationState: Equatable {
             return Status(
                 message: "Checking",
                 systemImage: "clock",
-                color: .secondary,
+                tone: .pending,
                 helpMessage: "Checking API key"
             )
         case .accepted(let message):
-            return Status(message: message, systemImage: nil, color: .green, helpMessage: message)
+            return Status(message: message, systemImage: nil, tone: .success, helpMessage: message)
         case .rejected(let message):
             return Status(
                 message: "Invalid key",
                 systemImage: "xmark.circle.fill",
-                color: .red,
+                tone: .failure,
                 helpMessage: message
             )
         case .unavailable(let message):
             return Status(
                 message: "Not verified",
                 systemImage: "exclamationmark.triangle.fill",
-                color: .orange,
+                tone: .caution,
                 helpMessage: message
             )
         }
     }
 
-    var validationIconColor: Color {
-        switch self {
-        case .accepted:
-            return .green
-        default:
-            return .primary
-        }
+    var isAccepted: Bool {
+        if case .accepted = self { return true }
+        return false
     }
 }
 
+/// The API key's status beside its field. Classic: the status in its colour, with its
+/// symbol. Midnight: grey words; Saved carries the green dot, Invalid key a dashed
+/// `mutedEdge` box, and nothing is red (#105 rules 1 and 2).
 private struct APIKeyValidationBadge: View {
     let status: APIKeyValidationState.Status
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
         content
-            .font(.caption2)
-            .foregroundStyle(status.color)
             .lineLimit(1)
             .truncationMode(.tail)
             .fixedSize(horizontal: true, vertical: false)
-            .frame(minHeight: SettingsWindowLayout.settingsControlHeight, alignment: .leading)
             .help(status.helpMessage ?? status.message)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(status.helpMessage ?? status.message)
     }
 
     @ViewBuilder private var content: some View {
+        switch tokens.controls {
+        case .system:
+            systemContent
+                .font(tokens.type.fieldCaption.font)
+                .foregroundStyle(systemColor.color)
+                .frame(minHeight: tokens.controlMetrics.badgeHeight, alignment: .leading)
+        case .drawn:
+            drawnContent
+                .font(tokens.type.fieldCaption.font)
+        }
+    }
+
+    @ViewBuilder private var systemContent: some View {
         if let systemImage = status.systemImage {
             Label(status.message, systemImage: systemImage)
         } else {
             Text(status.message)
+        }
+    }
+
+    private var systemColor: ThemeColor {
+        switch status.tone {
+        case .pending: tokens.colors.secondaryText
+        case .success: tokens.colors.success
+        case .failure: tokens.colors.failureText
+        case .caution: tokens.colors.cautionText
+        }
+    }
+
+    @ViewBuilder private var drawnContent: some View {
+        let metrics = tokens.controlMetrics
+        switch status.tone {
+        case .success:
+            HStack(spacing: metrics.badgeDotGap) {
+                Circle()
+                    .fill(tokens.colors.success.color)
+                    .frame(width: tokens.sizes.dot, height: tokens.sizes.dot)
+                Text(status.message)
+                    .foregroundStyle(tokens.colors.secondaryText.color)
+            }
+        case .failure:
+            Text(status.message)
+                .foregroundStyle(tokens.colors.failureText.color)
+                .padding(.horizontal, metrics.badgePadding)
+                .frame(height: metrics.badgeHeight)
+                .overlay {
+                    RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
+                        .strokeBorder(
+                            tokens.colors.mutedEdge.color,
+                            style: StrokeStyle(lineWidth: metrics.edgeWidth, dash: metrics.failureDash)
+                        )
+                }
+        case .pending:
+            Text(status.message)
+                .foregroundStyle(tokens.colors.secondaryText.color)
+        case .caution:
+            Text(status.message)
+                .foregroundStyle(tokens.colors.cautionText.color)
         }
     }
 }
@@ -1671,21 +1776,14 @@ private enum APIKeyDeletionConfirmation {
 }
 
 /// The Theme row: one chip per theme — the theme's icon and its name — the selected
-/// chip outlined in the accent colour. The chips fit the standard row height, so the row
-/// keeps the pane's rhythm. Both themes render the existing light look until #105 lands;
-/// the icons only preview what each will be.
+/// chip outlined in the brand colour (the accent colour in Classic), the others in
+/// `chipEdge`. The chips fit the control height, so the row keeps the pane's rhythm.
 private struct ThemePicker: View {
-    private static let iconSize: CGFloat = 20
-    private static let iconToNameSpacing: CGFloat = 5
-    private static let chipHorizontalPadding: CGFloat = 6
-    private static let chipCornerRadius: CGFloat = 6
-    private static let selectionOutlineWidth: CGFloat = 2
-    private static let chipSpacing: CGFloat = 8
-
     @Binding var selection: AppTheme
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
-        HStack(spacing: Self.chipSpacing) {
+        HStack(spacing: tokens.settingsWindow.chipSpacing) {
             ForEach(AppTheme.allCases) { theme in
                 chip(for: theme)
             }
@@ -1694,27 +1792,29 @@ private struct ThemePicker: View {
 
     private func chip(for theme: AppTheme) -> some View {
         let isSelected = theme == selection
+        let window = tokens.settingsWindow
 
         return Button {
             selection = theme
         } label: {
-            HStack(spacing: Self.iconToNameSpacing) {
+            HStack(spacing: window.chipIconGap) {
                 Image(Self.iconName(for: theme))
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: Self.iconSize, height: Self.iconSize)
+                    .frame(width: window.chipIcon, height: window.chipIcon)
                     .accessibilityHidden(true)
                 Text(theme.displayName)
-                    .foregroundStyle(.primary)
+                    .font(tokens.type.body.font)
+                    .foregroundStyle(tokens.colors.primaryText.color)
             }
-            .padding(.horizontal, Self.chipHorizontalPadding)
-            .frame(height: SettingsWindowLayout.settingsControlHeight)
+            .padding(.horizontal, window.chipPadding)
+            .frame(height: tokens.sizes.control)
             .overlay {
-                RoundedRectangle(cornerRadius: Self.chipCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.accentColor : Color.primary.opacity(0.15),
-                        lineWidth: isSelected ? Self.selectionOutlineWidth : 1
+                        (isSelected ? tokens.colors.brand : tokens.colors.chipEdge).color,
+                        lineWidth: isSelected ? window.chipSelectedOutline : tokens.controlMetrics.edgeWidth
                     )
             }
             .contentShape(Rectangle())
@@ -1732,9 +1832,13 @@ private struct ThemePicker: View {
     }
 }
 
+/// One row: the label in `body` on the left, the control at the right text edge. The row
+/// is at least `formRow` tall; the label keeps its full width and the control gets the
+/// rest, so a line under a control (the Launch at login error) wraps there.
 private struct SettingsRow<Content: View>: View {
     let title: String
     let content: Content
+    @Environment(\.themeTokens) private var tokens
 
     init(_ title: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -1742,26 +1846,37 @@ private struct SettingsRow<Content: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: SettingsWindowLayout.settingsRowColumnSpacing) {
+        HStack(alignment: .center, spacing: tokens.settingsWindow.labelSpacing) {
             Text(title)
+                .font(tokens.type.body.font)
+                .foregroundStyle(tokens.colors.primaryText.color)
                 .lineLimit(1)
-                .frame(width: SettingsWindowLayout.settingsRowLabelWidth, alignment: .leading)
-                .frame(minHeight: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                .fixedSize()
+                .layoutPriority(1)
 
             content
                 .controlSize(.small)
-                .frame(width: SettingsWindowLayout.settingsRowContentWidth, alignment: .trailing)
-                .frame(minHeight: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .frame(minHeight: SettingsWindowLayout.settingsRowHeight, alignment: .center)
+        .frame(minHeight: tokens.sizes.formRow, alignment: .center)
     }
 }
 
 private extension View {
-    func settingsControlFrame() -> some View {
+    /// A glyph button at the control height, sized as the system's small controls.
+    func settingsControlFrame(_ tokens: ThemeTokens) -> some View {
         controlSize(.small)
-            .frame(height: SettingsWindowLayout.settingsControlHeight, alignment: .center)
+            .frame(height: tokens.sizes.control, alignment: .center)
     }
+}
+
+// MARK: - Themed Settings end
+
+/// What the Reset usage and Usage by model windows still read from the Settings window's
+/// old layout. They move onto tokens with those windows (#163, #170).
+extension SettingsWindowLayout {
+    static let contentPadding: CGFloat = 18
+    static let backgroundColor = NSColor.controlBackgroundColor
 }
 
 private let allUsageResetKeys: [ProviderModelKey] = {
