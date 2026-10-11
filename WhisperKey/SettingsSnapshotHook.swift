@@ -10,7 +10,7 @@ import SettingsStore
 /// Once launched, the app opens Settings and writes `settings-<theme>-<tab>.png` for
 /// each pair, plus `settings-<theme>-quickPaste-on.png` when Quick paste is off (it is
 /// switched on for that shot only). The image is the window's frame view, titlebar
-/// included, at the screen's backing scale. The theme and Quick paste setting are put
+/// included, at @2x whatever the screen's scale. The theme and Quick paste setting are put
 /// back, Settings closes, and `done.txt` lists what was written.
 @MainActor
 enum SettingsSnapshotHook {
@@ -18,6 +18,8 @@ enum SettingsSnapshotHook {
 
     /// Long enough for a pane switch, the window resize and a theme change to settle.
     private static let settleNanoseconds: UInt64 = 700_000_000
+
+    private static let renderScale: CGFloat = 2
 
     private static var started = false
 
@@ -97,6 +99,11 @@ enum SettingsSnapshotHook {
         guard let window = SettingsWindowController.relatedWindow else {
             return "error: \(name): no settings window"
         }
+        // The window draws its titlebar and controls in their active state only while
+        // the app is active and the window is key.
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        await settle()
         guard let png = pngOfFrameView(of: window) else {
             return "error: \(name): could not render the window"
         }
@@ -116,7 +123,21 @@ enum SettingsSnapshotHook {
 
         frameView.layoutSubtreeIfNeeded()
         let bounds = frameView.bounds
-        guard let rep = frameView.bitmapImageRepForCachingDisplay(in: bounds) else { return nil }
+        // Always @2x, whatever screen the window is on, so the shots compare with the
+        // @2x mockups.
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(bounds.width * renderScale),
+            pixelsHigh: Int(bounds.height * renderScale),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return nil }
+        rep.size = bounds.size
         frameView.cacheDisplay(in: bounds, to: rep)
         return rep.representation(using: .png, properties: [:])
     }
