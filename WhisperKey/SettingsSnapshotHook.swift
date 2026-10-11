@@ -56,8 +56,7 @@ enum SettingsSnapshotHook {
 
         for theme in AppTheme.allCases {
             settingsWindowLog.info("hook theme=\(theme.rawValue, privacy: .public)")
-            settings.theme = theme
-            await settle()
+            log.append(contentsOf: await switchTheme(to: theme, settings: settings))
 
             for tab in SettingsWindowController.tabIdentifiers {
                 await ensureWindowOpen(coordinator: coordinator)
@@ -73,9 +72,9 @@ enum SettingsSnapshotHook {
             }
         }
 
-        settings.theme = originalTheme
         settings.quickPasteEnabled = originalQuickPaste
         await settle()
+        log.append(contentsOf: await switchTheme(to: originalTheme, settings: settings))
         // `-WKSettingsSnapshotKeepOpen YES` leaves Settings open on its first pane, for
         // measuring the open window (app-health: idle CPU, memory).
         if UserDefaults.standard.bool(forKey: keepOpenArgument) {
@@ -87,6 +86,42 @@ enum SettingsSnapshotHook {
         log.append("restored theme=\(originalTheme.rawValue) quickPasteEnabled=\(originalQuickPaste)")
         let report = log.joined(separator: "\n") + "\n"
         try? report.write(to: directory.appendingPathComponent("done.txt"), atomically: true, encoding: .utf8)
+    }
+
+    /// Switches the theme with Settings open and reports the window's frame before and
+    /// after, plus every frame the window passed through on the way (each move or resize
+    /// AppKit announced). A switch that keeps the window still reports no step at all.
+    private static func switchTheme(to theme: AppTheme, settings: SettingsStore) async -> [String] {
+        let window = SettingsWindowController.relatedWindow
+        guard let window, window.isVisible, settings.theme != theme else {
+            settings.theme = theme
+            await settle()
+            return []
+        }
+
+        let before = window.frame
+        var steps: [NSRect] = []
+        let center = NotificationCenter.default
+        let observers = [NSWindow.didMoveNotification, NSWindow.didResizeNotification].map { name in
+            center.addObserver(forName: name, object: window, queue: .main) { _ in
+                MainActor.assumeIsolated { steps.append(window.frame) }
+            }
+        }
+        settings.theme = theme
+        await settle()
+        observers.forEach(center.removeObserver)
+
+        let after = window.frame
+        var lines = ["switch to \(theme.rawValue): before \(describe(before)) after \(describe(after)) topLeft \(before.minX == after.minX && before.maxY == after.maxY ? "kept" : "MOVED")"]
+        lines += steps.map { "  step \(describe($0))" }
+        for line in lines {
+            settingsWindowLog.info("hook \(line, privacy: .public)")
+        }
+        return lines
+    }
+
+    private static func describe(_ frame: NSRect) -> String {
+        "origin=\(Int(frame.minX)),\(Int(frame.minY)) size=\(Int(frame.width))x\(Int(frame.height)) top=\(Int(frame.maxY))"
     }
 
     /// Opens Settings when it is not open, and takes it out of the click-outside
