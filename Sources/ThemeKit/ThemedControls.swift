@@ -184,7 +184,8 @@ public struct ThemedSegmentedPicker<Value: Hashable>: View {
             .labelsHidden()
             .pickerStyle(.segmented)
             .controlSize(.small)
-            .frame(width: tokens.controlMetrics.segmentedWidth)
+            // The system control keeps its own width; trailing keeps it at the row's edge.
+            .frame(width: tokens.controlMetrics.segmentedWidth, alignment: .trailing)
             .frame(height: tokens.sizes.control)
         case .drawn:
             drawn

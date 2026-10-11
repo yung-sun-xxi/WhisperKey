@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import os
 import SettingsStore
 
 /// Debug-only: renders the Settings window to PNG files, every theme times every pane,
@@ -53,6 +54,7 @@ enum SettingsSnapshotHook {
         await ensureWindowOpen(coordinator: coordinator)
 
         for theme in AppTheme.allCases {
+            settingsWindowLog.info("hook theme=\(theme.rawValue, privacy: .public)")
             settings.theme = theme
             await settle()
 
@@ -91,6 +93,7 @@ enum SettingsSnapshotHook {
     }
 
     private static func shoot(tab: String, name: String, in directory: URL) async -> String {
+        settingsWindowLog.info("hook select=\(tab, privacy: .public) for=\(name, privacy: .public)")
         guard SettingsWindowController.selectTab(identifier: tab) else {
             return "error: \(name): no pane \(tab) or no window"
         }
@@ -104,10 +107,16 @@ enum SettingsSnapshotHook {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         await settle()
+        // A hosting view hands `cacheDisplay` what it drew for the previous request, so
+        // the first render only asks SwiftUI to draw the current state; the second one
+        // is kept.
+        _ = pngOfFrameView(of: window)
+        await settle()
         guard let png = pngOfFrameView(of: window) else {
             return "error: \(name): could not render the window"
         }
 
+        settingsWindowLog.info("hook shot=\(name, privacy: .public) frame=\(Int(window.frame.width), privacy: .public)x\(Int(window.frame.height), privacy: .public)")
         let url = directory.appendingPathComponent("\(name).png")
         do {
             try png.write(to: url)
