@@ -63,7 +63,7 @@ points.
 | Name | Size | Usage |
 |---|---|---|
 | list row | 34 | popover, quick paste, full history, checklist |
-| form row | 40 | Settings |
+| form row | 32 | Settings |
 | panel bar | 36 | |
 | titlebar | 44 | |
 | + action bar | 48 | |
@@ -75,8 +75,10 @@ points.
 | dot | 6 | |
 | bar | 2×18 | |
 | widths | panel 320 · quick paste 328 · toast 380 | |
+| + settings window | 520 | Settings, both themes |
 
-The standard row heights asked for in #105 are **list row 34** and **form row 40**.
+The standard row heights asked for in #105 are **list row 34** and **form row 32**. The form row was 40
+until 2026-10-11, when the Settings window was made one size in both themes: 520 wide, rows of 32.
 
 ## Spacing and edges
 
@@ -92,6 +94,7 @@ Text edge 16 in panels, 20 in windows. Rows inset 8 from the shell with 8 inside
 - **Checkbox**: 14, radius 4. Off: 06 edge on 02. On and mixed: 08 fill, 01 mark
 - **Action bar**: 48 on 01, the panel footer at window scale
 - **Row names**: 34 is now "list row", 40 "form row"
+- **Theme picker**: 40 icon, radius 8. Selected: 2pt red outline, offset 2. Rest: 05 edge, hover 04 fill
 - **Green, failure**: extended to Granted and Needs access
 
 ## Values the surfaces use that the sheet does not list
