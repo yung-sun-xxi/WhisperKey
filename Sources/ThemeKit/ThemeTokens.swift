@@ -25,6 +25,15 @@ public struct ThemeTokens: Equatable, Sendable {
     public var spacing: Spacing
     public var panels: Panels
     public var shadows: Shadows
+    /// Whether push buttons, toggles, pop-ups, segmented controls and number fields are
+    /// the system's controls or drawn from these tokens.
+    public var controls: Rendering
+    /// Whether a window keeps the system's titlebar or draws its own bar (#162).
+    public var windowChrome: Rendering
+    /// The sizes of the drawn controls that the sheet does not name.
+    public var controlMetrics: ControlMetrics
+    /// The Settings window: its width, row area, tab well and Theme chips.
+    public var settingsWindow: SettingsWindowMetrics
 
     public init(
         theme: AppTheme,
@@ -34,7 +43,11 @@ public struct ThemeTokens: Equatable, Sendable {
         sizes: Sizes,
         spacing: Spacing,
         panels: Panels,
-        shadows: Shadows
+        shadows: Shadows,
+        controls: Rendering,
+        windowChrome: Rendering,
+        controlMetrics: ControlMetrics,
+        settingsWindow: SettingsWindowMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -44,7 +57,18 @@ public struct ThemeTokens: Equatable, Sendable {
         self.spacing = spacing
         self.panels = panels
         self.shadows = shadows
+        self.controls = controls
+        self.windowChrome = windowChrome
+        self.controlMetrics = controlMetrics
+        self.settingsWindow = settingsWindow
     }
+}
+
+/// Who draws a control or a window's chrome: the system, as Classic does, or the view
+/// itself from the tokens, as Midnight does.
+public enum Rendering: String, Equatable, Sendable {
+    case system
+    case drawn
 }
 
 public extension AppTheme {
@@ -105,6 +129,20 @@ public extension ThemeTokens {
         public var failureHatch: ThemeColor
         /// off knob. Off-toggle knob. Shapes only.
         public var offKnob: ThemeColor
+        /// The label of a destructive push button (Reset usage…). Red in Classic; in
+        /// Midnight it looks like its neighbours (#105 rule 2).
+        public var destructiveText: ThemeColor
+        /// A destructive glyph (the API key's trash). Red in Classic, 07 in Midnight.
+        public var destructiveGlyph: ThemeColor
+        /// Text that reports a failure: "Invalid key", the Launch at login error. Red in
+        /// Classic; 08 in Midnight, where a failure is a state, not a colour (rule 1).
+        public var failureText: ThemeColor
+        /// Text that reports a doubt: "Not verified". Orange in Classic, 07 in Midnight.
+        public var cautionText: ThemeColor
+        /// A glyph button at rest: the API key's validate shield.
+        public var actionGlyph: ThemeColor
+        /// The outline of an unselected Theme chip.
+        public var chipEdge: ThemeColor
 
         public init(
             bar: ThemeColor,
@@ -127,7 +165,13 @@ public extension ThemeTokens {
             success: ThemeColor,
             failureFill: ThemeColor,
             failureHatch: ThemeColor,
-            offKnob: ThemeColor
+            offKnob: ThemeColor,
+            destructiveText: ThemeColor,
+            destructiveGlyph: ThemeColor,
+            failureText: ThemeColor,
+            cautionText: ThemeColor,
+            actionGlyph: ThemeColor,
+            chipEdge: ThemeColor
         ) {
             self.bar = bar
             self.surface = surface
@@ -150,6 +194,12 @@ public extension ThemeTokens {
             self.failureFill = failureFill
             self.failureHatch = failureHatch
             self.offKnob = offKnob
+            self.destructiveText = destructiveText
+            self.destructiveGlyph = destructiveGlyph
+            self.failureText = failureText
+            self.cautionText = cautionText
+            self.actionGlyph = actionGlyph
+            self.chipEdge = chipEdge
         }
     }
 }
@@ -181,6 +231,10 @@ public extension ThemeTokens {
         public var defaultButton: ThemeFont
         /// 10/700. The check mark in Full history.
         public var checkMark: ThemeFont
+        /// Units, hints, badges and error lines in the Settings rows.
+        public var fieldCaption: ThemeFont
+        /// A glyph button in a Settings row: the API key's shield and trash.
+        public var actionGlyph: ThemeFont
 
         public init(
             statValue: ThemeFont,
@@ -193,7 +247,9 @@ public extension ThemeTokens {
             labelOnBrand: ThemeFont,
             segmentLabelOnBrand: ThemeFont,
             defaultButton: ThemeFont,
-            checkMark: ThemeFont
+            checkMark: ThemeFont,
+            fieldCaption: ThemeFont,
+            actionGlyph: ThemeFont
         ) {
             self.statValue = statValue
             self.title = title
@@ -206,6 +262,8 @@ public extension ThemeTokens {
             self.segmentLabelOnBrand = segmentLabelOnBrand
             self.defaultButton = defaultButton
             self.checkMark = checkMark
+            self.fieldCaption = fieldCaption
+            self.actionGlyph = actionGlyph
         }
     }
 }
@@ -447,5 +505,178 @@ public enum ThemeShadow: Equatable, Sendable {
     public var swiftUIRadius: CGFloat? {
         guard case let .drop(_, blur, _, _) = self else { return nil }
         return blur / 2
+    }
+}
+
+// MARK: - Controls and the Settings window
+
+public extension ThemeTokens {
+    /// The sizes of the drawn controls (#162) that the sheet does not name. Heights come
+    /// from `sizes.control`, radii from `radii.control`; the rest is here. Where Classic
+    /// renders the system's control, its value is what the system draws or what the
+    /// view sets on it today, and is marked so.
+    struct ControlMetrics: Equatable, Sendable {
+        /// The outline of a control.
+        public var edgeWidth: CGFloat
+        /// Inside a push button, a pop-up, a number field and the API key field.
+        public var horizontalPadding: CGFloat
+        /// A pop-up's narrowest width.
+        public var popUpMinWidth: CGFloat
+        /// Between a pop-up's title and its chevrons.
+        public var popUpTitleGap: CGFloat
+        /// The height of each up or down chevron; its base is twice that.
+        public var popUpChevron: CGFloat
+        /// Between the two chevrons.
+        public var popUpChevronGap: CGFloat
+        /// The segmented control's width.
+        public var segmentedWidth: CGFloat
+        /// Inside a segmented track, around the segments.
+        public var trackPadding: CGFloat
+        /// Between two segments.
+        public var segmentGap: CGFloat
+        /// The toggle's knob, and its inset from the track's edge.
+        public var toggleKnob: CGFloat
+        public var toggleKnobInset: CGFloat
+        /// The number's width: Classic's whole rounded field, Midnight's value inside
+        /// the box.
+        public var numberFieldWidth: CGFloat
+        /// Between a number and its unit.
+        public var numberUnitGap: CGFloat
+        /// The stepper beside a number field.
+        public var stepper: CGSize
+        /// Between the number field and its stepper.
+        public var stepperGap: CGFloat
+        /// The height of each stepper triangle (base twice that), and the gap between them.
+        public var stepperArrow: CGFloat
+        public var stepperArrowGap: CGFloat
+        /// The API key field's width.
+        public var secureFieldWidth: CGFloat
+        /// Between the controls of one row: badge, shield, field, trash.
+        public var rowControlGap: CGFloat
+        /// Between the Saved badge's dot and its word.
+        public var badgeDotGap: CGFloat
+        /// A badge's height and its padding inside the dashed edge.
+        public var badgeHeight: CGFloat
+        public var badgePadding: CGFloat
+        /// Dash and gap of a dashed failure edge.
+        public var failureDash: [CGFloat]
+
+        public init(
+            edgeWidth: CGFloat,
+            horizontalPadding: CGFloat,
+            popUpMinWidth: CGFloat,
+            popUpTitleGap: CGFloat,
+            popUpChevron: CGFloat,
+            popUpChevronGap: CGFloat,
+            segmentedWidth: CGFloat,
+            trackPadding: CGFloat,
+            segmentGap: CGFloat,
+            toggleKnob: CGFloat,
+            toggleKnobInset: CGFloat,
+            numberFieldWidth: CGFloat,
+            numberUnitGap: CGFloat,
+            stepper: CGSize,
+            stepperGap: CGFloat,
+            stepperArrow: CGFloat,
+            stepperArrowGap: CGFloat,
+            secureFieldWidth: CGFloat,
+            rowControlGap: CGFloat,
+            badgeDotGap: CGFloat,
+            badgeHeight: CGFloat,
+            badgePadding: CGFloat,
+            failureDash: [CGFloat]
+        ) {
+            self.edgeWidth = edgeWidth
+            self.horizontalPadding = horizontalPadding
+            self.popUpMinWidth = popUpMinWidth
+            self.popUpTitleGap = popUpTitleGap
+            self.popUpChevron = popUpChevron
+            self.popUpChevronGap = popUpChevronGap
+            self.segmentedWidth = segmentedWidth
+            self.trackPadding = trackPadding
+            self.segmentGap = segmentGap
+            self.toggleKnob = toggleKnob
+            self.toggleKnobInset = toggleKnobInset
+            self.numberFieldWidth = numberFieldWidth
+            self.numberUnitGap = numberUnitGap
+            self.stepper = stepper
+            self.stepperGap = stepperGap
+            self.stepperArrow = stepperArrow
+            self.stepperArrowGap = stepperArrowGap
+            self.secureFieldWidth = secureFieldWidth
+            self.rowControlGap = rowControlGap
+            self.badgeDotGap = badgeDotGap
+            self.badgeHeight = badgeHeight
+            self.badgePadding = badgePadding
+            self.failureDash = failureDash
+        }
+    }
+
+    /// The Settings window (#162): its width, the tab well, the row area and the Theme
+    /// row's chips. Row height is `sizes.formRow`, side padding `spacing.windowTextEdge`.
+    struct SettingsWindowMetrics: Equatable, Sendable {
+        /// The window's width.
+        public var width: CGFloat
+        /// The row area's padding above the first row and below the last.
+        public var rowAreaTop: CGFloat
+        public var rowAreaBottom: CGFloat
+        /// Between two rows.
+        public var rowSpacing: CGFloat
+        /// The least space between a row's label and its control.
+        public var labelSpacing: CGFloat
+        /// The tab well band's padding above and below the track.
+        public var tabWellPadding: CGFloat
+        /// A tab segment's height, the track's padding around the segments and the gap
+        /// between them.
+        public var tabSegmentHeight: CGFloat
+        public var tabTrackPadding: CGFloat
+        public var tabSegmentGap: CGFloat
+        /// The lines above the tab well and above the rows.
+        public var dividerWidth: CGFloat
+        /// The Theme chips: icon, icon to name, side padding, selected outline, and the
+        /// gap between chips.
+        public var chipIcon: CGFloat
+        public var chipIconGap: CGFloat
+        public var chipPadding: CGFloat
+        public var chipSelectedOutline: CGFloat
+        public var chipSpacing: CGFloat
+        /// Between a control and the error line under it (Launch at login).
+        public var errorLineGap: CGFloat
+
+        public init(
+            width: CGFloat,
+            rowAreaTop: CGFloat,
+            rowAreaBottom: CGFloat,
+            rowSpacing: CGFloat,
+            labelSpacing: CGFloat,
+            tabWellPadding: CGFloat,
+            tabSegmentHeight: CGFloat,
+            tabTrackPadding: CGFloat,
+            tabSegmentGap: CGFloat,
+            dividerWidth: CGFloat,
+            chipIcon: CGFloat,
+            chipIconGap: CGFloat,
+            chipPadding: CGFloat,
+            chipSelectedOutline: CGFloat,
+            chipSpacing: CGFloat,
+            errorLineGap: CGFloat
+        ) {
+            self.width = width
+            self.rowAreaTop = rowAreaTop
+            self.rowAreaBottom = rowAreaBottom
+            self.rowSpacing = rowSpacing
+            self.labelSpacing = labelSpacing
+            self.tabWellPadding = tabWellPadding
+            self.tabSegmentHeight = tabSegmentHeight
+            self.tabTrackPadding = tabTrackPadding
+            self.tabSegmentGap = tabSegmentGap
+            self.dividerWidth = dividerWidth
+            self.chipIcon = chipIcon
+            self.chipIconGap = chipIconGap
+            self.chipPadding = chipPadding
+            self.chipSelectedOutline = chipSelectedOutline
+            self.chipSpacing = chipSpacing
+            self.errorLineGap = errorLineGap
+        }
     }
 }

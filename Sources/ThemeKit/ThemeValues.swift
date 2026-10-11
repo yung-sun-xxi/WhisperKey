@@ -27,6 +27,24 @@ public enum ThemeColor: Hashable, Sendable {
     }
 }
 
+public extension ThemeColor {
+    /// The colour for an AppKit view or window.
+    var nsColor: NSColor {
+        switch self {
+        case let .hex(value, opacity):
+            return NSColor(
+                srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+                green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255,
+                alpha: CGFloat(opacity)
+            )
+        case let .system(name, opacity):
+            let base = name.nsColor
+            return opacity == 1 ? base : base.withAlphaComponent(base.alphaComponent * CGFloat(opacity))
+        }
+    }
+}
+
 /// The system colours Classic draws with today, named as the views name them.
 public enum SystemColor: String, Hashable, Sendable {
     /// `Color.clear`: nothing painted, the material or window shows through.
@@ -49,6 +67,8 @@ public enum SystemColor: String, Hashable, Sendable {
     case green
     /// `Color.red`.
     case red
+    /// `Color.orange`.
+    case orange
     /// `Color.white`.
     case white
     /// `Color.black`.
@@ -66,6 +86,24 @@ public enum SystemColor: String, Hashable, Sendable {
         case .accent: return .accentColor
         case .green: return .green
         case .red: return .red
+        case .orange: return .orange
+        case .white: return .white
+        case .black: return .black
+        }
+    }
+
+    /// The same colour for AppKit.
+    public var nsColor: NSColor {
+        switch self {
+        case .clear: return .clear
+        case .primary, .label: return .labelColor
+        case .secondary, .secondaryLabel: return .secondaryLabelColor
+        case .windowBackground: return .windowBackgroundColor
+        case .controlBackground: return .controlBackgroundColor
+        case .accent: return .controlAccentColor
+        case .green: return .systemGreen
+        case .red: return .systemRed
+        case .orange: return .systemOrange
         case .white: return .white
         case .black: return .black
         }
@@ -111,6 +149,20 @@ public struct ThemeFont: Hashable, Sendable {
     public var font: Font {
         let font = Font.system(size: size, weight: weight.swiftUI)
         return tabularDigits ? font.monospacedDigit() : font
+    }
+
+    /// The font for an AppKit view.
+    public var nsFont: NSFont {
+        let weight: NSFont.Weight
+        switch self.weight {
+        case .regular: weight = .regular
+        case .medium: weight = .medium
+        case .semibold: weight = .semibold
+        case .bold: weight = .bold
+        }
+        return tabularDigits
+            ? .monospacedDigitSystemFont(ofSize: size, weight: weight)
+            : .systemFont(ofSize: size, weight: weight)
     }
 
     /// Letter spacing in points, for `.tracking(_:)`.

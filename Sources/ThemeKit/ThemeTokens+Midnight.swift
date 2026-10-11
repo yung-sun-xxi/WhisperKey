@@ -27,7 +27,15 @@ public extension ThemeTokens {
             success: .hex(0x78BE20),        // green
             failureFill: .hex(0x1E2126),    // failure
             failureHatch: .hex(0x8A909E, opacity: 0.18),
-            offKnob: .hex(0x8A909E)         // off knob
+            offKnob: .hex(0x8A909E),        // off knob
+            // #105 rule 2: destructive actions look like their neighbours.
+            destructiveText: .hex(0xE8EAEF),  // 08, a push button's label
+            destructiveGlyph: .hex(0x9BA1AF), // 07
+            // Rule 1: a failure is a state, not a brand moment; the dashed 06 edge marks it.
+            failureText: .hex(0xE8EAEF),    // 08
+            cautionText: .hex(0x9BA1AF),    // 07
+            actionGlyph: .hex(0x9BA1AF),    // 07
+            chipEdge: .hex(0x3B4150)        // 05, every edge
         ),
         type: TypeScale(
             statValue: ThemeFont(size: 15, weight: .semibold, tabularDigits: true),
@@ -43,7 +51,11 @@ public extension ThemeTokens {
             segmentLabelOnBrand: ThemeFont(size: 11, weight: .medium),
             defaultButton: ThemeFont(size: 13, weight: .medium),
             // Not on the sheet, and below its type floor of 11.
-            checkMark: ThemeFont(size: 10, weight: .bold)
+            checkMark: ThemeFont(size: 10, weight: .bold),
+            // 11/400: units, badges.
+            fieldCaption: ThemeFont(size: 11, weight: .regular),
+            // The design draws no glyph button; Classic's size.
+            actionGlyph: ThemeFont(size: 14, weight: .semibold)
         ),
         radii: Radii(
             window: 10,
@@ -92,6 +104,61 @@ public extension ThemeTokens {
             window: .drop(color: .hex(0x000000, opacity: 0.45), blur: 52, x: 0, y: 24),
             menu: .drop(color: .hex(0x000000, opacity: 0.5), blur: 36, x: 0, y: 18),
             alert: .drop(color: .hex(0x000000, opacity: 0.6), blur: 44, x: 0, y: 20)
+        ),
+        controls: .drawn,
+        windowChrome: .drawn,
+        // Not on the sheet: the controls of the Settings mockups (tokens.md, gaps item 11).
+        controlMetrics: ControlMetrics(
+            edgeWidth: 1,
+            horizontalPadding: 10,
+            popUpMinWidth: 150,
+            popUpTitleGap: 10,
+            popUpChevron: 3.5,
+            popUpChevronGap: 3,
+            segmentedWidth: 150,
+            trackPadding: 2,
+            segmentGap: 2,
+            toggleKnob: 12,
+            toggleKnobInset: 2,
+            // Not in the mockup, which sizes the box to "30": four tabular digits.
+            numberFieldWidth: 36,
+            numberUnitGap: 8,
+            stepper: CGSize(width: 22, height: 26),
+            stepperGap: 6,
+            stepperArrow: 4,
+            stepperArrowGap: 4,
+            secureFieldWidth: 150,
+            rowControlGap: 8,
+            badgeDotGap: 5,
+            badgeHeight: 20,
+            badgePadding: 8,
+            // "1px dashed": the browser's dash for a 1px edge.
+            failureDash: [3, 3]
+        ),
+        // Not on the sheet: the Settings mockups (tokens.md, gaps item 10).
+        settingsWindow: SettingsWindowMetrics(
+            // The mockup's outer width. macOS draws the window's edge inside its frame,
+            // so the frame is 580 and the row area 540 (the mockup's 538 less its edge).
+            width: 580,
+            rowAreaTop: 10,
+            rowAreaBottom: 16,
+            rowSpacing: 0,
+            // The label is flexible in the mockup; the least gap is the sheet's 12.
+            labelSpacing: 12,
+            tabWellPadding: 14,
+            tabSegmentHeight: 26,
+            tabTrackPadding: 2,
+            tabSegmentGap: 2,
+            dividerWidth: 1,
+            // The mockup has no Theme row; the chips keep Classic's sizes at the
+            // control height.
+            chipIcon: 20,
+            chipIconGap: 5,
+            chipPadding: 6,
+            chipSelectedOutline: 2,
+            chipSpacing: 8,
+            // Not in the mockup either; Classic's.
+            errorLineGap: 4
         )
     )
 }
