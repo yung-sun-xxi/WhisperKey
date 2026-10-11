@@ -40,10 +40,29 @@ enum SettingsWindowController {
     static let willCloseNotification = Notification.Name("WhisperKeySettingsWindowWillClose")
 
     static func prepare(coordinator: AppCoordinator) {
+        #if DEBUG
+        SettingsSnapshotHook.startIfRequested(coordinator: coordinator)
+        #endif
+
         guard window == nil else { return }
 
         let preparedWindow = makeWindow(coordinator: coordinator)
         window = preparedWindow
+    }
+
+    /// The panes' identifiers, in the order the window shows them.
+    static var tabIdentifiers: [String] {
+        SettingsTab.allCases.map(\.identifier)
+    }
+
+    /// Shows the pane with `identifier` in the open window. False when there is no
+    /// window or no such pane.
+    @discardableResult
+    static func selectTab(identifier: String) -> Bool {
+        guard let controller = window?.contentViewController as? SettingsContentViewController else {
+            return false
+        }
+        return controller.selectTab(identifier: identifier)
     }
 
     static func hide() {
@@ -241,6 +260,14 @@ private final class SettingsContentViewController: NSTabViewController {
         guard viewController === selectedPaneController else { return }
 
         resizeWindowToSelectedPane()
+    }
+
+    func selectTab(identifier: String) -> Bool {
+        guard let index = tabViewItems.firstIndex(where: { ($0.identifier as? String) == identifier }) else {
+            return false
+        }
+        selectedTabViewItemIndex = index
+        return true
     }
 
     var windowContentSize: NSSize {
