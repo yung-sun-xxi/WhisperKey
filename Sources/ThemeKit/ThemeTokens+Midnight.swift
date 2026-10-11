@@ -137,9 +137,11 @@ public extension ThemeTokens {
         ),
         // Not on the sheet: the Settings mockups (tokens.md, gaps item 10).
         settingsWindow: SettingsWindowMetrics(
-            // The mockup's outer width. macOS draws the window's edge inside its frame,
-            // so the frame is 580 and the row area 540 (the mockup's 538 less its edge).
-            width: 580,
+            // The sheet's "+ settings window", both themes. macOS draws the window's edge
+            // inside its frame, so the frame is 520 and the row area 480.
+            width: 520,
+            // The sheet's text edge in windows, `spacing.windowTextEdge`.
+            textEdge: 20,
             rowAreaTop: 10,
             rowAreaBottom: 16,
             rowSpacing: 0,
@@ -158,7 +160,9 @@ public extension ThemeTokens {
             chipSelectedOutline: 2,
             chipSpacing: 8,
             // Not in the mockup either; Classic's.
-            errorLineGap: 4
+            errorLineGap: 4,
+            // Not in the mockup: the Quick paste hint line, one height in both themes.
+            hintLineHeight: 16
         )
     )
 }

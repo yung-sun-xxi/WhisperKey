@@ -21,20 +21,88 @@ final class SettingsTokensTests: XCTestCase {
         XCTAssertEqual(midnight.windowChrome, .drawn)
     }
 
-    // MARK: - Classic is today's SettingsWindowLayout
+    // MARK: - One window in both themes (decided 2026-10-11)
 
-    func testClassicSettingsWindowIsTodaysLayout() {
-        let window = classic.settingsWindow
-        // contentWidth, contentPadding, settingsRowSpacing, settingsRowColumnSpacing
-        XCTAssertEqual(window.width, 460)
-        XCTAssertEqual(window.rowAreaTop, 18)
-        XCTAssertEqual(window.rowAreaBottom, 18)
+    /// 520 wide, rows of 32 back to back, the same row-area padding and text edge.
+    func testBothThemesShareTheSettingsWindowsWidthAndRows() {
+        for tokens in [classic, midnight] {
+            let window = tokens.settingsWindow
+            let theme = tokens.theme.rawValue
+            XCTAssertEqual(window.width, 520, theme)
+            XCTAssertEqual(tokens.sizes.formRow, 32, theme)
+            XCTAssertEqual(window.rowSpacing, 0, theme)
+            XCTAssertEqual(window.rowAreaTop, 10, theme)
+            XCTAssertEqual(window.rowAreaBottom, 16, theme)
+            XCTAssertEqual(window.textEdge, 20, theme)
+            XCTAssertEqual(window.hintLineHeight, 16, theme)
+        }
+        // Midnight's Settings edge is the sheet's window edge; Classic's general window
+        // edge stays SettingsWindowLayout.contentPadding for its other windows.
+        XCTAssertEqual(midnight.settingsWindow.textEdge, midnight.spacing.windowTextEdge)
         XCTAssertEqual(classic.spacing.windowTextEdge, 18)
-        XCTAssertEqual(window.rowSpacing, 8)
-        XCTAssertEqual(window.labelSpacing, 12)
-        // settingsRowHeight, settingsControlHeight
-        XCTAssertEqual(classic.sizes.formRow, 24)
+        XCTAssertEqual(classic.settingsWindow.labelSpacing, 12)
+    }
+
+    /// Classic keeps the system's controls at their size, centred in the taller row.
+    func testClassicControlsStayTheSystemsSize() {
         XCTAssertEqual(classic.sizes.control, 22)
+        XCTAssertLessThan(classic.sizes.control, classic.sizes.formRow)
+    }
+
+    /// Classic's tab well is Midnight's track in Classic's colours and radii.
+    func testClassicTabTrackHasMidnightsMetrics() {
+        for tokens in [classic, midnight] {
+            let window = tokens.settingsWindow
+            XCTAssertEqual(window.tabSegmentHeight, 26, tokens.theme.rawValue)
+            XCTAssertEqual(window.tabTrackPadding, 2, tokens.theme.rawValue)
+            XCTAssertEqual(window.tabSegmentGap, 2, tokens.theme.rawValue)
+            XCTAssertEqual(window.dividerWidth, 1, tokens.theme.rawValue)
+        }
+        XCTAssertNotEqual(classic.radii.card, midnight.radii.card)
+        XCTAssertEqual(classic.colors.brand, .system(.accent))
+    }
+
+    /// Classic's band is taller by half the difference between Midnight's drawn bar and
+    /// the system titlebar, above and below, so both headers end at the same height.
+    func testClassicBandMakesUpTheSystemTitlebar() {
+        // Measured on macOS 27.0.1: a titled window's frame less its content rect.
+        XCTAssertEqual(classic.sizes.titlebar, 32)
+        XCTAssertEqual(
+            classic.settingsWindow.tabWellPadding,
+            midnight.settingsWindow.tabWellPadding + (midnight.sizes.titlebar - classic.sizes.titlebar) / 2
+        )
+        XCTAssertEqual(
+            classic.sizes.titlebar + SettingsWindowGeometry.headerHeight(classic),
+            SettingsWindowGeometry.headerHeight(midnight)
+        )
+    }
+
+    /// Every pane — rows 3 to 6, with or without the Quick paste hint — comes out one
+    /// frame in both themes, given the system titlebar the Classic tokens state.
+    func testTheWindowIsOneHeightInBothThemes() {
+        let titlebar = classic.sizes.titlebar
+        for rows in 0...8 {
+            for hints in 0...1 {
+                XCTAssertEqual(
+                    SettingsWindowGeometry.frameHeight(classic, rows: rows, hintLines: hints, systemTitlebar: titlebar),
+                    SettingsWindowGeometry.frameHeight(midnight, rows: rows, hintLines: hints, systemTitlebar: titlebar),
+                    "rows \(rows), hints \(hints)"
+                )
+            }
+        }
+    }
+
+    /// The sum written out once, for General's four rows: titlebar 44, tab well
+    /// 1 + 14 + (26 + 2 + 2) + 14 + 1 = 60, rows 10 + 4 × 32 + 16 = 154.
+    func testGeneralIsTwoHundredFiftyEightTall() {
+        XCTAssertEqual(SettingsWindowGeometry.tabWellHeight(midnight), 60)
+        XCTAssertEqual(SettingsWindowGeometry.headerHeight(midnight), 104)
+        XCTAssertEqual(SettingsWindowGeometry.paneHeight(midnight, rows: 4), 154)
+        XCTAssertEqual(SettingsWindowGeometry.frameHeight(midnight, rows: 4, systemTitlebar: 32), 258)
+        XCTAssertEqual(SettingsWindowGeometry.frameHeight(classic, rows: 4, systemTitlebar: 32), 258)
+        XCTAssertEqual(SettingsWindowGeometry.contentHeight(classic, rows: 4), 226)
+        // Quick paste on: five rows and the hint line.
+        XCTAssertEqual(SettingsWindowGeometry.paneHeight(classic, rows: 5, hintLines: 1), 202)
     }
 
     func testClassicThemePickerIsTodaysChip() {

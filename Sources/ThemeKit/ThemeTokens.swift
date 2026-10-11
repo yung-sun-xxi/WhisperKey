@@ -317,7 +317,7 @@ public extension ThemeTokens {
     struct Sizes: Equatable, Sendable {
         /// 34. List row: popover, quick paste, full history, checklist.
         public var listRow: CGFloat
-        /// 40. Form row: Settings.
+        /// 32. Form row: Settings.
         public var formRow: CGFloat
         /// 36. Panel bar.
         public var panelBar: CGFloat
@@ -613,10 +613,15 @@ public extension ThemeTokens {
     }
 
     /// The Settings window (#162): its width, the tab well, the row area and the Theme
-    /// row's chips. Row height is `sizes.formRow`, side padding `spacing.windowTextEdge`.
+    /// row's chips. Row height is `sizes.formRow`. The window is one size in both themes
+    /// (decided 2026-10-11): `SettingsWindowGeometry` adds these up and the tests hold
+    /// the two themes to the same frame.
     struct SettingsWindowMetrics: Equatable, Sendable {
         /// The window's width.
         public var width: CGFloat
+        /// The text edge of the tab well and the rows. The Settings window's own, so
+        /// Classic's general `spacing.windowTextEdge` stays what its other windows use.
+        public var textEdge: CGFloat
         /// The row area's padding above the first row and below the last.
         public var rowAreaTop: CGFloat
         public var rowAreaBottom: CGFloat
@@ -642,9 +647,13 @@ public extension ThemeTokens {
         public var chipSpacing: CGFloat
         /// Between a control and the error line under it (Launch at login).
         public var errorLineGap: CGFloat
+        /// A hint line between two rows (Quick paste's usage hint), fixed so the caption
+        /// size of the theme does not change the pane's height.
+        public var hintLineHeight: CGFloat
 
         public init(
             width: CGFloat,
+            textEdge: CGFloat,
             rowAreaTop: CGFloat,
             rowAreaBottom: CGFloat,
             rowSpacing: CGFloat,
@@ -659,9 +668,11 @@ public extension ThemeTokens {
             chipPadding: CGFloat,
             chipSelectedOutline: CGFloat,
             chipSpacing: CGFloat,
-            errorLineGap: CGFloat
+            errorLineGap: CGFloat,
+            hintLineHeight: CGFloat
         ) {
             self.width = width
+            self.textEdge = textEdge
             self.rowAreaTop = rowAreaTop
             self.rowAreaBottom = rowAreaBottom
             self.rowSpacing = rowSpacing
@@ -677,6 +688,7 @@ public extension ThemeTokens {
             self.chipSelectedOutline = chipSelectedOutline
             self.chipSpacing = chipSpacing
             self.errorLineGap = errorLineGap
+            self.hintLineHeight = hintLineHeight
         }
     }
 }
