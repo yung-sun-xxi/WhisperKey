@@ -70,7 +70,7 @@ public extension ThemeTokens {
         ),
         sizes: Sizes(
             listRow: 34,
-            formRow: 40,
+            formRow: 32,
             panelBar: 36,
             titlebar: 44,
             actionBar: 48,

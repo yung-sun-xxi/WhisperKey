@@ -77,11 +77,12 @@
         <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:4px;border:1px solid #5A6070;flex:none"></div>+ 4 · checkbox</div>
         <div style="height:1px;background:#23262D;margin:5px 0"></div>
         <div><span style="color:#9BA1AF">list row</span> 34 <span style="color:#9BA1AF">· popover, quick paste, full history, checklist</span></div>
-        <div><span style="color:#9BA1AF">form row</span> 40 <span style="color:#9BA1AF">· Settings</span></div>
+        <div><span style="color:#9BA1AF">form row</span> 32 <span style="color:#9BA1AF">· Settings</span></div>
         <div><span style="color:#9BA1AF">panel bar</span> 36 · <span style="color:#9BA1AF">titlebar</span> 44 · <span style="color:#9BA1AF">+ action bar</span> 48</div>
         <div><span style="color:#9BA1AF">menu item</span> 30 · <span style="color:#9BA1AF">control</span> 26 · <span style="color:#9BA1AF">keycap, badge</span> 18</div>
         <div><span style="color:#9BA1AF">toggle</span> 28×16 · <span style="color:#9BA1AF">+ checkbox</span> 14 · <span style="color:#9BA1AF">dot</span> 6 · <span style="color:#9BA1AF">bar</span> 2×18</div>
         <div><span style="color:#9BA1AF">widths</span> panel 320 · quick paste 328 · toast 380</div>
+        <div><span style="color:#9BA1AF">+ settings window</span> 520 <span style="color:#9BA1AF">· Settings, both themes</span></div>
       </div>
     </div>
 
@@ -106,6 +107,7 @@
         <div><strong style="font-weight:600">Checkbox</strong> <span style="color:#9BA1AF">— 14, radius 4. Off: 06 edge on 02. On and mixed: 08 fill, 01 mark</span></div>
         <div><strong style="font-weight:600">Action bar</strong> <span style="color:#9BA1AF">— 48 on 01, the panel footer at window scale</span></div>
         <div><strong style="font-weight:600">Row names</strong> <span style="color:#9BA1AF">— 34 is now “list row”, 40 “form row”</span></div>
+        <div><strong style="font-weight:600">Theme picker</strong> <span style="color:#9BA1AF">— 40 icon, radius 8. Selected: 2pt red outline, offset 2. Rest: 05 edge, hover 04 fill</span></div>
         <div><strong style="font-weight:600">Green, failure</strong> <span style="color:#9BA1AF">— extended to Granted and Needs access</span></div>
       </div>
     </div>
@@ -114,7 +116,7 @@
   <!-- MENU BAR POPOVER + SETTINGS -->
   <div style="margin-top:56px;display:flex;align-items:baseline;gap:12px">
     <div style="font-size:15px;font-weight:600;color:#E8EAEF">Menu bar popover and Settings</div>
-    <div style="font-size:12px;color:#9BA1AF">popover 320 under the menu bar · Settings 580, four tabs</div>
+    <div style="font-size:12px;color:#9BA1AF">popover 320 under the menu bar · Settings 520, four tabs</div>
   </div>
   <div style="margin-top:22px">
     <div style="display:flex;gap:44px;align-items:flex-start">
@@ -338,9 +340,9 @@
 
       <!-- ── SETTINGS ─────────────────────────────────────── -->
       <div style="width:580px;flex:none">
-        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">SETTINGS WINDOW · 580 WIDE</div>
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">SETTINGS WINDOW · 520 WIDE</div>
 
-        <div style="width:580px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box" data-screen-label="Settings General">
+        <div style="width:520px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box" data-screen-label="Settings General">
           <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
             <div style="display:flex;gap:8px">
               <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
@@ -358,11 +360,12 @@
             </div>
           </div>
           <div style="border-top:1px solid #23262D;padding:10px 20px 16px">
-            <div style="display:flex;align-items:center;height:40px">
+            <div style="display:flex;align-items:center;height:32px">
               <div style="flex:1;font-size:13px;color:#E8EAEF">Launch at login</div>
               <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;height:40px">
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0 10px"><div style="flex:1;font-size:13px;color:#E8EAEF;line-height:40px">Theme</div><div style="display:flex;gap:12px"><sc-if value="{{ classicSel }}" hint-placeholder-val="{{ true }}"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid #E24631;outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#E8EAEF">Classic</div></div></sc-if><sc-if value="{{ midnightSel }}" hint-placeholder-val="{{ false }}"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px" onClick="{{ pickClassic }}"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #3B4150" style-hover="background:#2E323B"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#B4BAC6">Classic</div></div></sc-if><sc-if value="{{ midnightSel }}" hint-placeholder-val="{{ false }}"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid #E24631;outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#E8EAEF">Midnight</div></div></sc-if><sc-if value="{{ classicSel }}" hint-placeholder-val="{{ true }}"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px" onClick="{{ pickMidnight }}"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #3B4150" style-hover="background:#2E323B"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#B4BAC6">Midnight</div></div></sc-if></div></div>
+            <div style="display:flex;align-items:center;gap:6px;height:32px">
               <div style="flex:1;font-size:13px;color:#E8EAEF">History size</div>
               <div style="display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box">
                 <div style="font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">30</div>
@@ -373,14 +376,23 @@
                 <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #9BA1AF"></div>
               </div>
             </div>
-            <div style="display:flex;align-items:center;height:40px">
+            <div style="display:flex;align-items:center;height:32px">
               <div style="flex:1;font-size:13px;color:#E8EAEF">Usage data</div>
               <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Reset usage…</div>
             </div>
           </div>
         </div>
 
-        <div style="width:580px;margin-top:28px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box" data-screen-label="Settings Transcription">
+        <div style="width:580px;margin-top:16px" data-screen-label="Theme row states">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">THEME ROW · SETTINGS › GENERAL</div>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px"><div><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:8px">CLASSIC · DEFAULT</div><div style="background:#1A1C21;border:1px solid #3B4150;border-radius:10px;padding:0 14px"><div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0 10px"><div style="flex:1;font-size:13px;color:#E8EAEF;line-height:40px">Theme</div><div style="display:flex;gap:12px"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid #E24631;outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#E8EAEF">Classic</div></div><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #3B4150"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#B4BAC6">Midnight</div></div></div></div></div></div><div><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:8px">MIDNIGHT</div><div style="background:#1A1C21;border:1px solid #3B4150;border-radius:10px;padding:0 14px"><div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0 10px"><div style="flex:1;font-size:13px;color:#E8EAEF;line-height:40px">Theme</div><div style="display:flex;gap:12px"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #3B4150"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#B4BAC6">Classic</div></div><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid #E24631;outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#E8EAEF">Midnight</div></div></div></div></div></div><div><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:8px">HOVER · UNSELECTED</div><div style="background:#1A1C21;border:1px solid #3B4150;border-radius:10px;padding:0 14px"><div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0 10px"><div style="flex:1;font-size:13px;color:#E8EAEF;line-height:40px">Theme</div><div style="display:flex;gap:12px"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid #E24631;outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#E8EAEF">Classic</div></div><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #3B4150;background:#2E323B"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#B4BAC6">Midnight</div></div></div></div></div></div></div>
+          <div style="margin-top:20px"><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">ICONS · 2× FOR EXPORT</div><div style="display:flex;gap:24px"><div style="display:flex;flex-direction:column;gap:8px"><div style="background:#1A1C21;border-radius:10px;padding:16px;width:max-content"><div id="theme-icon-classic-2x" data-screen-label="Theme icon Classic 2x" style="position:relative;width:80px;height:80px;border-radius:16px"><div style="position:absolute;left:12px;top:16px;width:56px;height:48px;box-sizing:border-box;border:2px solid #C8C8C8;border-radius:8px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:10px;background:#E3E3E3"></div><div style="position:absolute;left:14px;top:18px;width:28px;height:4px;border-radius:2px;background:#C7C7CC"></div><div style="position:absolute;left:14px;top:26px;width:20px;height:4px;border-radius:2px;background:#C7C7CC"></div><div style="position:absolute;left:14px;top:34px;width:24px;height:4px;border-radius:2px;background:#C7C7CC"></div><div style="position:absolute;left:6px;top:14px;width:4px;height:12px;border-radius:2px;background:#007AFF"></div></div></div></div><div style="font-size:11px;color:#9BA1AF">theme-classic@2x · 80 × 80</div></div><div style="display:flex;flex-direction:column;gap:8px"><div style="background:#1A1C21;border-radius:10px;padding:16px;width:max-content"><div id="theme-icon-midnight-2x" data-screen-label="Theme icon Midnight 2x" style="position:relative;width:80px;height:80px;border-radius:16px"><div style="position:absolute;left:12px;top:16px;width:56px;height:48px;box-sizing:border-box;border:2px solid #3B4150;border-radius:8px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:10px;background:#14161A"></div><div style="position:absolute;left:14px;top:18px;width:28px;height:4px;border-radius:2px;background:#5A6070"></div><div style="position:absolute;left:14px;top:26px;width:20px;height:4px;border-radius:2px;background:#5A6070"></div><div style="position:absolute;left:14px;top:34px;width:24px;height:4px;border-radius:2px;background:#5A6070"></div><div style="position:absolute;left:6px;top:14px;width:4px;height:12px;border-radius:2px;background:#E24631"></div></div></div></div><div style="font-size:11px;color:#9BA1AF">theme-midnight@2x · 80 × 80</div></div></div></div>
+          <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:12px;font-size:12px;line-height:1.5;color:#9BA1AF;text-wrap:pretty">The row grows past 40 to hold a 40 icon, 6 gap and an 11 name; the label centres on the icons. A click repaints every window at once, so there is no Save. Classic’s preview is the only place macOS system greys and system blue #007AFF appear: it describes the other theme. Exports are transparent outside the shell so the app can draw edge, hover fill and outline itself.</div>
+          </sc-if>
+        </div>
+
+        <div style="width:520px;margin-top:28px;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box" data-screen-label="Settings Transcription">
           <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
             <div style="display:flex;gap:8px">
               <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
@@ -398,7 +410,7 @@
             </div>
           </div>
           <div style="border-top:1px solid #23262D;padding:10px 20px 16px">
-            <div style="display:flex;align-items:center;height:40px">
+            <div style="display:flex;align-items:center;height:32px">
               <div style="flex:1;font-size:13px;color:#E8EAEF">Provider</div>
               <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;min-width:150px">
                 <div style="flex:1;font-size:13px;color:#E8EAEF">OpenAI</div>
@@ -408,7 +420,7 @@
                 </div>
               </div>
             </div>
-            <div style="display:flex;align-items:center;height:40px">
+            <div style="display:flex;align-items:center;height:32px">
               <div style="flex:1;font-size:13px;color:#E8EAEF">Model</div>
               <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;min-width:150px">
                 <div style="flex:1;font-size:13px;color:#E8EAEF">gpt-transcribe</div>
@@ -418,7 +430,7 @@
                 </div>
               </div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;height:40px">
+            <div style="display:flex;align-items:center;gap:8px;height:32px">
               <div style="flex:1;font-size:13px;color:#E8EAEF">API key</div>
               <div style="display:flex;align-items:center;gap:5px;flex:none">
                 <div style="width:6px;height:6px;border-radius:3px;background:#78BE20"></div>
@@ -427,7 +439,7 @@
               <div style="width:150px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;display:flex;align-items:center;font-size:13px;color:#9BA1AF;letter-spacing:0.12em">•••••••••••</div>
               <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Delete</div>
             </div>
-            <div style="display:flex;align-items:center;height:40px">
+            <div style="display:flex;align-items:center;height:32px">
               <div style="flex:1;font-size:13px;color:#E8EAEF">Language</div>
               <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box;min-width:150px">
                 <div style="flex:1;font-size:13px;color:#E8EAEF">Auto</div>
@@ -476,7 +488,7 @@
           <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">RECORDING · QUICK PASTE · SAME GRAMMAR</div>
           <div style="display:flex;flex-direction:column;gap:28px">
             <div style="width:580px;flex:none">
-              <div style="width:580px;box-shadow:0 24px 52px rgba(0,0,0,0.45);background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-sizing:border-box;overflow:hidden" data-screen-label="Settings Recording">
+              <div style="width:520px;box-shadow:0 24px 52px rgba(0,0,0,0.45);background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-sizing:border-box;overflow:hidden" data-screen-label="Settings Recording">
                 <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
                   <div style="display:flex;gap:8px">
                     <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
@@ -494,29 +506,29 @@
                   </div>
                 </div>
                 <div style="border-top:1px solid #23262D;padding:10px 20px 16px">
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Trigger</div>
                     <div style="display:flex;gap:4px">
                       <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">⌥</div>
                       <div style="min-width:24px;height:24px;padding:0 8px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">Space</div>
                     </div>
                   </div>
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Mode</div>
                     <div style="display:flex;gap:2px;background:#23262D;border-radius:6px;padding:2px;width:150px">
                       <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:#14161A;line-height:22px;border-radius:4px;background:#E24631">Hold</div>
                       <div style="flex:1;text-align:center;font-size:12px;color:#B4BAC6;line-height:22px;border-radius:4px">Toggle</div>
                     </div>
                   </div>
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Esc cancels recording</div>
                     <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
                   </div>
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Sound effects</div>
                     <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
                   </div>
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Pause music while recording</div>
                     <div style="width:28px;height:16px;border-radius:8px;background:#2E323B;position:relative"><div style="position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:6px;background:#8A909E"></div></div>
                   </div>
@@ -524,7 +536,7 @@
               </div>
             </div>
             <div style="width:580px;flex:none">
-              <div style="width:580px;box-shadow:0 24px 52px rgba(0,0,0,0.45);background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-sizing:border-box;overflow:hidden" data-screen-label="Settings Quick paste">
+              <div style="width:520px;box-shadow:0 24px 52px rgba(0,0,0,0.45);background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-sizing:border-box;overflow:hidden" data-screen-label="Settings Quick paste">
                 <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#14161A">
                   <div style="display:flex;gap:8px">
                     <div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div>
@@ -542,11 +554,11 @@
                   </div>
                 </div>
                 <div style="border-top:1px solid #23262D;padding:10px 20px 16px">
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Show quick paste popup</div>
                     <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
                   </div>
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Trigger</div>
                     <div style="display:flex;gap:4px">
                       <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">⌘</div>
@@ -554,11 +566,11 @@
                       <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:#E24631;font-size:12px;color:#14161A;display:flex;align-items:center;justify-content:center">V</div>
                     </div>
                   </div>
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Hold trigger to keep open</div>
                     <div style="width:28px;height:16px;border-radius:8px;background:#E24631;position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#14161A"></div></div>
                   </div>
-                  <div style="display:flex;align-items:center;gap:6px;height:40px">
+                  <div style="display:flex;align-items:center;gap:6px;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Entries</div>
                     <div style="display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150;box-sizing:border-box">
                       <div style="font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">10</div>
@@ -569,7 +581,7 @@
                       <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #9BA1AF"></div>
                     </div>
                   </div>
-                  <div style="display:flex;align-items:center;height:40px">
+                  <div style="display:flex;align-items:center;height:32px">
                     <div style="flex:1;font-size:13px;color:#E8EAEF">Paste history</div>
                     <div style="font-size:13px;color:#E8EAEF;line-height:24px;padding:0 10px;border-radius:6px;background:#23262D;border:1px solid #3B4150">Clear history…</div>
                   </div>
@@ -1065,7 +1077,11 @@ class Component extends DCLogic {
     return {
       showNotes: this.props.showNotes ?? true,
       showNotch: this.props.showNotch ?? true,
-      showKeycaps: this.props.showKeycaps ?? true
+      showKeycaps: this.props.showKeycaps ?? true,
+      classicSel: (this.state && this.state.theme || 'classic') === 'classic',
+      midnightSel: (this.state && this.state.theme) === 'midnight',
+      pickClassic: () => this.setState({ theme: 'classic' }),
+      pickMidnight: () => this.setState({ theme: 'midnight' })
     };
   }
 }
