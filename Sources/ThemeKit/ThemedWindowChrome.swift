@@ -3,11 +3,16 @@ import SwiftUI
 
 /// A window's chrome in the current theme (#162; reused by the other windows of #105).
 ///
-/// `.system` (Classic) is the standard titled window: the system titlebar and title, and
-/// the appearance the system gives it. `.drawn` (Midnight) makes the window dark — so
-/// its menus, pop-ups and alerts are dark too — hides the system title and lets the
-/// content run under a transparent titlebar, where the window draws `ThemedTitleBar`.
-/// The traffic lights stay the system's, moved down to the middle of that taller bar.
+/// One style mask in both themes: the content always runs under a transparent titlebar
+/// (`.fullSizeContentView`), so the frame is the content and a theme switch never
+/// changes the mask, which would make AppKit move or resize the window. The window draws
+/// `ThemedTitleBar` at the top of its content in either theme.
+///
+/// `.system` (Classic) looks like the standard titled window: the system appearance, the
+/// system title text and the traffic lights where the system puts them, over an empty
+/// band in the window's background colour. `.drawn` (Midnight) makes the window dark — so
+/// its menus, pop-ups and alerts are dark too — hides the system title, and moves the
+/// traffic lights down to the middle of its taller drawn bar.
 ///
 /// Keep one instance per window and call `apply(_:background:)` whenever the tokens
 /// change; it can switch either way while the window is open.
@@ -17,8 +22,14 @@ public final class ThemedWindowChrome {
     private var barHeight: CGFloat?
     private var observers: [NSObjectProtocol] = []
 
+    /// Sets the one style mask both themes share. Inserting `.fullSizeContentView` keeps
+    /// the content rect and shrinks the frame by the titlebar, so do it before the
+    /// window is sized and placed.
     public init(window: NSWindow) {
         self.window = window
+        window.styleMask.insert(.fullSizeContentView)
+        window.titlebarAppearsTransparent = true
+
         let center = NotificationCenter.default
         for name in [
             NSWindow.didResizeNotification,
@@ -38,6 +49,7 @@ public final class ThemedWindowChrome {
         }
     }
 
+    /// Colours, appearance, title and traffic lights. Never the style mask.
     public func apply(_ tokens: ThemeTokens, background: ThemeColor) {
         guard let window else { return }
 
@@ -46,18 +58,14 @@ public final class ThemedWindowChrome {
         case .system:
             barHeight = nil
             window.appearance = nil
-            window.titlebarAppearsTransparent = false
             window.titleVisibility = .visible
-            window.styleMask.remove(.fullSizeContentView)
             restoreTrafficLights()
         case .drawn:
             barHeight = tokens.sizes.titlebar
             window.appearance = NSAppearance(named: .darkAqua)
-            window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
-            window.styleMask.insert(.fullSizeContentView)
             placeTrafficLights()
-            // AppKit lays the titlebar out again after a style change; follow it.
+            // AppKit lays the titlebar out again on the next pass; follow it.
             DispatchQueue.main.async { [weak self] in
                 self?.placeTrafficLights()
             }
@@ -97,17 +105,26 @@ public final class ThemedWindowChrome {
     }
 
     /// Back from `.drawn`: the titlebar container is put back to the system titlebar's
-    /// height, the part of the frame the content no longer covers.
+    /// height. The content covers the whole frame, so that height is not the frame less
+    /// the content rect; it is what the same mask without `.fullSizeContentView` would
+    /// add above the content.
     private func restoreTrafficLights() {
         guard let window else { return }
-        let systemBar = window.frame.height - window.contentRect(forFrameRect: window.frame).height
+        let content = NSRect(origin: .zero, size: window.frame.size)
+        let titled = NSWindow.frameRect(
+            forContentRect: content,
+            styleMask: window.styleMask.subtracting(.fullSizeContentView)
+        )
+        let systemBar = titled.height - content.height
         guard systemBar > 0 else { return }
         centreTrafficLights(inBarOfHeight: systemBar)
     }
 }
 
-/// The bar `.drawn` chrome draws where the titlebar was: `sizes.titlebar` tall on `bar`,
-/// the title centred in `type.title` and `primaryText`. Draws nothing for `.system`.
+/// The bar at the top of a themed window's content, `sizes.titlebar` tall, under the
+/// transparent system titlebar. `.drawn`: the title centred in `type.title` and
+/// `primaryText` on `bar`. `.system`: an empty band in the window's background colour
+/// (it is clear), over which the system draws its own title and traffic lights.
 public struct ThemedTitleBar: View {
     @Environment(\.themeTokens) private var tokens
     private let title: String
@@ -117,7 +134,8 @@ public struct ThemedTitleBar: View {
     }
 
     public var body: some View {
-        if tokens.windowChrome == .drawn {
+        switch tokens.windowChrome {
+        case .drawn:
             Text(title)
                 .font(tokens.type.title.font)
                 .foregroundStyle(tokens.colors.primaryText.color)
@@ -125,6 +143,11 @@ public struct ThemedTitleBar: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: tokens.sizes.titlebar)
                 .background(tokens.colors.bar.color)
+                .accessibilityHidden(true)
+        case .system:
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: tokens.sizes.titlebar)
                 .accessibilityHidden(true)
         }
     }

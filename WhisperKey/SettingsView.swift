@@ -194,10 +194,10 @@ private final class SettingsTabSelection: ObservableObject {
     @Published var index = 0
 }
 
-/// The window's content: the header (the drawn titlebar in Midnight, then the tab well)
-/// above the tab view controller that holds the panes. The window is as tall as the
-/// header plus the selected pane, and as wide as the theme says; it follows both, and
-/// the theme's window chrome, while open.
+/// The window's content: the header (the titlebar band, then the tab well) above the tab
+/// view controller that holds the panes. The window is as tall as the header plus the
+/// selected pane, and as wide as the theme says; it follows both, and the theme's window
+/// chrome, while open.
 private final class SettingsContentViewController: NSViewController {
     let focusParkingView = FirstResponderParkingView(frame: .zero)
 
@@ -223,8 +223,9 @@ private final class SettingsContentViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
 
         header.sizingOptions = [.intrinsicContentSize]
-        // The drawn bar takes the titlebar's place. Under a transparent titlebar the
-        // titlebar's safe area would push the header down by the system titlebar's height.
+        // The header's titlebar band takes the titlebar's place in both themes. Under the
+        // transparent titlebar the titlebar's safe area would push the header down by the
+        // system titlebar's height.
         header.safeAreaRegions = []
         tabs.onSelectedPaneSizeChange = { [weak self] in
             self?.resizeWindowToSelectedPane()
@@ -319,12 +320,10 @@ private final class SettingsContentViewController: NSViewController {
         // Every pane takes the new theme now, the hidden ones too, so each reports its
         // new size before it is next shown.
         tabs.layOutEveryPane()
+        // Both themes give one size, so this changes nothing while the window is open; it
+        // sizes the window when the chrome is first attached. A later change in the
+        // header's or a pane's height resizes through their own callbacks.
         resizeWindowToSelectedPane(tokens)
-        // The panes and the header redraw in the new theme on the next pass; size again
-        // once they have.
-        DispatchQueue.main.async { [weak self] in
-            self?.resizeWindowToSelectedPane()
-        }
     }
 
     private func windowContentSize(_ tokens: ThemeTokens) -> NSSize {
@@ -345,14 +344,10 @@ private final class SettingsContentViewController: NSViewController {
         isResizingWindow = true
         defer { isResizingWindow = false }
 
-        // The content runs under the titlebar when the chrome is drawn, so the frame is
-        // the content's own size; otherwise the system titlebar sits on top of it.
-        let frameSize = window.styleMask.contains(.fullSizeContentView)
-            ? size
-            : window.frameRect(forContentRect: NSRect(origin: .zero, size: size)).size
+        // The content runs under the titlebar in both themes, so the frame is the content.
         var frame = window.frame
-        frame.origin.y = frame.maxY - frameSize.height
-        frame.size = frameSize
+        frame.origin.y = frame.maxY - size.height
+        frame.size = size
         if frame != window.frame {
             window.setFrame(frame, display: true)
         }
@@ -464,7 +459,8 @@ private final class SettingsHeaderHostingView: NSHostingView<AnyView> {
     }
 }
 
-/// The drawn titlebar (Midnight only) and the tab well.
+/// The titlebar band (Midnight's drawn bar, or Classic's empty band under the system
+/// title) and the tab well.
 private struct SettingsHeader: View {
     @ObservedObject var selection: SettingsTabSelection
     @Environment(\.themeTokens) private var tokens
