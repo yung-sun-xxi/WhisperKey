@@ -122,7 +122,7 @@ Values that follow from a sheet token (a 6pt dot at radius 3, a 2pt bar at radiu
    and 28 also occur. This scan is approximate: it also counts gaps between mockups and captions on
    the board, which are not app spacing.
 9. **Radius 7** on the 14×18 microphone glyph drawn in the toast; a glyph shape, not a control.
-10. **Settings window.** The window is 580 wide, its edge included. The tab well band is padded
+10. **Settings window.** The window is 520 wide, its edge included. The tab well band is padded
    14 above and below, its track padded 2 with a 2 gap between segments 26 tall. The row area
    is padded 10 at the top and 16 at the bottom.
 11. **Settings controls.** Push button: a 24 line inside a 1px 05 edge, padded 10. Pop-up: min

@@ -1015,7 +1015,7 @@ private struct SettingsPane: View {
         paneContent
             .padding(.top, window.rowAreaTop)
             .padding(.bottom, window.rowAreaBottom)
-            .padding(.horizontal, tokens.spacing.windowTextEdge)
+            .padding(.horizontal, window.textEdge)
             .frame(width: window.width, alignment: .topLeading)
             .fixedSize(horizontal: false, vertical: true)
             .background(tokens.colors.settingsSurface.color)
@@ -1430,7 +1430,8 @@ private struct QuickPasteSettingsPane: View {
                     .font(tokens.type.fieldCaption.font)
                     .foregroundStyle(tokens.colors.secondaryText.color)
                     .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // One height in both themes, whatever the caption size.
+                    .frame(maxWidth: .infinity, minHeight: tokens.settingsWindow.hintLineHeight, maxHeight: tokens.settingsWindow.hintLineHeight, alignment: .leading)
                 SettingsRow("Popup hold") {
                     ThemedNumberField(
                         "Popup hold",

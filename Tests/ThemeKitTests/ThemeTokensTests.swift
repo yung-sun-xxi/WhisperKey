@@ -55,7 +55,6 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertEqual(classic.colors.divider, .system(.primary, opacity: 0.14))
         // SettingsWindowLayout
         XCTAssertEqual(classic.colors.settingsSurface, .system(.controlBackground))
-        XCTAssertEqual(classic.sizes.formRow, 24)
         XCTAssertEqual(classic.sizes.control, 22)
         XCTAssertEqual(classic.spacing.windowTextEdge, 18)
         // MenuBarLayout.popoverWidth, MenuBarPanel.cornerRadius

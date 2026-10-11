@@ -144,6 +144,10 @@ final class TokenSheetTests: XCTestCase {
         let gaps = try sheet.section("Values the surfaces use that the sheet does not list")
         let window = midnight.settingsWindow
         XCTAssertTrue(gaps.contains("The window is \(n(window.width)) wide, its edge included"), gaps)
+        // "+ settings window | 520 | Settings, both themes".
+        XCTAssertEqual(window.width, try sheet.size("+ settings window"))
+        XCTAssertTrue(try sheet.cell(firstColumn: "settings window", column: 2).contains("both themes"))
+        XCTAssertEqual(ThemeTokens.classic.settingsWindow.width, try sheet.size("+ settings window"))
         XCTAssertTrue(gaps.contains("The tab well band is padded \(n(window.tabWellPadding)) above and below, its track padded \(n(window.tabTrackPadding)) with a \(n(window.tabSegmentGap)) gap between segments \(n(window.tabSegmentHeight)) tall"), gaps)
         XCTAssertTrue(gaps.contains("The row area is padded \(n(window.rowAreaTop)) at the top and \(n(window.rowAreaBottom)) at the bottom"), gaps)
         // Rows are the sheet's form row, back to back, at the window text edge.

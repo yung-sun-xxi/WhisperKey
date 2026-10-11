@@ -115,12 +115,17 @@ public extension ThemeTokens {
         sizes: Sizes(
             // HistorySection.inlineRowHeight and QuickPasteLayout.rowHeight.
             listRow: 26,
-            // SettingsWindowLayout.settingsRowHeight.
-            formRow: 24,
+            // The Settings window is one size in both themes (2026-10-11): rows of 32,
+            // the old 24 row plus its 8 spacing. The system controls keep their size,
+            // centred in the row.
+            formRow: 32,
             // No panel bar is drawn today; the popover's footer is a row of buttons.
             panelBar: 24,
-            // System-drawn titlebar.
-            titlebar: 28,
+            // System-drawn titlebar: 32 on macOS 27.0.1, measured as a titled window's
+            // frame height less its content rect (`[.titled, .closable,
+            // .miniaturizable]`, as the Settings window). Settings' tab well makes up
+            // the difference to Midnight's drawn 44 from it.
+            titlebar: 32,
             // No action bar is drawn today; Reset usage ends in a button row.
             actionBar: 44,
             // System-drawn menu item.
@@ -222,21 +227,27 @@ public extension ThemeTokens {
             badgePadding: 0,          // Classic's badge has no box
             failureDash: [3, 3]       // unused
         ),
+        // One window in both themes (decided 2026-10-11): Midnight's width, row area,
+        // text edge and tab track, so the frame is the same size on every tab.
         settingsWindow: SettingsWindowMetrics(
-            // SettingsWindowLayout.contentWidth.
-            width: 460,
-            // SettingsWindowLayout.contentPadding, all round.
-            rowAreaTop: 18,
-            rowAreaBottom: 18,
-            // SettingsWindowLayout.settingsRowSpacing and settingsRowColumnSpacing.
-            rowSpacing: 8,
+            width: 520,
+            // Midnight's window edge. `spacing.windowTextEdge` stays 18 for Classic's
+            // other windows.
+            textEdge: 20,
+            rowAreaTop: 10,
+            rowAreaBottom: 16,
+            // Rows back to back, as in Midnight.
+            rowSpacing: 0,
+            // SettingsWindowLayout.settingsRowColumnSpacing.
             labelSpacing: 12,
-            // No tab well today (the tabs were the toolbar's). Classic draws it as the
-            // popover's period picker: a 1.5 padded track, segments 21 tall, no gap.
-            tabWellPadding: 14,
-            tabSegmentHeight: 21,
-            tabTrackPadding: 1.5,
-            tabSegmentGap: 0,
+            // Midnight's track (26 segments, padded 2, 2 apart) in Classic's colours and
+            // radii. The band is padded Midnight's 14 plus half of what the system
+            // titlebar lacks against Midnight's drawn bar, (44 - 32) / 2 = 6, above and
+            // below, so both headers end 104 below the top of the frame.
+            tabWellPadding: 20,
+            tabSegmentHeight: 26,
+            tabTrackPadding: 2,
+            tabSegmentGap: 2,
             dividerWidth: 1,
             // ThemePicker's constants.
             chipIcon: 20,
@@ -245,7 +256,9 @@ public extension ThemeTokens {
             chipSelectedOutline: 2,
             chipSpacing: 8,
             // LaunchAtLoginToggle's VStack(spacing: 4).
-            errorLineGap: 4
+            errorLineGap: 4,
+            // The Quick paste hint line, the same in both themes.
+            hintLineHeight: 16
         )
     )
 }
