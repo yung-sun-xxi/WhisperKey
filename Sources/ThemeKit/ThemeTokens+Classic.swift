@@ -204,7 +204,7 @@ public extension ThemeTokens {
             popUpTitleGap: 10,        // unused
             popUpChevron: 3.5,        // unused
             popUpChevronGap: 3,       // unused
-            segmentedWidth: 150,      // no segmented control today; Midnight's width
+            segmentedWidth: 150,      // the slot; the system control keeps its own width
             trackPadding: 2,          // unused
             segmentGap: 2,            // unused
             toggleKnob: 13,           // system-drawn small switch

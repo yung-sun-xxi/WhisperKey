@@ -11,6 +11,7 @@ import HistoryStore
 import UsageStatsStore
 #if DEBUG
 import DevBuildMarker
+import os
 #endif
 
 // MARK: - Themed Settings begin
@@ -18,6 +19,13 @@ import DevBuildMarker
 enum SettingsWindowLayout {
     static let windowTitle = "WhisperKey Settings"
 }
+
+#if DEBUG
+/// What the Settings window's views and controllers did, in order, for checking a theme
+/// or tab switch on the installed dev app:
+/// `/usr/bin/log show --last 5m --info --predicate 'subsystem == "WhisperKey" AND category == "SettingsWindow"'`.
+let settingsWindowLog = Logger(subsystem: "WhisperKey", category: "SettingsWindow")
+#endif
 
 @MainActor
 enum SettingsWindowController {
@@ -215,22 +223,39 @@ private final class SettingsContentViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
 
         header.sizingOptions = [.intrinsicContentSize]
+        // The drawn bar takes the titlebar's place. Under a transparent titlebar the
+        // titlebar's safe area would push the header down by the system titlebar's height.
+        header.safeAreaRegions = []
         tabs.onSelectedPaneSizeChange = { [weak self] in
             self?.resizeWindowToSelectedPane()
         }
         header.onIntrinsicSizeChange = { [weak self] in
             self?.resizeWindowToSelectedPane()
         }
+        // Both publishers fire in `willSet`, before the value changes. Acting there would
+        // lay the header and panes out while they still read the old value, and SwiftUI
+        // would take that as their update for the change and not draw them again. So
+        // the work runs on the next turn of the main queue, once the value is stored.
         selection.$index
             .removeDuplicates()
-            .sink { [weak self] index in
-                self?.showPane(at: index)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak selection] _ in
+                guard let self, let selection else { return }
+                #if DEBUG
+                settingsWindowLog.info("selection applied index=\(selection.index, privacy: .public)")
+                #endif
+                self.showPane(at: selection.index)
             }
             .store(in: &subscriptions)
         ThemeTokensSource.shared.$tokens
             .dropFirst()
             .removeDuplicates()
-            .sink { [weak self] tokens in
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                let tokens = ThemeTokensSource.shared.tokens
+                #if DEBUG
+                settingsWindowLog.info("theme applied theme=\(tokens.theme.rawValue, privacy: .public)")
+                #endif
                 self?.applyTheme(tokens)
             }
             .store(in: &subscriptions)
@@ -289,9 +314,11 @@ private final class SettingsContentViewController: NSViewController {
         tabs.selectedTabViewItemIndex = index
     }
 
-    /// `tokens` is the theme being switched to: the source publishes before it changes.
     private func applyTheme(_ tokens: ThemeTokens) {
         chrome?.apply(tokens, background: tokens.colors.settingsSurface)
+        // Every pane takes the new theme now, the hidden ones too, so each reports its
+        // new size before it is next shown.
+        tabs.layOutEveryPane()
         resizeWindowToSelectedPane(tokens)
         // The panes and the header redraw in the new theme on the next pass; size again
         // once they have.
@@ -318,14 +345,20 @@ private final class SettingsContentViewController: NSViewController {
         isResizingWindow = true
         defer { isResizingWindow = false }
 
-        let top = window.frame.maxY
-        window.setContentSize(size)
-
+        // The content runs under the titlebar when the chrome is drawn, so the frame is
+        // the content's own size; otherwise the system titlebar sits on top of it.
+        let frameSize = window.styleMask.contains(.fullSizeContentView)
+            ? size
+            : window.frameRect(forContentRect: NSRect(origin: .zero, size: size)).size
         var frame = window.frame
-        if abs(frame.maxY - top) > 0.5 {
-            frame.origin.y = top - frame.height
+        frame.origin.y = frame.maxY - frameSize.height
+        frame.size = frameSize
+        if frame != window.frame {
             window.setFrame(frame, display: true)
         }
+        #if DEBUG
+        settingsWindowLog.info("window resized content=\(Int(size.width), privacy: .public)x\(Int(size.height), privacy: .public) frame=\(Int(window.frame.width), privacy: .public)x\(Int(window.frame.height), privacy: .public)")
+        #endif
         chrome?.placeTrafficLights()
     }
 }
@@ -386,6 +419,20 @@ private final class SettingsTabsController: NSTabViewController {
         onSelectedPaneSizeChange?()
     }
 
+    /// Lays out every pane, shown or not, so each draws in the current theme and
+    /// reports its size.
+    func layOutEveryPane() {
+        for item in tabViewItems {
+            guard let paneController = item.viewController else { continue }
+            paneController.loadViewIfNeeded()
+            paneController.view.needsLayout = true
+            paneController.view.layoutSubtreeIfNeeded()
+            #if DEBUG
+            settingsWindowLog.info("pane laid out tab=\((item.identifier as? String) ?? "", privacy: .public) preferred=\(Int(paneController.preferredContentSize.width), privacy: .public)x\(Int(paneController.preferredContentSize.height), privacy: .public)")
+            #endif
+        }
+    }
+
     var selectedPaneHeight: CGFloat {
         guard let paneController = selectedPaneController else { return 0 }
 
@@ -420,8 +467,12 @@ private final class SettingsHeaderHostingView: NSHostingView<AnyView> {
 /// The drawn titlebar (Midnight only) and the tab well.
 private struct SettingsHeader: View {
     @ObservedObject var selection: SettingsTabSelection
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
+        #if DEBUG
+        let _ = settingsWindowLog.info("header body theme=\(tokens.theme.rawValue, privacy: .public) selected=\(selection.index, privacy: .public) source=\(ThemeTokensSource.shared.tokens.theme.rawValue, privacy: .public)")
+        #endif
         VStack(spacing: 0) {
             ThemedTitleBar(title: SettingsWindowLayout.windowTitle)
             ThemedTabWell(titles: SettingsTab.allCases.map(\.title), selection: $selection.index)
@@ -958,6 +1009,9 @@ private struct SettingsPane: View {
 
     var body: some View {
         let window = tokens.settingsWindow
+        #if DEBUG
+        let _ = settingsWindowLog.info("pane body tab=\(tab.identifier, privacy: .public) theme=\(tokens.theme.rawValue, privacy: .public) source=\(ThemeTokensSource.shared.tokens.theme.rawValue, privacy: .public)")
+        #endif
         paneContent
             .padding(.top, window.rowAreaTop)
             .padding(.bottom, window.rowAreaBottom)
