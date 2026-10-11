@@ -100,7 +100,7 @@ final class ThemedWindowChromeTests: XCTestCase {
     /// window of the same size: on first apply, and after a round trip through Midnight,
     /// which moved them down into its taller bar. Checked right after `apply` as well as
     /// after a run-loop pass: AppKit lays the titlebar out again on that pass and would
-    /// hide a restore that put them in the wrong place for a frame.
+    /// hide a restore that left them in the wrong place.
     func testClassicTrafficLightsSitWhereThePlainWindowHasThem() {
         let plain = makeWindow()
         defer { plain.close() }
@@ -128,7 +128,8 @@ final class ThemedWindowChromeTests: XCTestCase {
             let barBottom = window.frame.height - ThemeTokens.midnight.sizes.titlebar
             XCTAssertEqual(window.frame.height - close.maxY, close.minY - barBottom, accuracy: 0.5)
         }
-        settle(window)
+        // No run-loop pass here, as in the open window, which keeps them centred until the
+        // switch: a pass lays the titlebar of this off-screen window out again.
 
         chrome.apply(.classic, background: ThemeTokens.classic.colors.settingsSurface)
         XCTAssertEqual(trafficLights(of: window), expected, "back from Midnight")
