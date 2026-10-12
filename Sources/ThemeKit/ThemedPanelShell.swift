@@ -21,6 +21,16 @@ public enum PanelKind: Sendable {
         case .toast: return tokens.panels.toast
         }
     }
+
+    /// The clear room the window keeps around the shell: the toast's, for its close disc
+    /// that overhangs the card's corner; none for the other panels, whose window is the
+    /// shell.
+    public func margin(in tokens: ThemeTokens) -> CGFloat {
+        switch self {
+        case .popover, .quickPaste: return 0
+        case .toast: return tokens.toast.margin
+        }
+    }
 }
 
 /// A floating panel's look around its content: `shell.width` wide, the shell's fill (02
@@ -62,7 +72,9 @@ public struct ThemedPanelShell<Content: View>: View {
 }
 
 /// The content view of a floating panel's window: a blur of what lies behind the window,
-/// rounded to the shell's radius, with the panel's hosting view on top.
+/// rounded to the shell's radius, with the panel's hosting view on top. The blur is inset
+/// by the panel's margin (`PanelKind.margin`), so it lies under the shell only and the
+/// margin stays clear.
 ///
 /// `NSVisualEffectView` takes no blur radius, so `.fill(color, blur:)` maps to a
 /// behind-window material with the fill drawn over it by `ThemedPanelShell`. The view
@@ -73,6 +85,7 @@ public final class ThemedPanelChromeView: NSView {
     private let kind: PanelKind
     private let source: ThemeTokensSource
     private let effectView = NSVisualEffectView()
+    private var effectInsets: [NSLayoutConstraint] = []
     private var subscription: AnyCancellable?
 
     /// Follows `ThemeTokensSource.shared`.
@@ -99,12 +112,14 @@ public final class ThemedPanelChromeView: NSView {
         addSubview(effectView)
         addSubview(contentView)
 
-        NSLayoutConstraint.activate([
+        // Leading, top, then trailing and bottom, which count the other way.
+        effectInsets = [
             effectView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            effectView.trailingAnchor.constraint(equalTo: trailingAnchor),
             effectView.topAnchor.constraint(equalTo: topAnchor),
-            effectView.bottomAnchor.constraint(equalTo: bottomAnchor),
-
+            trailingAnchor.constraint(equalTo: effectView.trailingAnchor),
+            bottomAnchor.constraint(equalTo: effectView.bottomAnchor),
+        ]
+        NSLayoutConstraint.activate(effectInsets + [
             contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
             contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
             contentView.topAnchor.constraint(equalTo: topAnchor),
@@ -148,6 +163,10 @@ public final class ThemedPanelChromeView: NSView {
             effectView.material = .popover
         }
         effectView.layer?.cornerRadius = shell.radius
+        let margin = kind.margin(in: tokens)
+        for inset in effectInsets where inset.constant != margin {
+            inset.constant = margin
+        }
         if let window {
             window.appearance = tokens.windowAppearance.nsAppearance
             // The shadow follows the window's opaque pixels, which the radius shapes.

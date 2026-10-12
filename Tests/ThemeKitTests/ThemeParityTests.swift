@@ -20,7 +20,8 @@ final class ThemeParityTests: XCTestCase {
         tokens.shadows = ThemeTokens.Shadows(
             window: shape(tokens.shadows.window),
             menu: shape(tokens.shadows.menu),
-            alert: shape(tokens.shadows.alert)
+            alert: shape(tokens.shadows.alert),
+            closeButton: shape(tokens.shadows.closeButton)
         )
         return tokens
     }
@@ -51,6 +52,7 @@ final class ThemeParityTests: XCTestCase {
         XCTAssertEqual(classic.settingsWindow, midnight.settingsWindow, "settingsWindow")
         XCTAssertEqual(classic.popover, midnight.popover, "popover")
         XCTAssertEqual(classic.quickPasteMarker, midnight.quickPasteMarker, "quickPasteMarker")
+        XCTAssertEqual(classic.toast, midnight.toast, "toast")
         XCTAssertEqual(classic.windowAppearance, midnight.windowAppearance, "windowAppearance")
         // Everything at once, so a group added later is held too.
         XCTAssertTrue(shape(classic) == shape(midnight), "the tokens differ outside the colours")

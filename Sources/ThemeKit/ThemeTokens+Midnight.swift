@@ -103,7 +103,9 @@ public extension ThemeTokens {
         shadows: Shadows(
             window: .drop(color: .hex(0x000000, opacity: 0.45), blur: 52, x: 0, y: 24),
             menu: .drop(color: .hex(0x000000, opacity: 0.5), blur: 36, x: 0, y: 18),
-            alert: .drop(color: .hex(0x000000, opacity: 0.6), blur: 44, x: 0, y: 20)
+            alert: .drop(color: .hex(0x000000, opacity: 0.6), blur: 44, x: 0, y: 20),
+            // The app's earlier close disc: black at 18%, radius 1.5, 0.5 down.
+            closeButton: .drop(color: .hex(0x000000, opacity: 0.18), blur: 3, x: 0, y: 0.5)
         ),
         windowAppearance: .dark,
         // Not on the sheet: the controls of the Settings mockups (tokens.md, gaps item 11).
@@ -207,6 +209,31 @@ public extension ThemeTokens {
             width: 14,
             gap: 8,
             font: ThemeFont(size: 11, weight: .semibold)
+        ),
+        // Not on the sheet: the TOAST section of the design file, quoted where it draws
+        // the value, and the app's own close disc and placement (#167).
+        toast: ToastMetrics(
+            // The app's: the clear room the close disc overhangs into, and the card 12
+            // from the screen's right edge and 8 under the menu bar.
+            margin: 10,
+            screenEdgeInset: 12,
+            menuBarGap: 8,
+            padding: 14,              // "padding:14px 14px 14px 16px"
+            leadingPadding: 16,
+            glyphColumn: 18,          // "width:18px"
+            glyphTop: 8,              // "padding-top:8px"
+            glyphGap: 10,             // "gap:10px"
+            // The SF Symbol about as tall as the design's 14×18 microphone.
+            glyph: ThemeFont(size: 15, weight: .regular),
+            title: ThemeFont(size: 11, weight: .regular),   // "font-size:11px", the caption
+            titleGap: 1,              // "margin-top:1px"
+            message: ThemeFont(size: 13, weight: .regular), // "font-size:13px", the body
+            messageLineHeight: 1.45,  // "line-height:1.45", the body's
+            actionGap: 10,            // "margin-top:10px"
+            // The app's close disc, which the design does not draw.
+            closeButton: 20,
+            closeGlyph: ThemeFont(size: 9, weight: .bold),
+            closeEdgeWidth: 0.5
         )
     )
 }
