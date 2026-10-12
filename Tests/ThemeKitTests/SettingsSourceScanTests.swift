@@ -16,7 +16,7 @@ final class SettingsSourceScanTests: XCTestCase {
     /// A number other than zero: zero spacing or padding is not a size.
     private static let number = #"(?:0\.[0-9]*[1-9][0-9]*|[1-9][0-9_]*(?:\.[0-9]+)?)"#
 
-    private static let forbidden: [(name: String, pattern: String)] = [
+    static let forbidden: [(name: String, pattern: String)] = [
         ("colour type", #"\b(?:NS)?Color\s*[.(]"#),
         // `layer: .secondary` is TransientWindowStack's layer, not a colour.
         ("named colour", #"(?<!layer: )\.(?:red|green|orange|blue|yellow|gray|grey|purple|pink|white|black|primary|secondary|tertiary|quaternary|accentColor)\b"#),
@@ -60,15 +60,7 @@ final class SettingsSourceScanTests: XCTestCase {
 
     func testTheSettingsSectionHoldsNoLiteralColourOrSize() throws {
         let sources = try Self.settingsRegions() + [Self.wholeFile("WhisperKey/LaunchAtLoginToggle.swift")]
-        var violations: [String] = []
-        for region in sources {
-            for (offset, rawLine) in region.text.components(separatedBy: "\n").enumerated() {
-                let line = Self.code(in: rawLine)
-                for rule in Self.forbidden where line.range(of: rule.pattern, options: .regularExpression) != nil {
-                    violations.append("\(region.file):\(region.firstLine + offset): \(rule.name): \(rawLine.trimmingCharacters(in: .whitespaces))")
-                }
-            }
-        }
+        let violations = Self.violations(in: sources)
         XCTAssertTrue(violations.isEmpty, "literal colours or sizes:\n" + violations.joined(separator: "\n"))
     }
 
@@ -115,6 +107,20 @@ final class SettingsSourceScanTests: XCTestCase {
         }
     }
 
+    /// One line per literal colour or size in `regions`, with its file and line.
+    static func violations(in regions: [Region]) -> [String] {
+        var violations: [String] = []
+        for region in regions {
+            for (offset, rawLine) in region.text.components(separatedBy: "\n").enumerated() {
+                let line = code(in: rawLine)
+                for rule in forbidden where line.range(of: rule.pattern, options: .regularExpression) != nil {
+                    violations.append("\(region.file):\(region.firstLine + offset): \(rule.name): \(rawLine.trimmingCharacters(in: .whitespaces))")
+                }
+            }
+        }
+        return violations
+    }
+
     // MARK: - Reading the source
 
     struct Region {
@@ -136,7 +142,11 @@ final class SettingsSourceScanTests: XCTestCase {
     }
 
     static func settingsRegions() throws -> [Region] {
-        let path = "WhisperKey/SettingsView.swift"
+        try markedRegions(in: "WhisperKey/SettingsView.swift", begin: beginMarker, end: endMarker)
+    }
+
+    /// Every stretch of `path` between a `begin` and an `end` marker line.
+    static func markedRegions(in path: String, begin beginMarker: String, end endMarker: String) throws -> [Region] {
         let lines = try String(contentsOf: repositoryURL().appendingPathComponent(path), encoding: .utf8)
             .components(separatedBy: "\n")
         var regions: [Region] = []

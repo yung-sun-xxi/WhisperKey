@@ -7,10 +7,6 @@ import ThemeKit
 import DevBuildMarker
 #endif
 
-enum MenuBarLayout {
-    static let popoverWidth: CGFloat = 306
-}
-
 @MainActor
 final class MenuBarController: NSObject {
     private static let log = Logger(subsystem: "WhisperKey", category: "MenuBarController")
@@ -68,7 +64,13 @@ final class MenuBarController: NSObject {
         }
         prewarmSettingsWindow()
         coordinator.scheduleWelcomePresentationAfterLaunch()
+        #if DEBUG
+        PopoverSnapshotHook.startIfRequested(controller: self)
+        #endif
     }
+
+    /// The popover's window, for the Debug build's snapshot hook.
+    var popoverWindow: NSWindow { panel }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
@@ -170,22 +172,28 @@ final class MenuBarController: NSObject {
         button.addSubview(processingIndicator)
     }
 
+    // MARK: - Themed Popover begin
+
+    /// The popover is a floating panel (#105 rule 4): the shared shell in SwiftUI around
+    /// its content, and the shared chrome view (blur, appearance) as the window's content.
     private func configurePanel() {
         ThemeTokensSource.shared.follow(coordinator.settings)
         hostingView.rootView = AnyView(
             ThemedRoot("popover") {
-                PopoverContent().environmentObject(coordinator)
+                ThemedPanelShell(.popover) {
+                    PopoverContent().environmentObject(coordinator)
+                }
             }
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
-        panel.contentView = PopoverChromeView(contentView: hostingView)
+        panel.contentView = ThemedPanelChromeView(kind: .popover, contentView: hostingView)
     }
 
     private func updatePanelSize() {
         let fittingSize = hostingView.fittingSize
         let panelSize = NSSize(
-            width: MenuBarLayout.popoverWidth,
+            width: ThemeTokensSource.shared.tokens.panels.popover.width,
             height: fittingSize.height
         )
         panel.setContentSize(panelSize)
@@ -193,6 +201,8 @@ final class MenuBarController: NSObject {
         panel.invalidateShadow()
         Self.log.info("updatePanelSize fittingSize=\(String(describing: fittingSize), privacy: .public) panelSize=\(String(describing: panelSize), privacy: .public)")
     }
+
+    // MARK: - Themed Popover end
 
     private func positionPanel() {
         guard let button = statusItem.button,
@@ -423,20 +433,18 @@ final class MenuBarController: NSObject {
     }
 }
 
-private final class MenuBarPanel: NSPanel {
-    static let cornerRadius: CGFloat = 12
+// MARK: - Themed Popover begin
 
+private final class MenuBarPanel: NSPanel {
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: MenuBarLayout.popoverWidth, height: 1),
+            contentRect: NSRect(x: 0, y: 0, width: ThemeTokensSource.shared.tokens.panels.popover.width, height: 1),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
 
-        backgroundColor = .clear
-        hasShadow = true
-        isOpaque = false
+        ThemedPanelChromeView.configure(self)
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         level = .floating
@@ -447,53 +455,13 @@ private final class MenuBarPanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
+// MARK: - Themed Popover end
+
 /// Lets a click on the spinner reach the status button underneath it.
 private final class MouseTransparentProgressIndicator: NSProgressIndicator {
     override func hitTest(_ point: NSPoint) -> NSView? {
         nil
     }
-}
-
-private final class PopoverChromeView: NSView {
-    private let effectView = NSVisualEffectView()
-
-    init(contentView: NSView) {
-        super.init(frame: .zero)
-
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
-
-        effectView.material = .popover
-        effectView.blendingMode = .behindWindow
-        effectView.state = .active
-        effectView.translatesAutoresizingMaskIntoConstraints = false
-        effectView.wantsLayer = true
-        effectView.layer?.cornerRadius = MenuBarPanel.cornerRadius
-        effectView.layer?.cornerCurve = .continuous
-        effectView.layer?.masksToBounds = true
-
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        effectView.addSubview(contentView)
-        addSubview(effectView)
-
-        NSLayoutConstraint.activate([
-            effectView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            effectView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            effectView.topAnchor.constraint(equalTo: topAnchor),
-            effectView.bottomAnchor.constraint(equalTo: bottomAnchor),
-
-            contentView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: effectView.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor),
-        ])
-    }
-
-    @MainActor required dynamic init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var isOpaque: Bool { false }
 }
 
 private final class TransparentHostingView: NSHostingView<AnyView> {

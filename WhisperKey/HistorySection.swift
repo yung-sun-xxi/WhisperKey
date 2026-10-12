@@ -1,77 +1,80 @@
 import AppKit
 import SwiftUI
 import HistoryStore
+import ThemeKit
 
+/// The popover's history (#161): a caps "History" header, the latest entries as
+/// `ThemedListRow`s with dividers between them (a click copies, a shift-click or a failed
+/// entry opens the reader), and the Full history and Clear history buttons.
 struct HistorySection: View {
     @ObservedObject var history: HistoryStore
     let coordinator: AppCoordinator
 
-    private static let visibleRowCount = 7
-    private static let inlineRowHeight: CGFloat = 26
-
+    @Environment(\.themeTokens) private var tokens
     @State private var copiedID: UUID?
     @State private var ownerWindow: NSWindow?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("History")
-                    .font(PopoverTypography.strongSectionTitle)
-                    .foregroundColor(PopoverTypography.primaryColor)
-                Spacer()
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            // The source says "History"; the caps header shows it in capitals.
+            Text("History")
+                .font(tokens.type.capsHeader.font)
+                .tracking(tokens.type.capsHeader.tracking)
+                .textCase(.uppercase)
+                .foregroundStyle(tokens.colors.secondaryText.color)
+                .padding(.horizontal, tokens.spacing.panelTextEdge)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: tokens.sizes.listRow)
 
-            if history.entries.isEmpty {
-                Text("No transcriptions yet")
-                    .font(PopoverTypography.base)
-                    .foregroundColor(PopoverTypography.secondaryColor)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(history.entries) { entry in
-                            HistoryInlineRow(
-                                entry: entry,
-                                copied: copiedID == entry.id,
-                                onCopy: { copy(entry: entry) },
-                                onOpenReadWindow: { openReadWindow(entry: entry) },
-                                onRetry: { coordinator.retryHistoryEntry(entry) }
-                            )
-                            .frame(height: Self.inlineRowHeight)
-                            if entry.id != history.entries.last?.id {
-                                Divider()
+            Group {
+                if history.entries.isEmpty {
+                    Text("No transcriptions yet")
+                        .font(tokens.type.body.font)
+                        .foregroundStyle(tokens.colors.secondaryText.color)
+                        .padding(.horizontal, tokens.spacing.rowPadding)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: tokens.sizes.listRow)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(history.entries) { entry in
+                                HistoryInlineRow(
+                                    entry: entry,
+                                    copied: copiedID == entry.id,
+                                    onCopy: { copy(entry: entry) },
+                                    onOpenReadWindow: { openReadWindow(entry: entry) },
+                                    onRetry: { coordinator.retryHistoryEntry(entry) }
+                                )
+                                if entry.id != history.entries.last?.id {
+                                    PopoverDivider()
+                                        .padding(.horizontal, tokens.spacing.rowPadding)
+                                }
                             }
                         }
                     }
+                    .frame(height: inlineListHeight)
+                    .scrollIndicators(.visible)
                 }
-                .frame(height: inlineListHeight)
-                .scrollIndicators(.visible)
             }
+            .padding(.horizontal, tokens.spacing.rowInset)
+            .padding(.bottom, tokens.popover.listBottom)
 
-            HStack(spacing: 8) {
-                Button {
+            HStack(spacing: tokens.controlMetrics.rowControlGap) {
+                ThemedPushButton("Full history") {
                     HistoryFullWindowController.show(history: history, coordinator: coordinator)
-                } label: {
-                    Text("Full history")
-                        .font(PopoverTypography.button)
                 }
-                .controlSize(.small)
                 .disabled(history.entries.isEmpty)
-                Spacer()
-                Button {
+                Spacer(minLength: 0)
+                ThemedPushButton("Clear history", role: .destructive) {
                     ClearHistoryConfirmation.present(from: ownerWindow) {
                         history.clear()
                     }
-                } label: {
-                    Text("Clear history")
-                        .font(PopoverTypography.button)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
                 }
-                .controlSize(.small)
+                .fixedSize(horizontal: true, vertical: false)
                 .disabled(history.entries.isEmpty)
             }
+            .padding(.horizontal, tokens.spacing.panelTextEdge)
+            .padding(.bottom, tokens.popover.buttonsBottom)
         }
         .background {
             WindowAccessor { window in
@@ -99,10 +102,12 @@ struct HistorySection: View {
         }
     }
 
+    /// `visibleRows` list rows and the dividers between them; more scroll.
     private var inlineListHeight: CGFloat {
-        let visibleRows = min(history.entries.count, Self.visibleRowCount)
+        let visibleRows = min(history.entries.count, tokens.popover.visibleRows)
         let dividerCount = max(visibleRows - 1, 0)
-        return (CGFloat(visibleRows) * Self.inlineRowHeight) + CGFloat(dividerCount)
+        return CGFloat(visibleRows) * tokens.sizes.listRow
+            + CGFloat(dividerCount) * tokens.panels.popover.edgeWidth
     }
 }
 
@@ -155,45 +160,51 @@ struct WindowAccessor: NSViewRepresentable {
     }
 }
 
+/// One history entry: one line of text in `body`, a green check once copied, and
+/// Retry on an entry that can be recognised again. A failed entry is a hatched row in
+/// `secondaryText`.
 private struct HistoryInlineRow: View {
     let entry: HistoryEntry
     let copied: Bool
     let onCopy: () -> Void
     let onOpenReadWindow: () -> Void
     let onRetry: () -> Void
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
-        HStack(spacing: 6) {
-            HStack(spacing: 6) {
-                Text(displayText)
-                    .font(PopoverTypography.base)
-                    .foregroundColor(entry.status == .recognized ? PopoverTypography.primaryColor : PopoverTypography.secondaryColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if copied {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.green)
-                        .font(.caption)
+        let recognized = entry.status == .recognized
+        ThemedListRow(style: recognized ? .normal : .failed) {
+            HStack(spacing: tokens.popover.rowGap) {
+                HStack(spacing: tokens.popover.rowGap) {
+                    Text(displayText)
+                        .font(tokens.type.body.font)
+                        .foregroundStyle((recognized ? tokens.colors.primaryText : tokens.colors.secondaryText).color)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if copied {
+                        Image(systemName: "checkmark")
+                            .font(tokens.type.caption.font)
+                            .foregroundStyle(tokens.colors.success.color)
+                    }
                 }
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, 4)
-            .onTapGesture(perform: handlePrimaryClick)
-            .contextMenu {
-                if entry.canRetryRecognition {
-                    Button("Retry", action: onRetry)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: handlePrimaryClick)
+                .contextMenu {
+                    if entry.canRetryRecognition {
+                        Button("Retry", action: onRetry)
+                    }
+                    Button("Open in Window", action: onOpenReadWindow)
+                    if entry.status == .recognized {
+                        Button("Copy to Clipboard", action: onCopy)
+                    }
                 }
-                Button("Open in Window", action: onOpenReadWindow)
-                if entry.status == .recognized {
-                    Button("Copy to Clipboard", action: onCopy)
-                }
-            }
-            .help(displayText)
+                .help(displayText)
 
-            if entry.canRetryRecognition {
-                Button("Retry", action: onRetry)
-                    .controlSize(.mini)
+                if entry.canRetryRecognition {
+                    ThemedFailureButton("Retry", action: onRetry)
+                }
             }
         }
     }

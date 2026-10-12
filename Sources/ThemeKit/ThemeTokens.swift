@@ -33,6 +33,9 @@ public struct ThemeTokens: Equatable, Sendable {
     public var controlMetrics: ControlMetrics
     /// The Settings window: its width, row area, tab well and Theme chips.
     public var settingsWindow: SettingsWindowMetrics
+    /// The menu bar popover: its section paddings and the drawn sizes the sheet does not
+    /// name.
+    public var popover: PopoverMetrics
 
     public init(
         theme: AppTheme,
@@ -45,7 +48,8 @@ public struct ThemeTokens: Equatable, Sendable {
         shadows: Shadows,
         windowAppearance: WindowAppearance,
         controlMetrics: ControlMetrics,
-        settingsWindow: SettingsWindowMetrics
+        settingsWindow: SettingsWindowMetrics,
+        popover: PopoverMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -58,6 +62,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.windowAppearance = windowAppearance
         self.controlMetrics = controlMetrics
         self.settingsWindow = settingsWindow
+        self.popover = popover
     }
 }
 
@@ -553,6 +558,10 @@ public extension ThemeTokens {
         public var badgePadding: CGFloat
         /// Dash and gap of a dashed failure edge.
         public var failureDash: [CGFloat]
+        /// A failed row's hatch: a `failureHatchStripe` wide stripe every
+        /// `failureHatchPeriod`, at 135°.
+        public var failureHatchStripe: CGFloat
+        public var failureHatchPeriod: CGFloat
 
         public init(
             edgeWidth: CGFloat,
@@ -577,7 +586,9 @@ public extension ThemeTokens {
             badgeDotGap: CGFloat,
             badgeHeight: CGFloat,
             badgePadding: CGFloat,
-            failureDash: [CGFloat]
+            failureDash: [CGFloat],
+            failureHatchStripe: CGFloat,
+            failureHatchPeriod: CGFloat
         ) {
             self.edgeWidth = edgeWidth
             self.horizontalPadding = horizontalPadding
@@ -602,6 +613,8 @@ public extension ThemeTokens {
             self.badgeHeight = badgeHeight
             self.badgePadding = badgePadding
             self.failureDash = failureDash
+            self.failureHatchStripe = failureHatchStripe
+            self.failureHatchPeriod = failureHatchPeriod
         }
     }
 
@@ -680,6 +693,107 @@ public extension ThemeTokens {
             self.chipSpacing = chipSpacing
             self.errorLineGap = errorLineGap
             self.hintLineHeight = hintLineHeight
+        }
+    }
+}
+
+// MARK: - The menu bar popover
+
+public extension ThemeTokens {
+    /// The menu bar popover (#161): the paddings of its sections and the sizes it draws
+    /// that the sheet does not name. Its width and shell are `panels.popover`, its rows
+    /// `sizes.listRow` with `spacing.rowInset` and `spacing.rowPadding`, its text edge
+    /// `spacing.panelTextEdge`.
+    struct PopoverMetrics: Equatable, Sendable {
+        /// Above the usage block, under the header row.
+        public var sectionTop: CGFloat
+        /// Between the usage block and the period picker.
+        public var usageGap: CGFloat
+        /// Above the toggle row.
+        public var togglesTop: CGFloat
+        /// Under the history list.
+        public var listBottom: CGFloat
+        /// Under the Full history and Clear history buttons.
+        public var buttonsBottom: CGFloat
+        /// Between the header row's glyph, its text and its status.
+        public var headerGap: CGFloat
+        /// A stat's inset in the usage block, top and bottom then left and right.
+        public var statInsetVertical: CGFloat
+        public var statInsetHorizontal: CGFloat
+        /// Between a stat's value and its label.
+        public var statLabelGap: CGFloat
+        /// The dividers between the stats, inset from the block's top and bottom.
+        public var statDividerInset: CGFloat
+        /// The chevron's own segment, the length of its arms and their stroke.
+        public var chevronSegment: CGFloat
+        public var chevronArm: CGFloat
+        public var chevronStroke: CGFloat
+        /// Between each half of the toggle row and the divider between them, and that
+        /// divider's height.
+        public var toggleGap: CGFloat
+        public var toggleDividerHeight: CGFloat
+        /// Between a list row's text and what follows it.
+        public var rowGap: CGFloat
+        /// The round stop button, and the square drawn in it.
+        public var stopButton: CGFloat
+        public var stopSquare: CGFloat
+        public var stopSquareRadius: CGFloat
+        /// The permission banner's inset and the gap between its lines.
+        public var bannerPadding: CGFloat
+        public var bannerGap: CGFloat
+        /// A keycap's side padding: the Debug build's letter badge.
+        public var keycapPadding: CGFloat
+        /// How many history rows show before the list scrolls; its height follows.
+        public var visibleRows: Int
+
+        public init(
+            sectionTop: CGFloat,
+            usageGap: CGFloat,
+            togglesTop: CGFloat,
+            listBottom: CGFloat,
+            buttonsBottom: CGFloat,
+            headerGap: CGFloat,
+            statInsetVertical: CGFloat,
+            statInsetHorizontal: CGFloat,
+            statLabelGap: CGFloat,
+            statDividerInset: CGFloat,
+            chevronSegment: CGFloat,
+            chevronArm: CGFloat,
+            chevronStroke: CGFloat,
+            toggleGap: CGFloat,
+            toggleDividerHeight: CGFloat,
+            rowGap: CGFloat,
+            stopButton: CGFloat,
+            stopSquare: CGFloat,
+            stopSquareRadius: CGFloat,
+            bannerPadding: CGFloat,
+            bannerGap: CGFloat,
+            keycapPadding: CGFloat,
+            visibleRows: Int
+        ) {
+            self.sectionTop = sectionTop
+            self.usageGap = usageGap
+            self.togglesTop = togglesTop
+            self.listBottom = listBottom
+            self.buttonsBottom = buttonsBottom
+            self.headerGap = headerGap
+            self.statInsetVertical = statInsetVertical
+            self.statInsetHorizontal = statInsetHorizontal
+            self.statLabelGap = statLabelGap
+            self.statDividerInset = statDividerInset
+            self.chevronSegment = chevronSegment
+            self.chevronArm = chevronArm
+            self.chevronStroke = chevronStroke
+            self.toggleGap = toggleGap
+            self.toggleDividerHeight = toggleDividerHeight
+            self.rowGap = rowGap
+            self.stopButton = stopButton
+            self.stopSquare = stopSquare
+            self.stopSquareRadius = stopSquareRadius
+            self.bannerPadding = bannerPadding
+            self.bannerGap = bannerGap
+            self.keycapPadding = keycapPadding
+            self.visibleRows = visibleRows
         }
     }
 }

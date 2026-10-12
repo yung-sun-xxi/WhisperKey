@@ -132,7 +132,10 @@ public extension ThemeTokens {
             badgeHeight: 20,
             badgePadding: 8,
             // "1px dashed": the browser's dash for a 1px edge.
-            failureDash: [3, 3]
+            failureDash: [3, 3],
+            // The failed row's "repeating-linear-gradient(135deg, … 0 4px, … 4px 9px)".
+            failureHatchStripe: 4,
+            failureHatchPeriod: 9
         ),
         // Not on the sheet: the Settings mockups (tokens.md, gaps item 10).
         settingsWindow: SettingsWindowMetrics(
@@ -162,13 +165,47 @@ public extension ThemeTokens {
             errorLineGap: 4,
             // Not in the mockup: the Quick paste hint line, one height in both themes.
             hintLineHeight: 16
+        ),
+        // Not on the sheet: the POPOVER section of the design file
+        // (`docs/design/dark/master-design.dc.html`), quoted where it draws the value.
+        popover: PopoverMetrics(
+            sectionTop: 14,           // the usage block, "padding:14px 16px 0"
+            usageGap: 8,              // the period picker, "margin-top:8px"
+            togglesTop: 10,           // the toggles, "padding:10px 8px 0"
+            listBottom: 8,            // the list, "padding:0 8px 8px"
+            // Not in the design, which has no history buttons: one step above 8.
+            buttonsBottom: 10,
+            headerGap: 10,            // the header row, "gap:10px"
+            statInsetVertical: 9,     // "padding:9px 10px", the sheet's "Stat tile inset 9×10"
+            statInsetHorizontal: 10,
+            statLabelGap: 2,          // the stat label, "margin-top:2px"
+            statDividerInset: 9,      // the stat dividers, "margin:9px 0"
+            chevronSegment: 26,       // "width:26px"
+            chevronArm: 6,            // "width:6px;height:6px"
+            chevronStroke: 1.5,       // "border-top:1.5px"
+            // Not in the design, which stacks the toggles in two rows; the app keeps
+            // them side by side. The gap is a step, the divider as tall as a keycap.
+            toggleGap: 14,
+            toggleDividerHeight: 18,
+            rowGap: 10,               // a list row, "gap:10px"
+            // Not in the design, which drops the stop button for a status line; the
+            // app keeps it at about its earlier size.
+            stopButton: 16,
+            stopSquare: 6,
+            stopSquareRadius: 1.5,
+            // Not in the design, which has no permission banner.
+            bannerPadding: 10,
+            bannerGap: 4,
+            keycapPadding: 4,         // a keycap, "padding:0 4px"
+            // The app's earlier count; the design shows seven rows too.
+            visibleRows: 7
         )
     )
 }
 
 private extension PanelShell {
     /// The one shell the three panels share (#105 rule 4): radius 12, 02 at 95% over a
-    /// blur of 30, a 05 edge, and the panel shadow the mockups draw.
+    /// blur of 30, a 05 edge, and the window server's shadow.
     static func midnight(width: CGFloat) -> PanelShell {
         PanelShell(
             width: width,
@@ -176,7 +213,11 @@ private extension PanelShell {
             background: .fill(.hex(0x1A1C21, opacity: 0.95), blur: 30),
             edge: .hex(0x3B4150),
             edgeWidth: 1,
-            shadow: .drop(color: .hex(0x000000, opacity: 0.5), blur: 48, x: 0, y: 22)
+            // The mockups draw "0 22px 48px rgba(0,0,0,0.5)". The owner kept the window
+            // server's shadow instead (#161): a drawn one needs a window larger than the
+            // panel, and a click on that shadow would land in the panel and stop
+            // dismissing it.
+            shadow: .system
         )
     }
 }
