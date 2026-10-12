@@ -67,6 +67,9 @@ enum PopoverSnapshotHook {
 
         lines.append(contentsOf: await switchTheme(to: originalTheme, settings: settings, window: controller.popoverWindow))
         if UserDefaults.standard.bool(forKey: keepOpenArgument) {
+            // Showing it again puts it back in the click-outside dismissal, so the status
+            // icon and a click elsewhere close it as usual.
+            controller.showPopover()
             lines.append("kept open")
         } else {
             controller.closePopover()
