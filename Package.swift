@@ -41,7 +41,8 @@ let package = Package(
         .target(name: "LoginItem"),
         .target(name: "SingleInstance"),
         // The look of each theme as values, and their delivery to every hosting root (#160).
-        .target(name: "ThemeKit", dependencies: ["SettingsStore"]),
+        // QuickPaste directly: ThemeKit builds the quick paste geometry from the tokens (#166).
+        .target(name: "ThemeKit", dependencies: ["SettingsStore", "QuickPaste"]),
         // Marks the Debug build (WhisperKey Dev) with a D. The whole module is compiled
         // only under DEBUG, so a Release build carries none of it (#149).
         .target(name: "DevBuildMarker"),

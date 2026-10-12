@@ -36,6 +36,9 @@ public struct ThemeTokens: Equatable, Sendable {
     /// The menu bar popover: its section paddings and the drawn sizes the sheet does not
     /// name.
     public var popover: PopoverMetrics
+    /// The quick paste popup's entry marker. Its geometry is `quickPasteMetrics`, built
+    /// from the shared tokens.
+    public var quickPasteMarker: QuickPasteMarkerMetrics
 
     public init(
         theme: AppTheme,
@@ -49,7 +52,8 @@ public struct ThemeTokens: Equatable, Sendable {
         windowAppearance: WindowAppearance,
         controlMetrics: ControlMetrics,
         settingsWindow: SettingsWindowMetrics,
-        popover: PopoverMetrics
+        popover: PopoverMetrics,
+        quickPasteMarker: QuickPasteMarkerMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -63,6 +67,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.controlMetrics = controlMetrics
         self.settingsWindow = settingsWindow
         self.popover = popover
+        self.quickPasteMarker = quickPasteMarker
     }
 }
 
@@ -794,6 +799,32 @@ public extension ThemeTokens {
             self.bannerGap = bannerGap
             self.keycapPadding = keycapPadding
             self.visibleRows = visibleRows
+        }
+    }
+}
+
+// MARK: - The quick paste popup
+
+public extension ThemeTokens {
+    /// The marker at the leading edge of each quick paste row (#166): a waveform for a
+    /// dictated entry, a clipboard for a hand-copied one, both in `secondaryText`. They
+    /// differ by shape and weight. The popup's width, rows and insets are the shared
+    /// tokens, put together by `quickPasteMetrics`.
+    struct QuickPasteMarkerMetrics: Equatable, Sendable {
+        /// The column the marker sits in.
+        public var width: CGFloat
+        /// Between the marker and the entry's text.
+        public var gap: CGFloat
+        /// The dictated entry's symbol.
+        public var dictated: ThemeFont
+        /// The hand-copied entry's symbol.
+        public var copied: ThemeFont
+
+        public init(width: CGFloat, gap: CGFloat, dictated: ThemeFont, copied: ThemeFont) {
+            self.width = width
+            self.gap = gap
+            self.dictated = dictated
+            self.copied = copied
         }
     }
 }

@@ -9,6 +9,12 @@ import SwiftUI
 /// the `failureHatch` stripes instead (#105 rule 1: failure is a state, not a brand
 /// moment). The caller insets the list `spacing.rowInset` from the shell and styles the
 /// row's text.
+///
+/// `isSelected` hands the selection to the caller, for a list that takes no mouse events
+/// (the quick paste popup, #166): the row then ignores hover, and a selected row draws
+/// the design's selection, the `selectedRow` fill plus the `brand` bar
+/// (`sizes.selectionBar`) at its leading edge, vertically centred. Left `nil`, the row
+/// follows the pointer as the popover's rows do, with the fill and no bar.
 public struct ThemedListRow<Content: View>: View {
     public enum Style: Sendable {
         case normal
@@ -18,10 +24,12 @@ public struct ThemedListRow<Content: View>: View {
     @Environment(\.themeTokens) private var tokens
     @State private var isHovered = false
     private let style: Style
+    private let isSelected: Bool?
     private let content: Content
 
-    public init(style: Style = .normal, @ViewBuilder content: () -> Content) {
+    public init(style: Style = .normal, isSelected: Bool? = nil, @ViewBuilder content: () -> Content) {
         self.style = style
+        self.isSelected = isSelected
         self.content = content()
     }
 
@@ -38,11 +46,37 @@ public struct ThemedListRow<Content: View>: View {
                         .fill(tokens.colors.failureFill.color)
                         .overlay(ThemedFailureHatch().clipShape(shape))
                 case .normal:
-                    shape.fill((isHovered ? tokens.colors.selectedRow : ThemeColor.system(.clear)).color)
+                    shape.fill((isFilled ? tokens.colors.selectedRow : ThemeColor.system(.clear)).color)
+                }
+            }
+            .overlay(alignment: .leading) {
+                if isSelected == true {
+                    ThemedSelectionBar()
                 }
             }
             .contentShape(shape)
             .onHover { isHovered = $0 }
+    }
+
+    /// The caller's selection when it gives one, the pointer's otherwise.
+    private var isFilled: Bool {
+        isSelected ?? isHovered
+    }
+}
+
+/// The selected row's bar: `sizes.selectionBar`, in `brand`, rounded to half its width
+/// (the sheet's "2pt bar at radius 1").
+public struct ThemedSelectionBar: View {
+    @Environment(\.themeTokens) private var tokens
+
+    public init() {}
+
+    public var body: some View {
+        let bar = tokens.sizes.selectionBar
+        RoundedRectangle(cornerRadius: bar.width / 2, style: .continuous)
+            .fill(tokens.colors.brand.color)
+            .frame(width: bar.width, height: bar.height)
+            .allowsHitTesting(false)
     }
 }
 
