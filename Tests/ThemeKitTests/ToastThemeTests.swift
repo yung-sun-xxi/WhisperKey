@@ -171,6 +171,33 @@ final class ToastThemeTests: XCTestCase {
         }
     }
 
+    /// Across the card: the edge, the 16 padding, the 18 glyph column and the 10 gap, then
+    /// the text. Measured on the label's top rows, above the glyph (8 down): the first
+    /// drawn point right of the edge is the label's first letter.
+    func testTheTextStartsAfterThePaddingTheGlyphColumnAndTheGap() throws {
+        let content = Content(message: "No speech detected", glyph: .microphoneSlash, action: nil)
+        let size = host(content).fittingSize
+        let image = try render(content, size: size)
+        let toast = midnight.toast
+        let edge = midnight.panels.toast.edgeWidth
+        guard case let .fill(fill, _) = midnight.panels.toast.background else { return XCTFail("not a fill") }
+        let textLeft = toast.margin + edge + toast.leadingPadding + toast.glyphColumn + toast.glyphGap
+        let labelTop = size.height - toast.margin - edge - toast.padding
+
+        var firstInk: CGFloat?
+        for x in stride(from: toast.margin + edge + 1, to: textLeft + 10, by: 0.5) {
+            let inked = stride(from: labelTop - 1, to: labelTop - toast.glyphTop + 1, by: -0.5).contains { y in
+                !image.colour(x: x, screenY: y, height: size.height).matches(fill)
+            }
+            if inked {
+                firstInk = x
+                break
+            }
+        }
+        let x = try XCTUnwrap(firstInk, "no label found")
+        XCTAssertEqual(x, textLeft, accuracy: 1.5, "the label starts at \(x), the design puts it at \(textLeft)")
+    }
+
     /// The close disc overhangs the card's top-left corner by half and is drawn whole:
     /// the margin keeps the part outside the card. Hidden, it leaves the margin clear.
     func testTheCloseDiscOverhangsTheCornerUnclipped() throws {
