@@ -22,29 +22,56 @@ public struct QuickPastePlacement: Equatable, Sendable {
 /// handed both to the hit test and to the view. Drawing and choosing therefore cannot
 /// disagree about where a row is.
 ///
-/// Top down: a header band `headerHeight` tall holding "Clipboard", the rows back to back
-/// at `rowHeight` each, then `rowInset` under the last row. The rows are also inset
-/// `rowInset` from the left and right edges; that changes where they are drawn, not which
-/// one a pointer is in — the full width of the panel counts, as it always has.
+/// Top down: the shell's edge, a header bar `headerHeight` tall holding "Clipboard", a
+/// separator `separatorHeight` tall, `rowInset` above the first row, the rows back to
+/// back at `rowHeight` each, `rowInset` under the last row, and the edge again. The rows
+/// are also inset `edgeWidth + rowInset` from the left and right; that changes where
+/// they are drawn, not which one a pointer is in — the full width of the panel counts,
+/// as it always has.
 ///
 /// The numbers live in `ThemeKit`, not here, because this module cannot see the tokens:
 /// `ThemeKit` depends on `SettingsStore`, which depends on this module.
 public struct QuickPasteMetrics: Equatable, Sendable {
-    /// The panel's width.
+    /// The panel's width, its edges included.
     public var width: CGFloat
-    /// The band above the first row that holds the header.
+    /// The shell's edge, drawn inside the panel on every side. The content keeps clear
+    /// of it, so the edge never covers the header bar or a row.
+    public var edgeWidth: CGFloat
+    /// The header bar above the rows.
     public var headerHeight: CGFloat
+    /// The line under the header bar.
+    public var separatorHeight: CGFloat
     /// Rows are contiguous — no spacing between them — so that there is no dead strip in
     /// which a release would mean nothing. Separation is drawn inside the row instead.
     public var rowHeight: CGFloat
-    /// Between the rows and the panel's left, right and bottom edges.
+    /// Between the rows and the separator above them, and between the rows and the
+    /// panel's edges on the other three sides.
     public var rowInset: CGFloat
 
-    public init(width: CGFloat, headerHeight: CGFloat, rowHeight: CGFloat, rowInset: CGFloat) {
+    public init(
+        width: CGFloat,
+        edgeWidth: CGFloat,
+        headerHeight: CGFloat,
+        separatorHeight: CGFloat,
+        rowHeight: CGFloat,
+        rowInset: CGFloat
+    ) {
         self.width = width
+        self.edgeWidth = edgeWidth
         self.headerHeight = headerHeight
+        self.separatorHeight = separatorHeight
         self.rowHeight = rowHeight
         self.rowInset = rowInset
+    }
+
+    /// From the panel's top to the first row: edge, header bar, separator, inset.
+    public var rowsTopOffset: CGFloat {
+        edgeWidth + headerHeight + separatorHeight + rowInset
+    }
+
+    /// From the last row to the panel's bottom: inset, edge.
+    public var rowsBottomOffset: CGFloat {
+        rowInset + edgeWidth
     }
 }
 
@@ -82,7 +109,7 @@ public enum QuickPasteLayout {
         let rows = CGFloat(max(entryCount, 1))
         return CGSize(
             width: metrics.width,
-            height: metrics.headerHeight + rows * metrics.rowHeight + metrics.rowInset
+            height: metrics.rowsTopOffset + rows * metrics.rowHeight + metrics.rowsBottomOffset
         )
     }
 
@@ -130,7 +157,8 @@ public enum QuickPasteLayout {
     // MARK: - Hit testing
 
     /// Which entry a pointer at `mouse` is over, or `nil` for none — outside the panel,
-    /// in the header band, in the inset under the last row, or over an empty history.
+    /// in the header bar or the inset above the first row, in the inset under the last
+    /// row, or over an empty history.
     ///
     /// `nil` is what makes releasing over nothing a cancel, so it is a real answer rather
     /// than a failure to find one.
@@ -150,7 +178,7 @@ public enum QuickPasteLayout {
         guard entryCount > 0 else { return nil }
         guard mouse.x >= panelFrame.minX, mouse.x <= panelFrame.maxX else { return nil }
 
-        let rowsTop = panelFrame.maxY - metrics.headerHeight
+        let rowsTop = panelFrame.maxY - metrics.rowsTopOffset
         let rowsBottom = rowsTop - CGFloat(entryCount) * metrics.rowHeight
         guard mouse.y <= rowsTop, mouse.y >= rowsBottom else { return nil }
 

@@ -91,7 +91,7 @@ final class QuickPasteSourceScanTests: XCTestCase {
         var total = 0
         for path in Self.wholeFiles + [Self.controller] {
             let text = try String(contentsOf: SettingsSourceScanTests.repositoryURL().appendingPathComponent(path), encoding: .utf8)
-            total += Self.count("\"doc.on.clipboard\"", in: text)
+            total += Self.count("\"command\"", in: text)
         }
         XCTAssertEqual(total, 1)
     }
