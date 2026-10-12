@@ -96,6 +96,29 @@ Text edge 16 in panels, 20 in windows. Rows inset 8 from the shell with 8 inside
 - **Theme picker**: 40 icon, radius 8. Selected: 2pt red outline, offset 2. Rest: 05 edge, hover 04 fill
 - **Green, failure**: extended to Granted and Needs access
 
+## Quick paste popup
+
+Same sizes in Midnight and Classic; only the colours differ (Classic in brackets).
+
+| Part | Value |
+|---|---|
+| header bar | **36** tall (panel bar), full width inside the shell, clipped by the shell's radius 12 |
+| header fill | **01** `#14161A` (Classic `#F8F9FB`) |
+| header separator | **1px 03** `#23262D` (Classic `#E0E2E6`), under the bar; rows start below it |
+| header label | "CLIPBOARD", 11/500 caps, 0.06em, 07, text edge 16 |
+| rows | list row 34, inset 8 from the shell (8 above the first row), 8 inside |
+| selection | 04 fill, 2×18 red bar at the row's leading edge |
+| marker column | 14 wide, leading, on every row; 8 gap before the text |
+| marker symbol | 11pt, 07 (`Color.secondary`) |
+| dictated marker | SF Symbol **`waveform`**, `.semibold` |
+| copied marker | SF Symbol **`command`**, `.semibold` (replaces `doc.on.clipboard`) |
+
+Panel height = 1 (edge) + 36 + 1 (separator) + 8 + rows × 34 + 8 + 1 (edge).
+
+`command` is the ⌘ key glyph, in SF Symbols since macOS 11. It names the Cmd-C the user pressed,
+reads as a key rather than a button, and its closed loops look nothing like `waveform`'s vertical
+bars. At `.semibold` its stroke matches `waveform`'s.
+
 ## Values the surfaces use that the sheet does not list
 
 Found by scanning the inline styles of the 17 surface sections of the design file on 2026-10-10.

@@ -1,8 +1,9 @@
 import QuickPaste
 import SwiftUI
 
-/// The quick paste popup as drawn (#166): the shared floating-panel shell, a caps
-/// "Clipboard" header, and the entries as list rows, the one under the pointer selected.
+/// The quick paste popup as drawn (#166): the shared floating-panel shell, a header bar
+/// with the caps "Clipboard" label and a separator under it, and the entries as list
+/// rows, the one under the pointer selected.
 ///
 /// Every size here is the `QuickPasteMetrics` the controller also hands the hit test, or
 /// a token; every colour and font is a token. Lives in ThemeKit rather than in the app so
@@ -11,8 +12,9 @@ import SwiftUI
 /// The panel takes no mouse events, so the selection is the caller's (`selectedID`),
 /// never the row's own hover.
 public struct ThemedQuickPasteView: View {
-    /// The symbol of a hand-copied entry. One name, so changing it is a one-line swap.
-    public static let copiedSymbol = "doc.on.clipboard"
+    /// The symbol of a hand-copied entry, the ⌘ of the Cmd-C that copied it. One name, so
+    /// changing it is a one-line swap.
+    public static let copiedSymbol = "command"
     /// The symbol of a dictated entry.
     public static let dictatedSymbol = "waveform"
 
@@ -51,8 +53,9 @@ public struct ThemedQuickPasteView: View {
     public var body: some View {
         ThemedPanelShell(.quickPaste) {
             VStack(alignment: .leading, spacing: 0) {
-                // The source says "Clipboard"; the caps header shows it in capitals, as
-                // the popover's "History".
+                // The bar: `panelBar` tall on the `bar` fill, the label at the panel text
+                // edge. The source says "Clipboard"; the caps header shows it in capitals,
+                // as the popover's "History".
                 Text("Clipboard")
                     .font(tokens.type.capsHeader.font)
                     .tracking(tokens.type.capsHeader.tracking)
@@ -61,6 +64,12 @@ public struct ThemedQuickPasteView: View {
                     .padding(.horizontal, tokens.spacing.panelTextEdge)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: metrics.headerHeight)
+                    .background(tokens.colors.bar.color)
+
+                // The separator under the bar.
+                Rectangle()
+                    .fill(tokens.colors.divider.color)
+                    .frame(height: metrics.separatorHeight)
 
                 // A stack, not a `Group`: a `Group`'s padding would land on every row.
                 VStack(alignment: .leading, spacing: 0) {
@@ -83,9 +92,12 @@ public struct ThemedQuickPasteView: View {
                         }
                     }
                 }
-                .padding(.horizontal, metrics.rowInset)
-                .padding(.bottom, metrics.rowInset)
+                .padding(metrics.rowInset)
             }
+            // Clear of the shell's edge, which `ThemedPanelShell` draws inside the shape:
+            // the bar starts under the top edge rather than behind it, as the design's
+            // border-box lays it out.
+            .padding(metrics.edgeWidth)
             .frame(width: metrics.width, alignment: .topLeading)
         }
     }
@@ -103,11 +115,11 @@ private struct QuickPasteRowView: View {
         let marker = tokens.quickPasteMarker
         ThemedListRow(isSelected: isSelected) {
             HStack(alignment: .firstTextBaseline, spacing: marker.gap) {
-                // Dictated and hand-copied entries differ by shape and weight, both in
-                // `secondaryText`, so five similar fragments can be told apart without
-                // reading them.
+                // Dictated and hand-copied entries differ by shape — the waveform's bars
+                // against the ⌘'s loops — both in `secondaryText`, so five similar
+                // fragments can be told apart without reading them.
                 Image(systemName: isDictated ? ThemedQuickPasteView.dictatedSymbol : ThemedQuickPasteView.copiedSymbol)
-                    .font((isDictated ? marker.dictated : marker.copied).font)
+                    .font(marker.font.font)
                     .foregroundStyle(tokens.colors.secondaryText.color)
                     .frame(width: marker.width)
                     .accessibilityLabel(isDictated ? "Dictated" : "Copied")

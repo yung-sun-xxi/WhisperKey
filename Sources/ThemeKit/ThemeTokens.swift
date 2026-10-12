@@ -806,25 +806,22 @@ public extension ThemeTokens {
 // MARK: - The quick paste popup
 
 public extension ThemeTokens {
-    /// The marker at the leading edge of each quick paste row (#166): a waveform for a
-    /// dictated entry, a clipboard for a hand-copied one, both in `secondaryText`. They
-    /// differ by shape and weight. The popup's width, rows and insets are the shared
-    /// tokens, put together by `quickPasteMetrics`.
+    /// The marker at the leading edge of each quick paste row (#166): `waveform` for a
+    /// dictated entry, `command` for a hand-copied one, both in `secondaryText`, in one
+    /// font. They differ by shape only. The popup's width, header bar, rows and insets
+    /// are the shared tokens, put together by `quickPasteMetrics`.
     struct QuickPasteMarkerMetrics: Equatable, Sendable {
         /// The column the marker sits in.
         public var width: CGFloat
         /// Between the marker and the entry's text.
         public var gap: CGFloat
-        /// The dictated entry's symbol.
-        public var dictated: ThemeFont
-        /// The hand-copied entry's symbol.
-        public var copied: ThemeFont
+        /// Both symbols.
+        public var font: ThemeFont
 
-        public init(width: CGFloat, gap: CGFloat, dictated: ThemeFont, copied: ThemeFont) {
+        public init(width: CGFloat, gap: CGFloat, font: ThemeFont) {
             self.width = width
             self.gap = gap
-            self.dictated = dictated
-            self.copied = copied
+            self.font = font
         }
     }
 }
