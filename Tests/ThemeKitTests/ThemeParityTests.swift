@@ -50,6 +50,7 @@ final class ThemeParityTests: XCTestCase {
         XCTAssertEqual(classic.controlMetrics, midnight.controlMetrics, "controlMetrics")
         XCTAssertEqual(classic.settingsWindow, midnight.settingsWindow, "settingsWindow")
         XCTAssertEqual(classic.popover, midnight.popover, "popover")
+        XCTAssertEqual(classic.quickPasteMarker, midnight.quickPasteMarker, "quickPasteMarker")
         XCTAssertEqual(classic.windowAppearance, midnight.windowAppearance, "windowAppearance")
         // Everything at once, so a group added later is held too.
         XCTAssertTrue(shape(classic) == shape(midnight), "the tokens differ outside the colours")

@@ -66,6 +66,7 @@ final class MenuBarController: NSObject {
         coordinator.scheduleWelcomePresentationAfterLaunch()
         #if DEBUG
         PopoverSnapshotHook.startIfRequested(controller: self)
+        QuickPasteSnapshotHook.startIfRequested(settings: coordinator.settings)
         #endif
     }
 

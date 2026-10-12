@@ -199,6 +199,16 @@ public extension ThemeTokens {
             keycapPadding: 4,         // a keycap, "padding:0 4px"
             // The app's earlier count; the design shows seven rows too.
             visibleRows: 7
+        ),
+        // Not on the sheet: the QUICK PASTE section of the design file draws its marker
+        // trailing, as a 14×14 waveform; the app keeps it leading on every row (#166).
+        quickPasteMarker: QuickPasteMarkerMetrics(
+            width: 14,                // the design's glyph: "height:14px", four 2 bars 2 apart
+            gap: 10,                  // a list row, "gap:10px"
+            // The app's earlier symbol sizes: the dictated one heavier, so the two differ
+            // by weight as well as by shape.
+            dictated: ThemeFont(size: 11, weight: .semibold),
+            copied: ThemeFont(size: 11, weight: .regular)
         )
     )
 }

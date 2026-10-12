@@ -9,7 +9,7 @@ import ThemeKit
 ///
 /// The entries come from `ClipboardHistoryStore`, not from a live read of the pasteboard.
 /// Which one is chosen is decided by `QuickPasteLayout` from the mouse position, never by
-/// the view — the panel takes no mouse events at all.
+/// the view — the panel takes no mouse events at all. `ThemedQuickPasteView` draws it.
 struct QuickPasteContent: Equatable {
     /// Newest first, already trimmed to what the panel should display.
     let entries: [ClipboardEntry]
@@ -35,90 +35,20 @@ struct QuickPasteContent: Equatable {
     }
 }
 
-struct QuickPasteRow: View {
-    let entry: ClipboardEntry
-    let isSelected: Bool
-
-    /// Dictated and hand-copied entries differ by shape *and* by colour, so five similar
-    /// fragments can be told apart without reading them. Shape alone is an 11-point glyph
-    /// at the edge of a row; colour alone would be lost on a monochrome display or to a
-    /// colour-blind eye.
-    private var isDictated: Bool { entry.origin == .whisperKey }
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: isDictated ? "waveform" : "doc.on.clipboard")
-                .font(.system(size: 11, weight: isDictated ? .semibold : .regular))
-                .foregroundStyle(isDictated ? Color.accentColor : Color.secondary)
-                .frame(width: 14)
-                .accessibilityLabel(isDictated ? "Dictated" : "Copied")
-            Text(entry.preview(maxLength: QuickPasteLayout.previewLength))
-                .font(.system(size: 12))
-                .foregroundStyle(Color.primary)
-                // One line, cut at the tail. Together with the fixed width below this is
-                // what stops a long entry widening or wrapping the panel — the window is
-                // sized from `QuickPasteLayout`, so text that wanted more room would be
-                // clipped rather than granted it.
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 0)
+extension QuickPasteContent {
+    /// The rows as the themed view draws them, top down, and which one is selected.
+    var rows: [ThemedQuickPasteView.Row] {
+        displayOrder.map { row in
+            ThemedQuickPasteView.Row(
+                id: row.entry.id,
+                text: row.entry.preview(maxLength: QuickPasteLayout.previewLength),
+                marker: row.entry.origin == .whisperKey ? .dictated : .copied
+            )
         }
-        .padding(.horizontal, 8)
-        // A fixed height, because the hit test computes row bands from the same number.
-        // A row that sized itself to its content would put the highlight and the choice
-        // on different rows.
-        .frame(height: QuickPasteLayout.rowHeight)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.22) : Color.clear)
-        )
     }
-}
 
-struct QuickPasteView: View {
-    let content: QuickPasteContent
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Clipboard")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .frame(height: QuickPasteLayout.headerHeight, alignment: .center)
-                .padding(.bottom, QuickPasteLayout.headerBottomSpacing)
-            if content.isEmpty {
-                Text("Clipboard history is empty")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.secondary)
-                    .padding(.horizontal, 8)
-                    .frame(height: QuickPasteLayout.rowHeight, alignment: .leading)
-            } else {
-                ForEach(content.displayOrder, id: \.entry.id) { row in
-                    QuickPasteRow(
-                        entry: row.entry,
-                        isSelected: row.index == content.highlightedIndex
-                    )
-                }
-            }
-        }
-        .padding(.horizontal, QuickPasteLayout.horizontalPadding)
-        .padding(.vertical, QuickPasteLayout.verticalPadding)
-        .frame(width: QuickPasteLayout.contentWidth, alignment: .leading)
-        // `VisualEffectBackground` rather than SwiftUI's `.regularMaterial`, for the
-        // reason spelled out on that type: a `Material` blends with what is inside the
-        // window, and this window's background is `.clear`, so the material had nothing
-        // to blend with and painted a flat opaque slab over whatever the panel covered.
-        // `ToastView` has always used this; the panel now uses the same thing.
-        //
-        // Every colour here is semantic — `Color.primary`, `Color.secondary`,
-        // `Color.accentColor` and an AppKit material — so light and dark are the
-        // system's answer, not a palette of ours.
-        .background { VisualEffectBackground(material: .popover) }
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12))
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    var selectedID: UUID? {
+        highlightedIndex.flatMap { entries.indices.contains($0) ? entries[$0].id : nil }
     }
 }
 
@@ -138,16 +68,25 @@ struct QuickPasteView: View {
 /// The one difference from `ToastWindow`: `ignoresMouseEvents = true`. The panel takes no
 /// part in hit-testing and cannot be clicked even deliberately. Which row is highlighted
 /// therefore comes from `QuickPasteLayout.highlightedIndex` applied to the global mouse
-/// position, and the window's own size and origin come from the same file — one geometry,
+/// position, and the window's own size comes from the same file. The `metrics` it is
+/// built with are the controller's, the same value the hit test takes — one geometry,
 /// used by both the drawing and the choosing.
+///
+/// The look is the shared floating-panel shell (#105 rule 4, #166): `ThemedPanelChromeView`
+/// as the window's content, `ThemedQuickPasteView` inside it.
 @MainActor
 final class QuickPastePanel: NSPanel {
-    private var hostingView: NSHostingView<ThemedRoot<QuickPasteView>>!
+    private var hostingView: NSHostingView<ThemedRoot<ThemedQuickPasteView>>!
     private var content: QuickPasteContent
+    private let metrics: QuickPasteMetrics
 
-    init(content: QuickPasteContent) {
+    init(content: QuickPasteContent, metrics: QuickPasteMetrics) {
         self.content = content
-        let size = QuickPasteLayout.panelSize(entryCount: content.entries.count)
+        self.metrics = metrics
+        let size = QuickPasteLayout.panelSize(
+            entryCount: content.entries.count,
+            metrics: metrics
+        )
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -160,24 +99,15 @@ final class QuickPastePanel: NSPanel {
         hidesOnDeactivate = false
         isMovable = false
         isMovableByWindowBackground = false
-        hasShadow = true
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary]
-        backgroundColor = .clear
-        isOpaque = false
+        // Clear and see-through, with the window server's shadow: the shell's rounded
+        // shape is the panel's outline.
+        ThemedPanelChromeView.configure(self)
         ignoresMouseEvents = true
 
-        let hosting = NSHostingView(rootView: Self.root(content))
-        hosting.translatesAutoresizingMaskIntoConstraints = false
-        let container = NSView(frame: contentRect(forFrameRect: frame))
-        container.addSubview(hosting)
-        NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: container.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
-        contentView = container
+        let hosting = NSHostingView(rootView: Self.root(content, metrics: metrics))
+        contentView = ThemedPanelChromeView(kind: .quickPaste, contentView: hosting)
         self.hostingView = hosting
 
         // Sized from the layout rather than from `fittingSize`: the hit test derives row
@@ -193,11 +123,16 @@ final class QuickPastePanel: NSPanel {
     func setHighlightedIndex(_ index: Int?) {
         guard content.highlightedIndex != index else { return }
         content.highlightedIndex = index
-        hostingView.rootView = Self.root(content)
+        hostingView.rootView = Self.root(content, metrics: metrics)
     }
 
-    private static func root(_ content: QuickPasteContent) -> ThemedRoot<QuickPasteView> {
-        ThemedRoot("quickPaste") { QuickPasteView(content: content) }
+    private static func root(
+        _ content: QuickPasteContent,
+        metrics: QuickPasteMetrics
+    ) -> ThemedRoot<ThemedQuickPasteView> {
+        ThemedRoot("quickPaste") {
+            ThemedQuickPasteView(metrics: metrics, rows: content.rows, selectedID: content.selectedID)
+        }
     }
 
     /// Long enough to read as an appearance rather than a flash, short enough that the

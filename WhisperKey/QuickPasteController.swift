@@ -4,6 +4,7 @@ import Foundation
 import HotkeyEngine
 import PasteEngine
 import QuickPaste
+import ThemeKit
 import os
 
 /// The quick-paste popup: hold the trigger, a non-activating panel appears under the
@@ -19,7 +20,8 @@ import os
 /// This file is deliberately thin, because the application target has no test bundle: the
 /// gesture is in `HoldToRevealStateMachine`, the event translation and the decision to
 /// swallow an arrow in `HoldToRevealRunner`, every piece of geometry — panel size,
-/// placement, which row a point is in — in `QuickPasteLayout`, and which row the pointer
+/// placement, which row a point is in — in `QuickPasteLayout` (with the sizes from the
+/// theme's tokens, `ThemeTokens.quickPasteMetrics`), and which row the pointer
 /// and the arrow keys between them have chosen in `QuickPasteSelection`. What is left
 /// here is the parts that only exist against a live system: a timer, an `NSPanel`,
 /// `NSEvent.mouseLocation` and `NSWorkspace`.
@@ -34,6 +36,8 @@ final class QuickPasteController: QuickPasteGestureControlling {
         let entryCount: Int
         let frame: CGRect
         let isFlipped: Bool
+        /// The geometry the panel was drawn with, so the hit test chooses on the same rows.
+        let metrics: QuickPasteMetrics
         /// Which row is chosen and which input chose it. The pointer and the arrow keys
         /// both write here, and `QuickPasteSelection` is what decides which of them wins.
         var selection: QuickPasteSelection
@@ -196,7 +200,10 @@ final class QuickPasteController: QuickPasteGestureControlling {
 
         let entries = Array(store.entries.prefix(configuration.visibleEntryCount))
         let cursor = NSEvent.mouseLocation
-        let size = QuickPasteLayout.panelSize(entryCount: entries.count)
+        // Read once, from the theme's tokens, and handed to the window size, the view and
+        // the hit test alike: the row drawn highlighted is the row a release pastes.
+        let metrics = ThemeTokensSource.shared.tokens.quickPasteMetrics
+        let size = QuickPasteLayout.panelSize(entryCount: entries.count, metrics: metrics)
         let placement = QuickPasteLayout.placement(
             cursor: cursor,
             size: size,
@@ -204,7 +211,7 @@ final class QuickPasteController: QuickPasteGestureControlling {
         )
 
         let content = QuickPasteContent(entries: entries, isFlipped: placement.isFlipped)
-        let panel = QuickPastePanel(content: content)
+        let panel = QuickPastePanel(content: content, metrics: metrics)
         panel.show(at: placement.origin)
         self.panel = panel
         self.revealedEntries = entries
@@ -212,6 +219,7 @@ final class QuickPasteController: QuickPasteGestureControlling {
             entryCount: entries.count,
             frame: CGRect(origin: placement.origin, size: size),
             isFlipped: placement.isFlipped,
+            metrics: metrics,
             selection: QuickPasteSelection(
                 entryCount: entries.count,
                 isFlipped: placement.isFlipped
@@ -283,7 +291,8 @@ final class QuickPasteController: QuickPasteGestureControlling {
             mouse: mouse,
             panelFrame: reveal.frame,
             entryCount: reveal.entryCount,
-            isFlipped: reveal.isFlipped
+            isFlipped: reveal.isFlipped,
+            metrics: reveal.metrics
         )
     }
 

@@ -2,25 +2,33 @@ import CoreGraphics
 import XCTest
 @testable import QuickPaste
 
-/// Geometry the panel and the hit test must agree on. Spelled out here rather than read
-/// back from the implementation, so a change to a constant fails a test instead of moving
-/// the goalposts along with itself.
+/// Geometry the panel and the hit test must agree on: the Midnight grid (#166) — a 328
+/// shell, a 34 header band, 34 rows, and 8 between the rows and the shell's sides and
+/// bottom. Spelled out here rather than read back from the implementation, so a change to
+/// a number fails a test instead of moving the goalposts along with itself.
 private enum Geometry {
-    static let width: CGFloat = 320
-    static let verticalPadding: CGFloat = 9
-    static let headerBand: CGFloat = 14 + 4      // header height + its bottom spacing
-    static let rowHeight: CGFloat = 26
+    static let width: CGFloat = 328
+    static let headerBand: CGFloat = 34
+    static let rowHeight: CGFloat = 34
+    static let rowInset: CGFloat = 8
     static let gap: CGFloat = 10
     static let cursorInsetX: CGFloat = 16
 
+    static let metrics = QuickPasteMetrics(
+        width: width,
+        headerHeight: headerBand,
+        rowHeight: rowHeight,
+        rowInset: rowInset
+    )
+
     /// Height of a panel showing `n` entries.
     static func height(_ n: Int) -> CGFloat {
-        verticalPadding * 2 + headerBand + CGFloat(max(n, 1)) * rowHeight
+        headerBand + CGFloat(max(n, 1)) * rowHeight + rowInset
     }
 
     /// Screen y of the top edge of the rows band for a panel with this frame.
     static func rowsTop(_ frame: CGRect) -> CGFloat {
-        frame.maxY - verticalPadding - headerBand
+        frame.maxY - headerBand
     }
 
     /// A point comfortably inside row `slot`, counted from the top of the list.
@@ -38,6 +46,27 @@ private func panelFrame(entryCount: Int, origin: CGPoint = CGPoint(x: 500, y: 40
         origin: origin,
         size: CGSize(width: Geometry.width, height: Geometry.height(entryCount))
     )
+}
+
+private extension QuickPasteLayout {
+    static func panelSize(entryCount: Int) -> CGSize {
+        panelSize(entryCount: entryCount, metrics: Geometry.metrics)
+    }
+
+    static func highlightedIndex(
+        mouse: CGPoint,
+        panelFrame: CGRect,
+        entryCount: Int,
+        isFlipped: Bool = false
+    ) -> Int? {
+        highlightedIndex(
+            mouse: mouse,
+            panelFrame: panelFrame,
+            entryCount: entryCount,
+            isFlipped: isFlipped,
+            metrics: Geometry.metrics
+        )
+    }
 }
 
 final class QuickPasteLayoutTests: XCTestCase {
@@ -61,6 +90,20 @@ final class QuickPasteLayoutTests: XCTestCase {
             QuickPasteLayout.panelSize(entryCount: 0).height,
             QuickPasteLayout.panelSize(entryCount: 1).height,
             accuracy: 0.001
+        )
+    }
+
+    func testPanelSizesOnTheMidnightGrid() {
+        // 34 header + one row's worth of space + 8 under it, and 34 + 5 × 34 + 8.
+        XCTAssertEqual(QuickPasteLayout.panelSize(entryCount: 0), CGSize(width: 328, height: 76))
+        XCTAssertEqual(QuickPasteLayout.panelSize(entryCount: 5), CGSize(width: 328, height: 212))
+    }
+
+    func testTheSizeFollowsTheMetricsItIsGiven() {
+        let wide = QuickPasteMetrics(width: 400, headerHeight: 20, rowHeight: 30, rowInset: 4)
+        XCTAssertEqual(
+            QuickPasteLayout.panelSize(entryCount: 3, metrics: wide),
+            CGSize(width: 400, height: 20 + 3 * 30 + 4)
         )
     }
 
@@ -149,6 +192,84 @@ final class QuickPasteLayoutTests: XCTestCase {
 
         XCTAssertNil(
             QuickPasteLayout.highlightedIndex(mouse: mouse, panelFrame: frame, entryCount: 3)
+        )
+    }
+
+    func testTheWholeHeaderBandIsNotARow() {
+        // The 34 band under the top edge holds "Clipboard"; even one hair above the first
+        // row is still the header.
+        let frame = panelFrame(entryCount: 3)
+        for y in [frame.maxY, frame.maxY - 17, Geometry.rowsTop(frame) + 0.001] {
+            XCTAssertNil(
+                QuickPasteLayout.highlightedIndex(
+                    mouse: CGPoint(x: frame.midX, y: y), panelFrame: frame, entryCount: 3
+                ),
+                "y \(y) is in the header band"
+            )
+        }
+    }
+
+    func testTheWholeBottomInsetIsNotARow() {
+        // The 8 under the last row: from just below its bottom edge down to the shell's.
+        let frame = panelFrame(entryCount: 3)
+        let lastRowBottom = Geometry.rowsTop(frame) - 3 * Geometry.rowHeight
+        XCTAssertEqual(lastRowBottom, frame.minY + Geometry.rowInset, accuracy: 0.001)
+        for y in [lastRowBottom - 0.001, frame.minY + 4, frame.minY] {
+            XCTAssertNil(
+                QuickPasteLayout.highlightedIndex(
+                    mouse: CGPoint(x: frame.midX, y: y), panelFrame: frame, entryCount: 3
+                ),
+                "y \(y) is in the bottom inset"
+            )
+        }
+    }
+
+    func testEveryRowBoundaryOnTheMidnightGrid() {
+        // Rows of 34 under a 34 header: row k spans maxY - 34 - 34k down to
+        // maxY - 34 - 34(k + 1), and each line between two rows belongs to the lower one.
+        let frame = panelFrame(entryCount: 5)
+        for k in 0..<5 {
+            let top = frame.maxY - 34 - 34 * CGFloat(k)
+            XCTAssertEqual(
+                QuickPasteLayout.highlightedIndex(
+                    mouse: CGPoint(x: frame.midX, y: top), panelFrame: frame, entryCount: 5
+                ),
+                k,
+                "top edge of row \(k)"
+            )
+            XCTAssertEqual(
+                QuickPasteLayout.highlightedIndex(
+                    mouse: CGPoint(x: frame.midX, y: top - 33.999), panelFrame: frame, entryCount: 5
+                ),
+                k,
+                "just above the bottom edge of row \(k)"
+            )
+        }
+    }
+
+    func testFlippedRowBoundariesOnTheMidnightGrid() {
+        // Flipped, the bottom row is the newest entry: the same bands, counted upwards.
+        let frame = panelFrame(entryCount: 5)
+        for k in 0..<5 {
+            let top = frame.maxY - 34 - 34 * CGFloat(k)
+            XCTAssertEqual(
+                QuickPasteLayout.highlightedIndex(
+                    mouse: CGPoint(x: frame.midX, y: top - 17),
+                    panelFrame: frame,
+                    entryCount: 5,
+                    isFlipped: true
+                ),
+                4 - k
+            )
+        }
+        XCTAssertNil(
+            QuickPasteLayout.highlightedIndex(
+                mouse: CGPoint(x: frame.midX, y: frame.minY + 4),
+                panelFrame: frame,
+                entryCount: 5,
+                isFlipped: true
+            ),
+            "the bottom inset is nothing when flipped too"
         )
     }
 
