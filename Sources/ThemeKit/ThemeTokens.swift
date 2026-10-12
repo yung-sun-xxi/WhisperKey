@@ -39,6 +39,9 @@ public struct ThemeTokens: Equatable, Sendable {
     /// The quick paste popup's entry marker. Its geometry is `quickPasteMetrics`, built
     /// from the shared tokens.
     public var quickPasteMarker: QuickPasteMarkerMetrics
+    /// The toast: its card, its close disc and where its window rests. Its shell is
+    /// `panels.toast`.
+    public var toast: ToastMetrics
 
     public init(
         theme: AppTheme,
@@ -53,7 +56,8 @@ public struct ThemeTokens: Equatable, Sendable {
         controlMetrics: ControlMetrics,
         settingsWindow: SettingsWindowMetrics,
         popover: PopoverMetrics,
-        quickPasteMarker: QuickPasteMarkerMetrics
+        quickPasteMarker: QuickPasteMarkerMetrics,
+        toast: ToastMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -68,6 +72,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.settingsWindow = settingsWindow
         self.popover = popover
         self.quickPasteMarker = quickPasteMarker
+        self.toast = toast
     }
 }
 
@@ -447,11 +452,14 @@ public extension ThemeTokens {
         public var menu: ThemeShadow
         /// An alert.
         public var alert: ThemeShadow
+        /// The toast's close disc, which overhangs the card into the clear margin.
+        public var closeButton: ThemeShadow
 
-        public init(window: ThemeShadow, menu: ThemeShadow, alert: ThemeShadow) {
+        public init(window: ThemeShadow, menu: ThemeShadow, alert: ThemeShadow, closeButton: ThemeShadow) {
             self.window = window
             self.menu = menu
             self.alert = alert
+            self.closeButton = closeButton
         }
     }
 }
@@ -822,6 +830,89 @@ public extension ThemeTokens {
             self.width = width
             self.gap = gap
             self.font = font
+        }
+    }
+}
+
+// MARK: - The toast
+
+public extension ThemeTokens {
+    /// The toast (#167): the design's card on the `panels.toast` shell, and the app's
+    /// close disc on its top-left corner. The window is `margin` larger than the card on
+    /// every side, so the disc, which overhangs the corner by half, is not cut off;
+    /// `toastWindowWidth` and the insets in `ToastGeometry.swift` put that together.
+    struct ToastMetrics: Equatable, Sendable {
+        /// Clear room around the card on every side, for the close disc.
+        public var margin: CGFloat
+        /// From the right edge of the screen's visible area to the card.
+        public var screenEdgeInset: CGFloat
+        /// From the bottom of the menu bar to the card.
+        public var menuBarGap: CGFloat
+        /// Inside the shell's edge: top, trailing and bottom.
+        public var padding: CGFloat
+        /// Inside the shell's edge, before the glyph column.
+        public var leadingPadding: CGFloat
+        /// The column the glyph is centred in.
+        public var glyphColumn: CGFloat
+        /// Above the glyph, from the top of the text.
+        public var glyphTop: CGFloat
+        /// Between the glyph column and the text.
+        public var glyphGap: CGFloat
+        /// The microphone symbol.
+        public var glyph: ThemeFont
+        /// "WhisperKey" over the message.
+        public var title: ThemeFont
+        /// Between the label and the message.
+        public var titleGap: CGFloat
+        /// The message.
+        public var message: ThemeFont
+        /// The message's line height as a multiple of its size, as CSS states it.
+        public var messageLineHeight: Double
+        /// Above the action button.
+        public var actionGap: CGFloat
+        /// The close disc's diameter.
+        public var closeButton: CGFloat
+        /// The cross in the close disc.
+        public var closeGlyph: ThemeFont
+        /// The close disc's edge.
+        public var closeEdgeWidth: CGFloat
+
+        public init(
+            margin: CGFloat,
+            screenEdgeInset: CGFloat,
+            menuBarGap: CGFloat,
+            padding: CGFloat,
+            leadingPadding: CGFloat,
+            glyphColumn: CGFloat,
+            glyphTop: CGFloat,
+            glyphGap: CGFloat,
+            glyph: ThemeFont,
+            title: ThemeFont,
+            titleGap: CGFloat,
+            message: ThemeFont,
+            messageLineHeight: Double,
+            actionGap: CGFloat,
+            closeButton: CGFloat,
+            closeGlyph: ThemeFont,
+            closeEdgeWidth: CGFloat
+        ) {
+            self.margin = margin
+            self.screenEdgeInset = screenEdgeInset
+            self.menuBarGap = menuBarGap
+            self.padding = padding
+            self.leadingPadding = leadingPadding
+            self.glyphColumn = glyphColumn
+            self.glyphTop = glyphTop
+            self.glyphGap = glyphGap
+            self.glyph = glyph
+            self.title = title
+            self.titleGap = titleGap
+            self.message = message
+            self.messageLineHeight = messageLineHeight
+            self.actionGap = actionGap
+            self.closeButton = closeButton
+            self.closeGlyph = closeGlyph
+            self.closeEdgeWidth = closeEdgeWidth
         }
     }
 }
