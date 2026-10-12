@@ -794,7 +794,7 @@ private struct UsageSummaryRow: View {
             statDivider
             UsageMetricColumn(value: UsageLineFormatter.compactAudioDurationLabel(summary.audioDurationSeconds), label: "audio")
             statDivider
-            UsageMetricColumn(value: costText ?? "-", label: nil)
+            UsageMetricColumn(value: costText ?? "-", label: "cost")
             if showsDisclosure {
                 // Its own segment, so the three figures keep equal widths.
                 statDivider
