@@ -135,6 +135,8 @@ final class TokenSheetTests: XCTestCase {
         let edges = try sheet.section("Spacing and edges")
         XCTAssertTrue(edges.contains("Text edge \(Int(spacing.panelTextEdge)) in panels, \(Int(spacing.windowTextEdge)) in windows"), edges)
         XCTAssertTrue(edges.contains("Rows inset \(Int(spacing.rowInset)) from the shell with \(Int(spacing.rowPadding)) inside"), edges)
+        let popover = midnight.popover
+        XCTAssertTrue(edges.contains("Stat tile inset \(Int(popover.statInsetVertical))×\(Int(popover.statInsetHorizontal))"), edges)
     }
 
     // MARK: - Settings window (#162)
@@ -192,10 +194,13 @@ final class TokenSheetTests: XCTestCase {
 
     func testShadowsMatchTheMockups() throws {
         let gaps = try sheet.section("Values the surfaces use that the sheet does not list")
-        let panel = try TokenSheet.shadow(in: gaps, after: "panels")
-        XCTAssertEqual(midnight.panels.popover.shadow, panel)
-        XCTAssertEqual(midnight.panels.quickPaste.shadow, panel)
-        XCTAssertEqual(midnight.panels.toast.shadow, panel)
+        // The sheet states a drawn panel shadow; the panels keep the window server's
+        // instead (#161, the owner's decision: a drawn one needs a larger window whose
+        // shadow would catch clicks).
+        XCTAssertEqual(try TokenSheet.shadow(in: gaps, after: "panels"), .drop(color: .hex(0x000000, opacity: 0.5), blur: 48, x: 0, y: 22))
+        XCTAssertEqual(midnight.panels.popover.shadow, .system)
+        XCTAssertEqual(midnight.panels.quickPaste.shadow, .system)
+        XCTAssertEqual(midnight.panels.toast.shadow, .system)
         XCTAssertEqual(midnight.shadows.window, try TokenSheet.shadow(in: gaps, after: "windows"))
         XCTAssertEqual(midnight.shadows.menu, try TokenSheet.shadow(in: gaps, after: "actions menu"))
         XCTAssertEqual(midnight.shadows.alert, try TokenSheet.shadow(in: gaps, after: "the mock alert"))

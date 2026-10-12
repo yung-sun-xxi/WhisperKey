@@ -492,56 +492,66 @@ private final class FirstResponderParkingView: NSView {
 
 // MARK: - Themed Settings end
 
+// MARK: - Themed Popover begin
+
+/// The menu bar popover (#161): today's structure and behaviour in the theme's look. Top
+/// to bottom the permission banner (only while a permission is missing), the header row,
+/// the usage block and period picker, the output toggles, the history and the footer.
+/// The shell around it is `ThemedPanelShell(.popover)`; every colour, font and size here
+/// comes from the tokens.
 struct PopoverContent: View {
     @EnvironmentObject private var coordinator: AppCoordinator
-    private static let contentInsets = EdgeInsets(top: 14, leading: 16, bottom: 16, trailing: 16)
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 12) {
-                if let banner = PermissionBanner(coordinator: coordinator) {
-                    banner
-                }
-                CommandCenterHeader(
-                    settings: coordinator.settings,
-                    usageStats: coordinator.usageStats,
-                    appState: coordinator.state,
-                    cancelAction: coordinator.cancelActiveOperation
-                )
-                HistorySection(history: coordinator.history, coordinator: coordinator)
-                Divider()
-                    .opacity(0.55)
-                HStack {
-                    Button {
-                        coordinator.openSettingsWindow()
-                    } label: {
-                        Text("Settings")
-                            .font(.system(size: 12, weight: .regular))
-                    }
-                    .keyboardShortcut(",", modifiers: [.command])
-                    Spacer()
-                    Button {
-                        NSApplication.shared.terminate(nil)
-                    } label: {
-                        Text("Quit")
-                            .font(.system(size: 12, weight: .regular))
-                    }
-                        .keyboardShortcut("q")
-                }
+            if let banner = PermissionBanner(coordinator: coordinator) {
+                banner
+                    .padding(.horizontal, tokens.spacing.panelTextEdge)
+                    .padding(.vertical, tokens.popover.sectionTop)
+                PopoverDivider()
             }
-            .padding(Self.contentInsets)
+            CommandCenterHeader(
+                settings: coordinator.settings,
+                usageStats: coordinator.usageStats,
+                appState: coordinator.state,
+                cancelAction: coordinator.cancelActiveOperation
+            )
+            HistorySection(history: coordinator.history, coordinator: coordinator)
+            PopoverDivider()
+            footer
         }
-        .frame(width: MenuBarLayout.popoverWidth)
-        .font(PopoverTypography.base)
-        .foregroundColor(PopoverTypography.primaryColor)
+    }
+
+    /// A `panelBar` on the `bar` fill: Settings left, Quit right, as plain text.
+    private var footer: some View {
+        HStack(spacing: 0) {
+            Button("Settings") {
+                coordinator.openSettingsWindow()
+            }
+            .keyboardShortcut(",", modifiers: [.command])
+            Spacer(minLength: 0)
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q")
+        }
+        .buttonStyle(PopoverBarButtonStyle(tokens: tokens))
+        .padding(.horizontal, tokens.spacing.panelTextEdge)
+        .frame(height: tokens.sizes.panelBar)
+        .frame(maxWidth: .infinity)
+        .background(tokens.colors.bar.color)
     }
 }
 
+/// A missing permission: a `card` with the title, a line of explanation and the button
+/// that fixes it.
 private struct PermissionBanner: View {
     let title: String
     let message: String
     let buttonTitle: String
     let action: () -> Void
+    @Environment(\.themeTokens) private var tokens
 
     init?(coordinator: AppCoordinator) {
         if !coordinator.permissions.accessibilityGranted {
@@ -564,33 +574,41 @@ private struct PermissionBanner: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: tokens.popover.bannerGap) {
             Text(title)
-                .font(PopoverTypography.sectionTitle)
-                .foregroundColor(PopoverTypography.primaryColor)
+                .font(tokens.type.title.font)
+                .foregroundStyle(tokens.colors.primaryText.color)
             Text(message)
-                .font(PopoverTypography.base)
-                .foregroundColor(PopoverTypography.secondaryColor)
-            Button(buttonTitle, action: action)
-                .controlSize(.small)
+                .font(tokens.type.small.font)
+                .foregroundStyle(tokens.colors.secondaryText.color)
+                .fixedSize(horizontal: false, vertical: true)
+            ThemedPushButton(buttonTitle, action: action)
+                .padding(.top, tokens.popover.bannerGap)
         }
-        .padding(8)
+        .padding(tokens.popover.bannerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        .background(
+            tokens.colors.card.color,
+            in: RoundedRectangle(cornerRadius: tokens.radii.card, style: .continuous)
+        )
     }
 }
 
 #if DEBUG
-/// Marks the dev app's popover with the same letter as its menu bar icon (#149).
+/// Marks the dev app's popover with the same letter as its menu bar icon (#149): a
+/// keycap-sized badge in `caption` and `secondaryText` inside an `edge` outline.
 private struct DevBuildBadge: View {
+    @Environment(\.themeTokens) private var tokens
+
     var body: some View {
         Text(DevBuildMarker.letter)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundColor(PopoverTypography.secondaryColor)
-            .frame(minWidth: 16, minHeight: 16)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(PopoverTypography.secondaryColor.opacity(0.6), lineWidth: 1)
+            .font(tokens.type.caption.font)
+            .foregroundStyle(tokens.colors.secondaryText.color)
+            .padding(.horizontal, tokens.popover.keycapPadding)
+            .frame(minWidth: tokens.sizes.keycap, minHeight: tokens.sizes.keycap)
+            .overlay(
+                RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
+                    .strokeBorder(tokens.colors.edge.color, lineWidth: tokens.controlMetrics.edgeWidth)
             )
             .help("WhisperKey Dev (Debug build)")
             .accessibilityLabel("Dev build")
@@ -603,50 +621,52 @@ private struct CommandCenterHeader: View {
     @ObservedObject var usageStats: UsageStatsStore
     let appState: AppCoordinator.AppState
     let cancelAction: () -> Void
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             headerRow
+            PopoverDivider()
 
-            usageSummaryButton
-
-            HeaderPeriodPicker(selection: $settings.usageStatsRange)
-
-            HStack(spacing: 12) {
-                HeaderOutputToggle(
-                    title: "Clipboard",
-                    isOn: $settings.saveTranscriptionToClipboard,
-                    alignment: .leading
+            VStack(spacing: tokens.popover.usageGap) {
+                usageSummaryButton
+                ThemedPeriodPicker(
+                    "Usage stats range",
+                    selection: $settings.usageStatsRange,
+                    options: UsageStatsRange.allCases,
+                    title: { $0.compactLabel },
+                    help: { $0.displayName }
                 )
-                HeaderVerticalDivider()
-                HeaderOutputToggle(
-                    title: "Auto-paste",
-                    isOn: $settings.autoPasteTranscription,
-                    alignment: .trailing
-                )
+                .help("Choose the usage stats range")
             }
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, tokens.spacing.panelTextEdge)
+            .padding(.top, tokens.popover.sectionTop)
+
+            outputToggles
+                .padding(.horizontal, tokens.spacing.rowInset)
+                .padding(.top, tokens.popover.togglesTop)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// A `listRow` with the microphone, "Provider · model" in `small` and the status:
+    /// the green dot while idle, the stop button while busy.
     private var headerRow: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 8) {
+        HStack(spacing: tokens.popover.headerGap) {
+            HStack(spacing: tokens.popover.headerGap) {
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(PopoverTypography.secondaryColor)
-                    .frame(width: 14, height: 14, alignment: .center)
+                    .font(tokens.type.small.font)
+                    .foregroundStyle(tokens.colors.secondaryText.color)
                 Text("\(settings.provider.shortDisplayName) · \(settings.currentTranscriptionModelID)")
-                    .font(PopoverTypography.caption)
-                    .foregroundColor(PopoverTypography.primaryColor)
+                    .font(tokens.type.small.font)
+                    .foregroundStyle(tokens.colors.secondaryText.color)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .truncationMode(.middle)
             }
             .help("\(settings.provider.displayName) · \(settings.currentTranscriptionModelID)")
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 0)
 
             #if DEBUG
             DevBuildBadge()
@@ -654,6 +674,8 @@ private struct CommandCenterHeader: View {
 
             statusControl
         }
+        .padding(.horizontal, tokens.spacing.panelTextEdge)
+        .frame(height: tokens.sizes.listRow)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -663,14 +685,24 @@ private struct CommandCenterHeader: View {
         case .starting, .recording, .transcribing:
             cancelStatusButton
         case .idle, .error, .microphoneDenied, .accessibilityDenied:
-            ZStack {
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 7, height: 7)
-            }
-            .frame(width: 18, height: 18)
-            .accessibilityLabel("Active")
+            Circle()
+                .fill(tokens.colors.success.color)
+                .frame(width: tokens.sizes.dot, height: tokens.sizes.dot)
+                .frame(width: tokens.popover.stopButton, height: tokens.popover.stopButton)
+                .accessibilityLabel("Active")
         }
+    }
+
+    /// Clipboard and Auto-paste side by side in one `listRow`, a short divider between.
+    private var outputToggles: some View {
+        HStack(spacing: tokens.popover.toggleGap) {
+            HeaderOutputToggle(title: "Clipboard", isOn: $settings.saveTranscriptionToClipboard)
+            HeaderVerticalDivider(color: tokens.colors.divider, height: tokens.popover.toggleDividerHeight)
+            HeaderOutputToggle(title: "Auto-paste", isOn: $settings.autoPasteTranscription)
+        }
+        .padding(.horizontal, tokens.spacing.rowPadding)
+        .frame(height: tokens.sizes.listRow)
+        .frame(maxWidth: .infinity)
     }
 
     /// Every provider and model in the period, not just the selected one (#139).
@@ -684,7 +716,6 @@ private struct CommandCenterHeader: View {
             UsageBreakdownWindowController.show(usageStats: usageStats, settings: settings)
         } label: {
             UsageSummaryRow(summary: summary, showsDisclosure: true)
-                .contentShape(RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Usage by model")
@@ -693,7 +724,7 @@ private struct CommandCenterHeader: View {
     private var cancelStatusButton: some View {
         Button(action: cancelAction) {
             CancelStatusIcon()
-                .frame(width: 18, height: 18)
+                .frame(width: tokens.popover.stopButton, height: tokens.popover.stopButton)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -715,62 +746,75 @@ private struct CommandCenterHeader: View {
     }
 }
 
-/// Red circle with a white stop square, both drawn from the same center
-/// point, so they can never drift apart the way an SF Symbol overlay can
-/// (symbol glyphs are not centered within their image bounds).
+/// The stop button: a `recordingStop` circle with an `onBrand` square, both drawn from
+/// the same center point, so they can never drift apart the way an SF Symbol overlay
+/// can (symbol glyphs are not centered within their image bounds).
 private struct CancelStatusIcon: View {
+    @Environment(\.themeTokens) private var tokens
+
     var body: some View {
+        let colors = tokens.colors
+        let popover = tokens.popover
         Canvas { context, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let radius = min(size.width, size.height) / 2 * 0.84
-
+            let diameter = min(size.width, size.height)
             let circle = Path(ellipseIn: CGRect(
-                x: center.x - radius,
-                y: center.y - radius,
-                width: radius * 2,
-                height: radius * 2
+                x: center.x - diameter / 2,
+                y: center.y - diameter / 2,
+                width: diameter,
+                height: diameter
             ))
-            context.fill(circle, with: .color(.red.opacity(0.84)))
+            context.fill(circle, with: .color(colors.recordingStop.color))
 
-            let halfSide = radius * 0.4
+            let side = popover.stopSquare
             let square = Path(roundedRect: CGRect(
-                x: center.x - halfSide,
-                y: center.y - halfSide,
-                width: halfSide * 2,
-                height: halfSide * 2
-            ), cornerRadius: halfSide * 0.35)
-            context.fill(square, with: .color(.white))
+                x: center.x - side / 2,
+                y: center.y - side / 2,
+                width: side,
+                height: side
+            ), cornerRadius: popover.stopSquareRadius)
+            context.fill(square, with: .color(colors.onBrand.color))
         }
     }
 }
 
+/// The usage block: a `card` with three stats and the chevron's own segment, 1pt `edge`
+/// dividers between them. Under the pointer the block takes `selectedRow` and the
+/// chevron `primaryText`.
 private struct UsageSummaryRow: View {
     let summary: UsageSummary
     var showsDisclosure = false
+    @Environment(\.themeTokens) private var tokens
+    @State private var isHovered = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: tokens.radii.card, style: .continuous)
         HStack(spacing: 0) {
             UsageMetricColumn(value: UsageLineFormatter.wordsLabel(summary.wordCount), label: "words")
-            HeaderVerticalDivider()
+            statDivider
             UsageMetricColumn(value: UsageLineFormatter.compactAudioDurationLabel(summary.audioDurationSeconds), label: "audio")
-            HeaderVerticalDivider()
+            statDivider
             UsageMetricColumn(value: costText ?? "-", label: nil)
             if showsDisclosure {
                 // Its own segment, so the three figures keep equal widths.
-                HeaderVerticalDivider()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(PopoverTypography.primaryColor.opacity(0.62))
-                    .frame(width: 26)
+                statDivider
+                DisclosureChevron(color: isHovered ? tokens.colors.primaryText : tokens.colors.secondaryText)
+                    .frame(width: tokens.popover.chevronSegment)
             }
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 0)
+        .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 7))
+        .background((isHovered ? tokens.colors.selectedRow : tokens.colors.card).color, in: shape)
+        .contentShape(shape)
+        .onHover { isHovered = $0 }
         .help(showsDisclosure
             ? "\(UsageLineFormatter.line(from: summary)). Click for usage by model."
             : UsageLineFormatter.line(from: summary))
+    }
+
+    private var statDivider: some View {
+        HeaderVerticalDivider(color: tokens.colors.edge, height: nil)
+            .padding(.vertical, tokens.popover.statDividerInset)
     }
 
     private var costText: String? {
@@ -781,27 +825,34 @@ private struct UsageSummaryRow: View {
     }
 }
 
+/// One stat: the value in `statValue` (tabular), its label in `caption` and
+/// `secondaryText` under it, inset `statInsetVertical` × `statInsetHorizontal`.
 private struct UsageMetricColumn: View {
     let value: String
     let label: String?
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
-        VStack(spacing: 1) {
+        VStack(spacing: tokens.popover.statLabelGap) {
             Text(value)
-                .font(.system(size: 14, weight: .semibold).monospacedDigit())
-                .foregroundColor(PopoverTypography.primaryColor)
+                .font(tokens.type.statValue.font)
+                .foregroundStyle(tokens.colors.primaryText.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
             if let label {
                 Text(label)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(PopoverTypography.primaryColor.opacity(0.62))
+                    .font(tokens.type.caption.font)
+                    .foregroundStyle(tokens.colors.secondaryText.color)
                     .lineLimit(1)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 31, alignment: .center)
+        .padding(.vertical, tokens.popover.statInsetVertical)
+        .padding(.horizontal, tokens.popover.statInsetHorizontal)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
+
+// MARK: - Themed Popover end
 
 struct HeaderPeriodPicker: View {
     @Binding var selection: UsageStatsRange
@@ -836,34 +887,99 @@ struct HeaderPeriodPicker: View {
     }
 }
 
+// MARK: - Themed Popover begin
+
+/// Clipboard or Auto-paste: the label in `body` and `primaryText`, a `ThemedToggle` at
+/// the end of its half of the row.
 private struct HeaderOutputToggle: View {
     let title: String
     @Binding var isOn: Bool
-    let alignment: Alignment
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: tokens.popover.rowGap) {
             Text(title)
-                .font(PopoverTypography.base)
-                .foregroundColor(PopoverTypography.primaryColor)
+                .font(tokens.type.body.font)
+                .foregroundStyle(tokens.colors.primaryText.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
-            Toggle(title, isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.mini)
+            Spacer(minLength: 0)
+            ThemedToggle(title, isOn: $isOn)
         }
-        .frame(maxWidth: .infinity, alignment: alignment)
+        .frame(maxWidth: .infinity)
     }
 }
 
+/// A vertical line as wide as the panel's edge. Without a height it takes the height
+/// its container gives it.
 private struct HeaderVerticalDivider: View {
+    let color: ThemeColor
+    let height: CGFloat?
+    @Environment(\.themeTokens) private var tokens
+
     var body: some View {
-        Rectangle()
-            .fill(HeaderSurfaceColor.divider)
-            .frame(width: 1, height: 24)
+        let line = Rectangle()
+            .fill(color.color)
+            .frame(width: tokens.panels.popover.edgeWidth)
+        if let height {
+            line.frame(height: height)
+        } else {
+            line.frame(maxHeight: .infinity)
+        }
     }
 }
+
+/// A horizontal line across the popover in `divider` (03 on the 02 surface).
+struct PopoverDivider: View {
+    @Environment(\.themeTokens) private var tokens
+
+    var body: some View {
+        Rectangle()
+            .fill(tokens.colors.divider.color)
+            .frame(height: tokens.panels.popover.edgeWidth)
+            .frame(maxWidth: .infinity)
+    }
+}
+
+/// A text button on the popover's footer bar: `small` in `primaryText`,
+/// `secondaryText` while pressed.
+private struct PopoverBarButtonStyle: ButtonStyle {
+    let tokens: ThemeTokens
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(tokens.type.small.font)
+            .foregroundStyle((configuration.isPressed ? tokens.colors.secondaryText : tokens.colors.primaryText).color)
+            .lineLimit(1)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+    }
+}
+
+/// The usage block's chevron: two `chevronArm` strokes meeting at a right angle,
+/// pointing right, as the design draws a rotated bordered square.
+private struct DisclosureChevron: View {
+    let color: ThemeColor
+    @Environment(\.themeTokens) private var tokens
+
+    var body: some View {
+        let arm = tokens.popover.chevronArm
+        let stroke = tokens.popover.chevronStroke
+        Canvas { context, size in
+            let reach = arm / 2.squareRoot()
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            var path = Path()
+            path.move(to: CGPoint(x: center.x - reach / 2, y: center.y - reach))
+            path.addLine(to: CGPoint(x: center.x + reach / 2, y: center.y))
+            path.addLine(to: CGPoint(x: center.x - reach / 2, y: center.y + reach))
+            context.stroke(path, with: .color(color.color), style: StrokeStyle(lineWidth: stroke, lineJoin: .miter))
+        }
+        .frame(maxHeight: .infinity)
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Themed Popover end
 
 enum HeaderSurfaceColor {
     static let bar = Color.primary.opacity(0.075)
