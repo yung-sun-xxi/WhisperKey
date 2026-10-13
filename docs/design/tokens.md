@@ -18,7 +18,7 @@ points.
 | 03 | `#23262D` | cards, controls, tracks. Dividers on 02 |
 | 04 | `#2E323B` | hover and selected row, inactive keycap, off track. + a control sitting on a 03 card |
 | 05 | `#3B4150` | every edge: shell, control outline, active keycap, divider on 03 |
-| 06 | `#5A6070` | dashed failure edge, traffic lights. + unchecked checkbox edge. Never text |
+| 06 | `#5A6070` | dashed failure edge, traffic lights. + unchecked checkbox edge. + empty-list glyph. Never text |
 | 07 | `#9BA1AF` | secondary type. 6.4:1 on 02 |
 | 07n | `#B4BAC6` | navigation at rest: inactive tabs and segments |
 | 08 | `#E8EAEF` | primary type. + checked checkbox fill |
@@ -75,6 +75,7 @@ points.
 | bar | 2×18 | |
 | widths | panel 320 · quick paste 328 · toast 380 | |
 | + settings window | 520 | Settings, both themes |
+| + empty-list glyph | 22 | SF title size, tray in Full history |
 
 The standard row heights asked for in #105 are **list row 34** and **form row 32**. The form row was 40
 until 2026-10-11, when the Settings window was made one size in both themes: 520 wide, rows of 32.
@@ -95,6 +96,7 @@ Text edge 16 in panels, 20 in windows. Rows inset 8 from the shell with 8 inside
 - **Row names**: 34 is now "list row", 40 "form row"
 - **Theme picker**: 40 icon, radius 8. Selected: 2pt red outline, offset 2. Rest: 05 edge, hover 04 fill
 - **Green, failure**: extended to Granted and Needs access
+- **Empty list**: tray glyph 22 in 06, 4 above a 13/400 line in 07, centred both ways
 
 ## Quick paste popup
 
