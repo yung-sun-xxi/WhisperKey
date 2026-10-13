@@ -34,7 +34,7 @@
         <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#23262D;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">03 #23262D</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">cards, controls, tracks. Dividers on 02</div></div></div>
         <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#2E323B;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">04 #2E323B</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">hover and selected row, inactive keycap, off track. + a control sitting on a 03 card</div></div></div>
         <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#3B4150;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">05 #3B4150</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">every edge: shell, control outline, active keycap, divider on 03</div></div></div>
-        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#5A6070;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">06 #5A6070</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">dashed failure edge, traffic lights. + unchecked checkbox edge. Never text</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#5A6070;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">06 #5A6070</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">dashed failure edge, traffic lights. + unchecked checkbox edge. + empty-list glyph. Never text</div></div></div>
         <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#9BA1AF;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">07 #9BA1AF</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">secondary type. 6.4:1 on 02</div></div></div>
         <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#B4BAC6;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">07n #B4BAC6</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">navigation at rest: inactive tabs and segments</div></div></div>
         <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#E8EAEF;flex:none"></div><div><div style="font-size:12px;color:#E8EAEF">08 #E8EAEF</div><div style="font-size:11px;color:#9BA1AF;line-height:1.4">primary type. + checked checkbox fill</div></div></div>
@@ -83,6 +83,7 @@
         <div><span style="color:#9BA1AF">toggle</span> 28×16 · <span style="color:#9BA1AF">+ checkbox</span> 14 · <span style="color:#9BA1AF">dot</span> 6 · <span style="color:#9BA1AF">bar</span> 2×18</div>
         <div><span style="color:#9BA1AF">widths</span> panel 320 · quick paste 328 · toast 380</div>
         <div><span style="color:#9BA1AF">+ settings window</span> 520 <span style="color:#9BA1AF">· Settings, both themes</span></div>
+        <div><span style="color:#9BA1AF">+ empty-list glyph</span> 22 <span style="color:#9BA1AF">· SF title size, tray in Full history</span></div>
       </div>
     </div>
 
@@ -109,6 +110,7 @@
         <div><strong style="font-weight:600">Row names</strong> <span style="color:#9BA1AF">— 34 is now “list row”, 40 “form row”</span></div>
         <div><strong style="font-weight:600">Theme picker</strong> <span style="color:#9BA1AF">— 40 icon, radius 8. Selected: 2pt red outline, offset 2. Rest: 05 edge, hover 04 fill</span></div>
         <div><strong style="font-weight:600">Green, failure</strong> <span style="color:#9BA1AF">— extended to Granted and Needs access</span></div>
+        <div><strong style="font-weight:600">Empty list</strong> <span style="color:#9BA1AF">— tray glyph 22 in 06, 4 above a 13/400 line in 07, centred both ways</span></div>
       </div>
     </div>
   </div>
@@ -770,6 +772,33 @@
       </div>
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
         <div style="margin-top:12px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> Settings’ chrome, with the tab well turned into the count bar; the rows are the popover’s rows unchanged, only the timestamp is absolute.</div>
+      </sc-if>
+    </div>
+
+    <div style="width:560px;flex:none" data-screen-label="Full history empty">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#9BA1AF;margin-bottom:10px">3b · FULL HISTORY · EMPTY</div>
+      <div style="width:560px;height:500px;display:flex;flex-direction:column;background:#1A1C21;border:1px solid #3B4150;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.45);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;flex:none;display:flex;align-items:center;padding:0 16px;background:#14161A">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div><div style="width:12px;height:12px;border-radius:6px;background:#5A6070"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#E8EAEF;pointer-events:none">WhisperKey History</div>
+        </div>
+        <div style="height:48px;flex:none;display:flex;align-items:center;gap:6px;padding:0 20px;background:#14161A;border-top:1px solid #23262D;box-sizing:border-box">
+          <div style="font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums">0</div>
+          <div style="font-size:11px;color:#9BA1AF;flex:1">entries</div>
+          <div style="font-size:13px;color:#9BA1AF;line-height:24px;padding:0 10px;border-radius:6px;background:transparent;border:1px solid #3B4150">Clear history</div>
+        </div>
+        <div style="flex:1;min-height:0;overflow:hidden;border-top:1px solid #23262D;padding:8px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+          <div title="SF Symbol tray, 22" style="position:relative;width:24px;height:18px;flex:none">
+            <div style="position:absolute;inset:0;border:1.5px solid #5A6070;border-radius:4px;box-sizing:border-box"></div>
+            <div style="position:absolute;left:0;top:9px;width:8px;height:1.5px;background:#5A6070"></div>
+            <div style="position:absolute;right:0;top:9px;width:8px;height:1.5px;background:#5A6070"></div>
+            <div style="position:absolute;left:6.5px;right:6.5px;top:9px;height:4.5px;border:1.5px solid #5A6070;border-top:none;border-radius:0 0 2px 2px;box-sizing:border-box"></div>
+          </div>
+          <div style="font-size:13px;color:#9BA1AF">No transcriptions yet</div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#9BA1AF;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#E8EAEF">Borrows</strong> Full history unchanged down to the list area. Clear history is the sheet’s disabled control. The list area holds only the tray glyph (22 in 06) and one 13/400 line in 07, 4 apart, centred both ways.</div>
       </sc-if>
     </div>
 
