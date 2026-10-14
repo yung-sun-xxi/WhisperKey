@@ -44,6 +44,8 @@ public struct ThemeTokens: Equatable, Sendable {
     public var toast: ToastMetrics
     /// The full history window: its size, count bar, list area, rows and empty list.
     public var fullHistory: FullHistoryMetrics
+    /// The history entry reader: its size, date line, text card and action bar.
+    public var historyReader: HistoryReaderMetrics
 
     public init(
         theme: AppTheme,
@@ -60,7 +62,8 @@ public struct ThemeTokens: Equatable, Sendable {
         popover: PopoverMetrics,
         quickPasteMarker: QuickPasteMarkerMetrics,
         toast: ToastMetrics,
-        fullHistory: FullHistoryMetrics
+        fullHistory: FullHistoryMetrics,
+        historyReader: HistoryReaderMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -77,6 +80,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.quickPasteMarker = quickPasteMarker
         self.toast = toast
         self.fullHistory = fullHistory
+        self.historyReader = historyReader
     }
 }
 
@@ -980,6 +984,62 @@ public extension ThemeTokens {
             self.timestamp = timestamp
             self.emptyGlyph = emptyGlyph
             self.emptyGap = emptyGap
+        }
+    }
+}
+
+// MARK: - The history entry reader
+
+public extension ThemeTokens {
+    /// The history entry reader (#165): Settings' chrome (the system titlebar over the
+    /// window's `surface`) with a `divider` line under it; the content padded to the
+    /// window text edge holds the date line in `secondaryText` (the date, then the
+    /// language tag in `type.caption`) and the text in a `card` of `radii.card`, the body
+    /// at `type.bodyLineHeight`; then an action bar `sizes.actionBar` tall on `bar` under
+    /// a `divider` line, holding the drawn push buttons. The rest is here.
+    struct HistoryReaderMetrics: Equatable, Sendable {
+        /// The window's content, under the titlebar, and its least size.
+        public var contentSize: CGSize
+        public var minContentSize: CGSize
+        /// The lines under the titlebar and above the action bar.
+        public var dividerWidth: CGFloat
+        /// The content's padding above the date line and below the card; on each side it
+        /// is `spacing.windowTextEdge`.
+        public var contentPaddingVertical: CGFloat
+        /// Between the date line and the card.
+        public var contentGap: CGFloat
+        /// The date.
+        public var date: ThemeFont
+        /// Between the date and the language tag after it.
+        public var languageGap: CGFloat
+        /// Inside the card, around the text.
+        public var cardPaddingVertical: CGFloat
+        public var cardPaddingHorizontal: CGFloat
+        /// Between the action bar's buttons.
+        public var actionGap: CGFloat
+
+        public init(
+            contentSize: CGSize,
+            minContentSize: CGSize,
+            dividerWidth: CGFloat,
+            contentPaddingVertical: CGFloat,
+            contentGap: CGFloat,
+            date: ThemeFont,
+            languageGap: CGFloat,
+            cardPaddingVertical: CGFloat,
+            cardPaddingHorizontal: CGFloat,
+            actionGap: CGFloat
+        ) {
+            self.contentSize = contentSize
+            self.minContentSize = minContentSize
+            self.dividerWidth = dividerWidth
+            self.contentPaddingVertical = contentPaddingVertical
+            self.contentGap = contentGap
+            self.date = date
+            self.languageGap = languageGap
+            self.cardPaddingVertical = cardPaddingVertical
+            self.cardPaddingHorizontal = cardPaddingHorizontal
+            self.actionGap = actionGap
         }
     }
 }

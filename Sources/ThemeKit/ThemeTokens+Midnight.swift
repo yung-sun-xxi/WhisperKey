@@ -256,6 +256,24 @@ public extension ThemeTokens {
             // and "4 above a 13/400 line in 07".
             emptyGlyph: ThemeFont(size: 22, weight: .regular),
             emptyGap: 4
+        ),
+        // Not on the sheet: the HISTORY READER section of the design file, quoted where it
+        // draws the value, the app's own window size, and the ticket's language tag (#165).
+        historyReader: HistoryReaderMetrics(
+            // The app's: 480 × 280 under the titlebar, at least 360 × 220.
+            contentSize: CGSize(width: 480, height: 280),
+            minContentSize: CGSize(width: 360, height: 220),
+            dividerWidth: 1,            // "border-top:1px solid #23262D"
+            contentPaddingVertical: 14, // the content, "gap:8px;padding:14px 20px"
+            contentGap: 8,
+            // "font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums"
+            date: ThemeFont(size: 11, weight: .regular, tabularDigits: true),
+            // Not in the mockup: the ticket keeps the tag in caps right after the date;
+            // the count bar's gap between a number and its noun.
+            languageGap: 6,
+            cardPaddingVertical: 10,    // the card, "padding:10px 14px"
+            cardPaddingHorizontal: 14,
+            actionGap: 8                // the action bar, "gap:8px;padding:0 20px"
         )
     )
 }
