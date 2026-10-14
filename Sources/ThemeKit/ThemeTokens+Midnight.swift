@@ -234,6 +234,28 @@ public extension ThemeTokens {
             closeButton: 20,
             closeGlyph: ThemeFont(size: 9, weight: .bold),
             closeEdgeWidth: 0.5
+        ),
+        // Not on the sheet: the FULL HISTORY section of the design file, quoted where it
+        // draws the value, and the app's own window size (#164).
+        fullHistory: FullHistoryMetrics(
+            // The app's: 560 × 500 under the titlebar, at least 420 × 320.
+            contentSize: CGSize(width: 560, height: 500),
+            minContentSize: CGSize(width: 420, height: 320),
+            dividerWidth: 1,          // "border-top:1px solid #23262D"
+            // "font-size:13px;color:#E8EAEF;font-variant-numeric:tabular-nums"
+            count: ThemeFont(size: 13, weight: .regular, tabularDigits: true),
+            countGap: 6,              // the count bar, "gap:6px"
+            listPaddingVertical: 8,   // the list area, "padding:8px 12px"
+            listPaddingHorizontal: 12,
+            rowGap: 10,               // a row, "gap:10px", as the popover's
+            // A failed row, "gap:8px"; its timestamp's "margin-left:2px" makes 10.
+            failedRowGap: 8,
+            // "font-size:11px;color:#9BA1AF;font-variant-numeric:tabular-nums"
+            timestamp: ThemeFont(size: 11, weight: .regular, tabularDigits: true),
+            // The sheet's "+ empty-list glyph | 22 | SF title size, tray in Full history",
+            // and "4 above a 13/400 line in 07".
+            emptyGlyph: ThemeFont(size: 22, weight: .regular),
+            emptyGap: 4
         )
     )
 }

@@ -68,6 +68,7 @@ final class MenuBarController: NSObject {
         PopoverSnapshotHook.startIfRequested(controller: self)
         QuickPasteSnapshotHook.startIfRequested(settings: coordinator.settings)
         ToastSnapshotHook.startIfRequested(settings: coordinator.settings)
+        FullHistorySnapshotHook.startIfRequested(coordinator: coordinator)
         #endif
     }
 
