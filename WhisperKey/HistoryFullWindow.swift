@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import ThemeKit
 import HistoryStore
@@ -6,6 +7,7 @@ import HistoryStore
 @MainActor
 enum HistoryFullWindowController {
     private static var window: NSWindow?
+    private static var themeFollower: AnyCancellable?
     private static let delegate = WindowDelegate()
 
     static var relatedWindow: NSWindow? {
@@ -28,8 +30,9 @@ enum HistoryFullWindowController {
         let window = NSWindow(contentViewController: host)
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         window.title = "WhisperKey History"
-        window.setContentSize(NSSize(width: 560, height: 500))
-        window.minSize = NSSize(width: 420, height: 320)
+        // Settings' chrome and the tokens' size, then the theme's colours on every switch.
+        ThemedFullHistoryWindow.configure(window, tokens: ThemeTokensSource.shared.tokens)
+        themeFollower = ThemedFullHistoryWindow.follow(ThemeTokensSource.shared, window: window)
         window.isReleasedWhenClosed = false
         window.level = .floating
         window.center()
@@ -52,6 +55,7 @@ enum HistoryFullWindowController {
 
     static func windowDidClose() {
         TransientWindowStack.shared.unregister(id: "fullHistory")
+        themeFollower = nil
         window = nil
     }
 
@@ -75,6 +79,8 @@ private final class WindowDelegate: NSObject, NSWindowDelegate {
     }
 }
 
+/// The store's entries as rows for `ThemedFullHistoryView`, which draws them (#164), and
+/// what its actions do: copy, open the reader, retry, and Clear history after the alert.
 private struct HistoryFullView: View {
     @ObservedObject var history: HistoryStore
     let coordinator: AppCoordinator
@@ -83,50 +89,24 @@ private struct HistoryFullView: View {
     @State private var ownerWindow: NSWindow?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(countLabel)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Clear history") {
-                    ClearHistoryConfirmation.present(from: ownerWindow) {
-                        history.clear()
-                    }
+        ThemedFullHistoryView(
+            rows: history.entries.map(row),
+            copiedID: copiedID,
+            onClear: {
+                ClearHistoryConfirmation.present(from: ownerWindow) {
+                    history.clear()
                 }
-                .controlSize(.small)
-                .disabled(history.entries.isEmpty)
+            },
+            onCopy: { id in
+                if let entry = entry(id) { copy(entry) }
+            },
+            onOpen: { id in
+                if let entry = entry(id) { open(entry) }
+            },
+            onRetry: { id in
+                if let entry = entry(id) { coordinator.retryHistoryEntry(entry) }
             }
-
-            if history.entries.isEmpty {
-                emptyState
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(history.entries) { entry in
-                            HistoryFullRow(
-                                entry: entry,
-                                copied: copiedID == entry.id,
-                                onCopy: { copy(entry: entry) },
-                                onOpen: {
-                                    HistoryReadWindowController.show(entry: entry) {
-                                        coordinator.retryHistoryEntry(entry)
-                                    }
-                                },
-                                onRetry: { coordinator.retryHistoryEntry(entry) }
-                            )
-                            if entry.id != history.entries.last?.id {
-                                Divider()
-                            }
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-                .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-            }
-        }
-        .padding(14)
-        .frame(minWidth: 420, minHeight: 320)
+        )
         .background {
             WindowAccessor { window in
                 ownerWindow = window
@@ -134,107 +114,43 @@ private struct HistoryFullView: View {
         }
     }
 
-    private var countLabel: String {
-        let count = history.entries.count
-        return count == 1 ? "1 entry" : "\(count) entries"
+    private func row(_ entry: HistoryEntry) -> ThemedFullHistoryView.Row {
+        ThemedFullHistoryView.Row(
+            id: entry.id,
+            text: displayText(entry),
+            timestamp: HistoryTimestamp.string(from: entry.createdAt),
+            isRecognized: entry.status == .recognized,
+            canRetry: entry.canRetryRecognition
+        )
     }
 
-    @ViewBuilder
-    private var emptyState: some View {
-        VStack(spacing: 4) {
-            Image(systemName: "tray")
-                .font(.title)
-                .foregroundStyle(.tertiary)
-            Text("No transcriptions yet")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+    private func entry(_ id: UUID) -> HistoryEntry? {
+        history.entries.first { $0.id == id }
+    }
+
+    private func open(_ entry: HistoryEntry) {
+        HistoryReadWindowController.show(entry: entry) {
+            coordinator.retryHistoryEntry(entry)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func copy(entry: HistoryEntry) {
+    private func copy(_ entry: HistoryEntry) {
         guard entry.status == .recognized else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(entry.text, forType: .string)
         copiedID = entry.id
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            try? await Task.sleep(nanoseconds: ThemedFullHistoryView.copiedCheckNanoseconds)
             if copiedID == entry.id {
                 copiedID = nil
             }
         }
     }
-}
 
-private struct HistoryFullRow: View {
-    let entry: HistoryEntry
-    let copied: Bool
-    let onCopy: () -> Void
-    let onOpen: () -> Void
-    let onRetry: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(displayText)
-                        .font(.system(.callout))
-                        .foregroundStyle(entry.status == .recognized ? .primary : .secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 4) {
-                        Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
-                        if let language = entry.language, !language.isEmpty {
-                            Text("·")
-                            Text(language.uppercased())
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                }
-                Spacer(minLength: 4)
-                if copied {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.green)
-                        .font(.caption)
-                }
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .onTapGesture(perform: handlePrimaryClick)
-            .contextMenu {
-                if entry.canRetryRecognition {
-                    Button("Retry", action: onRetry)
-                }
-                Button("Open in Window", action: onOpen)
-                if entry.status == .recognized {
-                    Button("Copy to Clipboard", action: onCopy)
-                }
-            }
-            .help(displayText)
-
-            if entry.canRetryRecognition {
-                Button("Retry", action: onRetry)
-                    .controlSize(.small)
-                    .padding(.trailing, 8)
-            }
-        }
-    }
-
-    private func handlePrimaryClick() {
-        if entry.status != .recognized || NSEvent.modifierFlags.contains(.shift) {
-            onOpen()
-        } else {
-            onCopy()
-        }
-    }
-
-    private var displayText: String {
+    private func displayText(_ entry: HistoryEntry) -> String {
         switch entry.status {
         case .recognized:
-            entry.preview(maxLength: 320)
+            entry.preview(maxLength: ThemedFullHistoryView.previewLength)
         case .pendingRecognition:
             "File to recognize"
         case .noSpeechDetected:

@@ -42,6 +42,8 @@ public struct ThemeTokens: Equatable, Sendable {
     /// The toast: its card, its close disc and where its window rests. Its shell is
     /// `panels.toast`.
     public var toast: ToastMetrics
+    /// The full history window: its size, count bar, list area, rows and empty list.
+    public var fullHistory: FullHistoryMetrics
 
     public init(
         theme: AppTheme,
@@ -57,7 +59,8 @@ public struct ThemeTokens: Equatable, Sendable {
         settingsWindow: SettingsWindowMetrics,
         popover: PopoverMetrics,
         quickPasteMarker: QuickPasteMarkerMetrics,
-        toast: ToastMetrics
+        toast: ToastMetrics,
+        fullHistory: FullHistoryMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -73,6 +76,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.popover = popover
         self.quickPasteMarker = quickPasteMarker
         self.toast = toast
+        self.fullHistory = fullHistory
     }
 }
 
@@ -913,6 +917,69 @@ public extension ThemeTokens {
             self.closeButton = closeButton
             self.closeGlyph = closeGlyph
             self.closeEdgeWidth = closeEdgeWidth
+        }
+    }
+}
+
+// MARK: - The full history window
+
+public extension ThemeTokens {
+    /// The full history window (#164): Settings' chrome (the system titlebar over the
+    /// window's `surface`), a count bar `sizes.actionBar` tall on `bar` between two
+    /// `divider` lines at the window text edge, then the list area on `surface` holding
+    /// the popover's list rows (`sizes.listRow`, `spacing.rowPadding`) with an absolute
+    /// timestamp. The rest is here.
+    struct FullHistoryMetrics: Equatable, Sendable {
+        /// The window's content, under the titlebar, and its least size.
+        public var contentSize: CGSize
+        public var minContentSize: CGSize
+        /// The lines above and below the count bar.
+        public var dividerWidth: CGFloat
+        /// The number of entries; the noun after it is `type.caption`.
+        public var count: ThemeFont
+        /// Between the number and the noun.
+        public var countGap: CGFloat
+        /// The list area's padding above the first row and below the last, and on each
+        /// side.
+        public var listPaddingVertical: CGFloat
+        public var listPaddingHorizontal: CGFloat
+        /// Between a row's parts: its text, the copied check and the timestamp.
+        public var rowGap: CGFloat
+        /// Between a failed row's text and its Retry button; the timestamp after Retry
+        /// keeps `rowGap`.
+        public var failedRowGap: CGFloat
+        /// A row's timestamp.
+        public var timestamp: ThemeFont
+        /// The empty list's tray, and the gap between it and the line under it.
+        public var emptyGlyph: ThemeFont
+        public var emptyGap: CGFloat
+
+        public init(
+            contentSize: CGSize,
+            minContentSize: CGSize,
+            dividerWidth: CGFloat,
+            count: ThemeFont,
+            countGap: CGFloat,
+            listPaddingVertical: CGFloat,
+            listPaddingHorizontal: CGFloat,
+            rowGap: CGFloat,
+            failedRowGap: CGFloat,
+            timestamp: ThemeFont,
+            emptyGlyph: ThemeFont,
+            emptyGap: CGFloat
+        ) {
+            self.contentSize = contentSize
+            self.minContentSize = minContentSize
+            self.dividerWidth = dividerWidth
+            self.count = count
+            self.countGap = countGap
+            self.listPaddingVertical = listPaddingVertical
+            self.listPaddingHorizontal = listPaddingHorizontal
+            self.rowGap = rowGap
+            self.failedRowGap = failedRowGap
+            self.timestamp = timestamp
+            self.emptyGlyph = emptyGlyph
+            self.emptyGap = emptyGap
         }
     }
 }
