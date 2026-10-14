@@ -69,6 +69,7 @@ final class MenuBarController: NSObject {
         QuickPasteSnapshotHook.startIfRequested(settings: coordinator.settings)
         ToastSnapshotHook.startIfRequested(settings: coordinator.settings)
         FullHistorySnapshotHook.startIfRequested(coordinator: coordinator)
+        HistoryReaderSnapshotHook.startIfRequested(settings: coordinator.settings)
         #endif
     }
 

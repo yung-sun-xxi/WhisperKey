@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import ThemeKit
 import HistoryStore
@@ -6,6 +7,12 @@ import HistoryStore
 @MainActor
 enum HistoryReadWindowController {
     private static var openWindows: [UUID: NSWindow] = [:]
+    private static var themeFollowers: [UUID: AnyCancellable] = [:]
+
+    /// The reader open on `id`, for the Debug build's snapshot hook.
+    static func window(for id: UUID) -> NSWindow? {
+        openWindows[id]
+    }
 
     static func show(entry: HistoryEntry, onRetry: (() -> Void)? = nil) {
         if let existing = openWindows[entry.id] {
@@ -14,10 +21,8 @@ enum HistoryReadWindowController {
             return
         }
 
-        let formattedDate = entry.createdAt.formatted(date: .abbreviated, time: .shortened)
         let contentView = HistoryReadView(
             entry: entry,
-            formattedDate: formattedDate,
             onRetry: onRetry,
             onClose: { close(id: entry.id) }
         )
@@ -26,8 +31,9 @@ enum HistoryReadWindowController {
         let window = NSWindow(contentViewController: host)
         window.styleMask = [.titled, .closable, .resizable]
         window.title = "Transcription"
-        window.setContentSize(NSSize(width: 480, height: 280))
-        window.minSize = NSSize(width: 360, height: 220)
+        // Settings' chrome and the tokens' size, then the theme's colours on every switch.
+        ThemedHistoryReaderWindow.configure(window, tokens: ThemeTokensSource.shared.tokens)
+        themeFollowers[entry.id] = ThemedHistoryReaderWindow.follow(ThemeTokensSource.shared, window: window)
         window.isReleasedWhenClosed = false
         window.level = .floating
         window.center()
@@ -40,6 +46,7 @@ enum HistoryReadWindowController {
     }
 
     static func close(id: UUID) {
+        themeFollowers.removeValue(forKey: id)
         guard let window = openWindows.removeValue(forKey: id) else { return }
         window.close()
     }
@@ -62,65 +69,28 @@ private final class WindowCloseDelegate: NSObject, NSWindowDelegate {
     }
 }
 
+/// The entry as `ThemedHistoryReaderView` shows it (#165): the date in the system's
+/// format, the language, the text or its failure's wording, and what Copy, Retry and Close
+/// do. It draws nothing itself.
 private struct HistoryReadView: View {
     let entry: HistoryEntry
-    let formattedDate: String
     let onRetry: (() -> Void)?
     let onClose: () -> Void
 
-    @State private var didCopy = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(formattedDate)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if let language = entry.language, !language.isEmpty {
-                    Text(language.uppercased())
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.15), in: Capsule())
-                }
-            }
-
-            ScrollView {
-                Text(displayText)
-                    .font(.system(.body, design: .default))
-                    .foregroundStyle(entry.status == .recognized ? .primary : .secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(8)
-            }
-            .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-
-            HStack {
-                if entry.status == .recognized {
-                    Button(didCopy ? "Copied" : "Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(entry.text, forType: .string)
-                        didCopy = true
-                        Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 1_400_000_000)
-                            didCopy = false
-                        }
-                    }
-                    .keyboardShortcut("c", modifiers: [.command])
-                }
-                if entry.canRetryRecognition, let onRetry {
-                    Button("Retry") {
-                        onRetry()
-                        onClose()
-                    }
-                }
-                Spacer()
-                Button("Close", action: onClose)
-                    .keyboardShortcut(.cancelAction)
-            }
-        }
-        .padding(14)
+        ThemedHistoryReaderView(
+            date: entry.createdAt.formatted(date: .abbreviated, time: .shortened),
+            language: entry.language,
+            text: displayText,
+            isRecognized: entry.status == .recognized,
+            canRetry: entry.canRetryRecognition && onRetry != nil,
+            onCopy: {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(entry.text, forType: .string)
+            },
+            onRetry: { onRetry?() },
+            onClose: onClose
+        )
     }
 
     private var displayText: String {
