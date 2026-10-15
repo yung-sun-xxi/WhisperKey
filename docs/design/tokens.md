@@ -28,11 +28,11 @@ points.
 
 | Token | Value | Usage |
 |---|---|---|
-| red | `#E24631` | oklch 0.60 0.196 31°. Trigger caps, active segment and tab, toggle on, 2pt selected-row bar. + default button |
+| red | `#E24631` | oklch 0.60 0.196 31°. Trigger caps, active segment and tab, toggle on, 2pt selected-row bar. + default button. + stop button while recording |
 | red hover | `#D0331F` | hover and pressed on any red fill |
 | on red | `#14161A` | all type and glyphs on red, 4.4:1 |
-| green | `#78BE20` | 6pt dot only: Connected, Saved. + Granted |
-| failure | hatch `#8A909E` at 18% on `#1E2126`, 1px dashed 06 | Failed row, rejected key. + Needs access badge |
+| green | `#78BE20` | 6pt dot only: Connected, Saved. + Granted. + 7pt idle dot in the popover header, copied check on a history row, API key saved |
+| failure | hatch `#8A909E` at 18% on `#1E2126`, 1px dashed 06 | Failed row, rejected key. + Needs access badge. + permission banner. + Invalid key badge |
 | system red | `#FF3B30` | drawn by macOS in alerts. Never on a WhisperKey surface |
 | off knob | `#8A909E` | off-toggle knob and hatch stroke. Shapes only |
 
@@ -72,7 +72,11 @@ points.
 | toggle | 28×16 | |
 | + checkbox | 14 | |
 | dot | 6 | |
+| + idle dot | 7 | popover header, idle |
 | bar | 2×18 | |
+| + stop button | 18 | popover header, while recording |
+| + icon button | 26 | API key validate and delete |
+| + toast close | 20 | |
 | widths | panel 320 · quick paste 328 · toast 380 | |
 | + settings window | 520 | Settings, both themes |
 | + empty-list glyph | 22 | SF title size, tray in Full history |
@@ -97,6 +101,20 @@ Text edge 16 in panels, 20 in windows. Rows inset 8 from the shell with 8 inside
 - **Theme picker**: 40 icon, radius 8. Selected: 2pt red outline, offset 2. Rest: 05 edge, hover 04 fill
 - **Green, failure**: extended to Granted and Needs access
 - **Empty list**: tray glyph 22 in 06, 4 above a 13/400 line in 07, centred both ways
+
+## Added for the app's controls
+
+Added on 2026-10-15, when the design was revised to govern the look only (#173): every surface now
+shows the app's own texts and controls. The sheet's older captions and type samples still name trigger
+caps, the selected-row bar, "⌘K" and "RECENT", which the app does not have; the sheet was left as it
+was on purpose.
+
+- **Stop button**: 18 red disc, 6 square in 01, radius 1. Hover red hover
+- **Icon button**: 26 square, the push button's 03 fill and 05 edge, glyph in 07
+- **Toast close**: 20 disc, 03 fill, 05 edge, 07 xmark; centre on the shell's top-left corner, hover only
+- **Permission banner**: failure hatch, 1px dashed 06, radius 8; 13/600 title, 12 body in 07, push button on 04
+- **Badge tones**: success: 6 green dot + 07 text. Failure: dashed 06. Caution: 04 fill, solid 06 edge, 08 text. Pending: 6 ring in 07 + 07 text
+- **Row menu**: the menu shell: 03, 05 edge, radius 10, 30 items, hover 04
 
 ## Quick paste popup
 
