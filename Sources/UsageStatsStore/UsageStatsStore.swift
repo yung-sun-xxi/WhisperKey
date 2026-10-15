@@ -335,3 +335,23 @@ public final class UsageStatsStore: ObservableObject, @unchecked Sendable {
         return decoder
     }
 }
+
+/// The words of the question asked before "Reset selected…" clears counters (#183).
+public struct UsageResetPrompt: Equatable, Sendable {
+    public static let confirmButtonTitle = "Reset"
+    public static let cancelButtonTitle = "Cancel"
+
+    public let modelCount: Int
+
+    public init(modelCount: Int) {
+        self.modelCount = modelCount
+    }
+
+    public var title: String {
+        modelCount == 1 ? "Reset usage for 1 model?" : "Reset usage for \(modelCount) models?"
+    }
+
+    public var informativeText: String {
+        "Their word, audio and cost totals go back to zero. Transcription history is not affected. This can't be undone."
+    }
+}

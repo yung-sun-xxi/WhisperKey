@@ -46,6 +46,8 @@ public struct ThemeTokens: Equatable, Sendable {
     public var fullHistory: FullHistoryMetrics
     /// The history entry reader: its size, date line, text card and action bar.
     public var historyReader: HistoryReaderMetrics
+    /// The Reset usage window: its width, card, rows and Current pill.
+    public var resetUsage: ResetUsageMetrics
 
     public init(
         theme: AppTheme,
@@ -63,7 +65,8 @@ public struct ThemeTokens: Equatable, Sendable {
         quickPasteMarker: QuickPasteMarkerMetrics,
         toast: ToastMetrics,
         fullHistory: FullHistoryMetrics,
-        historyReader: HistoryReaderMetrics
+        historyReader: HistoryReaderMetrics,
+        resetUsage: ResetUsageMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -81,6 +84,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.toast = toast
         self.fullHistory = fullHistory
         self.historyReader = historyReader
+        self.resetUsage = resetUsage
     }
 }
 
@@ -1040,6 +1044,67 @@ public extension ThemeTokens {
             self.cardPaddingVertical = cardPaddingVertical
             self.cardPaddingHorizontal = cardPaddingHorizontal
             self.actionGap = actionGap
+        }
+    }
+}
+
+// MARK: - The Reset usage window
+
+public extension ThemeTokens {
+    /// The Reset usage window (#183): the system titlebar, a `divider` line, the lead
+    /// line in `secondaryText` over a `card` of `radii.card` holding `sizes.listRow` rows
+    /// (Select all first, a hairline under it), then an action bar `sizes.actionBar` tall
+    /// on `bar` under another `divider` line. The sizes the sheet does not name are here.
+    struct ResetUsageMetrics: Equatable, Sendable {
+        /// The window's content width, under the titlebar.
+        public var contentWidth: CGFloat
+        /// The content's padding above the lead line and below the card; on each side it
+        /// is `spacing.windowTextEdge`.
+        public var contentPaddingTop: CGFloat
+        public var contentPaddingBottom: CGFloat
+        /// Between the lead line and the card.
+        public var cardGap: CGFloat
+        /// The card's padding on the sides and below the last row.
+        public var cardInset: CGFloat
+        /// Between a row's checkbox, its text and its pill.
+        public var rowGap: CGFloat
+        /// The Current pill's side padding.
+        public var pillPadding: CGFloat
+        /// The select-all box's dash: its width, its thickness and its radius.
+        public var mixedMarkWidth: CGFloat
+        public var mixedMarkHeight: CGFloat
+        public var mixedMarkRadius: CGFloat
+        /// Between the action bar's buttons.
+        public var actionGap: CGFloat
+        /// How many model rows show before the card scrolls.
+        public var visibleRows: Int
+
+        public init(
+            contentWidth: CGFloat,
+            contentPaddingTop: CGFloat,
+            contentPaddingBottom: CGFloat,
+            cardGap: CGFloat,
+            cardInset: CGFloat,
+            rowGap: CGFloat,
+            pillPadding: CGFloat,
+            mixedMarkWidth: CGFloat,
+            mixedMarkHeight: CGFloat,
+            mixedMarkRadius: CGFloat,
+            actionGap: CGFloat,
+            visibleRows: Int
+        ) {
+            self.contentWidth = contentWidth
+            self.contentPaddingTop = contentPaddingTop
+            self.contentPaddingBottom = contentPaddingBottom
+            self.cardGap = cardGap
+            self.cardInset = cardInset
+            self.rowGap = rowGap
+            self.pillPadding = pillPadding
+            self.mixedMarkWidth = mixedMarkWidth
+            self.mixedMarkHeight = mixedMarkHeight
+            self.mixedMarkRadius = mixedMarkRadius
+            self.actionGap = actionGap
+            self.visibleRows = visibleRows
         }
     }
 }

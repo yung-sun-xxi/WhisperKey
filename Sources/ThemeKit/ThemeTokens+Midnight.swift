@@ -274,6 +274,23 @@ public extension ThemeTokens {
             cardPaddingVertical: 10,    // the card, "padding:10px 14px"
             cardPaddingHorizontal: 14,
             actionGap: 8                // the action bar, "gap:8px;padding:0 20px"
+        ),
+        // Not on the sheet: the RESET USAGE section of the design file, quoted where it
+        // draws the value (#183).
+        resetUsage: ResetUsageMetrics(
+            contentWidth: 420,          // "width:420px", the window's content
+            contentPaddingTop: 14,      // the content, "padding:14px 20px 16px"
+            contentPaddingBottom: 16,
+            cardGap: 14,                // the card, "margin-top:14px"
+            cardInset: 4,               // the card, "padding:0 4px 4px"
+            rowGap: 10,                 // a row, "gap:10px"
+            pillPadding: 6,             // the Current pill, "padding:0 6px"
+            mixedMarkWidth: 8,          // the mixed mark, "width:8px;height:2px"
+            mixedMarkHeight: 2,
+            mixedMarkRadius: 1,
+            actionGap: 8,               // the action bar, "gap:8px;padding:0 20px"
+            // The app's earlier 160 pt list showed about six rows; the design shows four.
+            visibleRows: 6
         )
     )
 }
