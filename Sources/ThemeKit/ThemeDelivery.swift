@@ -20,7 +20,7 @@ public final class ThemeTokensSource: ObservableObject {
     private var subscription: AnyCancellable?
 
     /// Starts at `theme` and stays there until it follows a store.
-    public init(theme: AppTheme = .classic) {
+    public init(theme: AppTheme = .daylight) {
         tokens = theme.tokens
     }
 
@@ -38,12 +38,12 @@ public final class ThemeTokensSource: ObservableObject {
 }
 
 private struct ThemeTokensKey: EnvironmentKey {
-    static let defaultValue = ThemeTokens.classic
+    static let defaultValue = ThemeTokens.daylight
 }
 
 public extension EnvironmentValues {
     /// The current theme's tokens. Every hosting root sets it through `ThemedRoot`;
-    /// a view outside one sees Classic's tokens.
+    /// a view outside one sees Daylight's tokens.
     var themeTokens: ThemeTokens {
         get { self[ThemeTokensKey.self] }
         set { self[ThemeTokensKey.self] = newValue }

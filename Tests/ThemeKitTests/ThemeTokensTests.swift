@@ -6,7 +6,7 @@ import XCTest
 
 final class ThemeTokensTests: XCTestCase {
     func testEachThemeResolvesToItsOwnValueSet() {
-        XCTAssertEqual(AppTheme.classic.tokens, ThemeTokens.classic)
+        XCTAssertEqual(AppTheme.daylight.tokens, ThemeTokens.daylight)
         XCTAssertEqual(AppTheme.midnight.tokens, ThemeTokens.midnight)
         for theme in AppTheme.allCases {
             XCTAssertEqual(theme.tokens.theme, theme)
@@ -31,7 +31,7 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertNil(ThemeShadow.system.swiftUIRadius)
     }
 
-    func testAViewOutsideAThemedRootSeesClassic() {
-        XCTAssertEqual(EnvironmentValues().themeTokens, ThemeTokens.classic)
+    func testAViewOutsideAThemedRootSeesDaylight() {
+        XCTAssertEqual(EnvironmentValues().themeTokens, ThemeTokens.daylight)
     }
 }

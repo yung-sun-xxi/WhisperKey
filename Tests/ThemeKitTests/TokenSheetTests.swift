@@ -4,7 +4,8 @@ import XCTest
 @testable import ThemeKit
 
 /// Midnight against `docs/design/tokens.md`, read from the file itself, so a change to
-/// the sheet that the tokens do not follow turns this red.
+/// the sheet that the tokens do not follow turns this red. Daylight's colours are held to
+/// the sheet's "Daylight" column the same way, in `DaylightTokenSheetTests` below.
 final class TokenSheetTests: XCTestCase {
     private var sheet: TokenSheet!
     private let midnight = ThemeTokens.midnight
@@ -149,7 +150,7 @@ final class TokenSheetTests: XCTestCase {
         // "+ settings window | 520 | Settings, both themes".
         XCTAssertEqual(window.width, try sheet.size("+ settings window"))
         XCTAssertTrue(try sheet.cell(firstColumn: "settings window", column: 2).contains("both themes"))
-        XCTAssertEqual(ThemeTokens.classic.settingsWindow.width, try sheet.size("+ settings window"))
+        XCTAssertEqual(ThemeTokens.daylight.settingsWindow.width, try sheet.size("+ settings window"))
         XCTAssertTrue(gaps.contains("The tab well band is padded \(n(window.tabWellPadding)) above and below, its track padded \(n(window.tabTrackPadding)) with a \(n(window.tabSegmentGap)) gap between segments \(n(window.tabSegmentHeight)) tall"), gaps)
         XCTAssertTrue(gaps.contains("The row area is padded \(n(window.rowAreaTop)) at the top and \(n(window.rowAreaBottom)) at the bottom"), gaps)
         // Rows are the sheet's form row, back to back, at the window text edge.
@@ -224,6 +225,99 @@ final class TokenSheetTests: XCTestCase {
     }
 }
 
+// MARK: - Daylight
+
+/// Daylight against the sheet's "Daylight" column (#176): every colour role takes the
+/// Daylight value of the token Midnight's role uses, so the two palettes cannot drift
+/// apart in which token a role means.
+final class DaylightTokenSheetTests: XCTestCase {
+    private var sheet: TokenSheet!
+    private let daylight = ThemeTokens.daylight
+    private let midnight = ThemeTokens.midnight
+
+    override func setUpWithError() throws {
+        sheet = try TokenSheet.load()
+    }
+
+    /// The sheet token of each colour role, as `ThemeTokens+Midnight.swift` names it.
+    private let roles: [(String, KeyPath<ThemeTokens.Colors, ThemeColor>, String)] = [
+        ("bar", \.bar, "01"),
+        ("surface", \.surface, "02"),
+        ("settingsSurface", \.settingsSurface, "02"),
+        ("card", \.card, "03"),
+        ("divider", \.divider, "03"),
+        ("selectedRow", \.selectedRow, "04"),
+        ("raisedControl", \.raisedControl, "04"),
+        ("edge", \.edge, "05"),
+        ("mutedEdge", \.mutedEdge, "06"),
+        ("secondaryText", \.secondaryText, "07"),
+        ("navigationText", \.navigationText, "07n"),
+        ("primaryText", \.primaryText, "08"),
+        ("checkboxFill", \.checkboxFill, "08"),
+        ("brand", \.brand, "red"),
+        ("brandHover", \.brandHover, "red hover"),
+        ("onBrand", \.onBrand, "on red"),
+        ("recordingStop", \.recordingStop, "red"),
+        ("success", \.success, "green"),
+        ("offKnob", \.offKnob, "off knob"),
+        ("destructiveText", \.destructiveText, "08"),
+        ("destructiveGlyph", \.destructiveGlyph, "07"),
+        ("failureText", \.failureText, "08"),
+        ("cautionText", \.cautionText, "07"),
+        ("actionGlyph", \.actionGlyph, "07"),
+        ("chipEdge", \.chipEdge, "05"),
+    ]
+
+    func testEveryColourRoleTakesItsTokensDaylightValue() throws {
+        for (name, role, token) in roles {
+            XCTAssertEqual(midnight.colors[keyPath: role], .hex(try sheet.hex(token)), "Midnight \(name) is \(token)")
+            XCTAssertEqual(daylight.colors[keyPath: role], .hex(try sheet.hex(token, .daylight)), "Daylight \(name) is \(token)")
+        }
+        // "hatch `#666C78` at 18% on `#E8E9ED`"
+        let failure = try sheet.hexes("failure", .daylight)
+        XCTAssertEqual(failure.count, 2)
+        XCTAssertEqual(daylight.colors.failureHatch, .hex(failure[0], opacity: 0.18))
+        XCTAssertEqual(daylight.colors.failureFill, .hex(failure[1]))
+    }
+
+    /// The table above covers every role, so a role added later must be placed on the
+    /// sheet before this passes.
+    func testTheRoleTableCoversEveryColour() {
+        let named = Set(roles.map(\.0)).union(["failureFill", "failureHatch"])
+        let all = Set(Mirror(reflecting: daylight.colors).children.compactMap(\.label))
+        XCTAssertEqual(all, named)
+    }
+
+    func testNoTokenIsTheSystemRed() throws {
+        let systemRed = try sheet.hex("system red", .daylight)
+        for child in Mirror(reflecting: daylight.colors).children {
+            XCTAssertNotEqual(child.value as? ThemeColor, .hex(systemRed), child.label ?? "")
+        }
+    }
+
+    /// "02 surface. Panels at 95% + blur 30", edged in 05: Daylight's 02 and 05.
+    func testPanelShellsAreOneShellInDaylightsColours() throws {
+        let surface = try sheet.hex("02", .daylight)
+        let edge = try sheet.hex("05", .daylight)
+        XCTAssertTrue(try sheet.cell(firstColumn: "02", column: 3).contains("Panels at 95%"))
+        for panel in [daylight.panels.popover, daylight.panels.quickPaste, daylight.panels.toast] {
+            XCTAssertEqual(panel.background, .fill(.hex(surface, opacity: 0.95), blur: 30))
+            XCTAssertEqual(panel.edge, .hex(edge))
+            XCTAssertEqual(panel.shadow, .system)
+        }
+    }
+
+    func testShadowsMatchTheLightDesign() throws {
+        let gaps = try sheet.section("Values the surfaces use that the sheet does not list")
+        XCTAssertEqual(try TokenSheet.shadow(in: gaps, after: "light panels"), .drop(color: .hex(0x000000, opacity: 0.16), blur: 48, x: 0, y: 22))
+        XCTAssertEqual(daylight.shadows.window, try TokenSheet.shadow(in: gaps, after: "light windows"))
+        XCTAssertEqual(daylight.shadows.menu, try TokenSheet.shadow(in: gaps, after: "light actions menu"))
+        XCTAssertEqual(daylight.shadows.alert, try TokenSheet.shadow(in: gaps, after: "light mock alert"))
+        // The app's own close disc is in neither design and keeps Midnight's shadow.
+        XCTAssertEqual(daylight.shadows.closeButton, midnight.shadows.closeButton)
+    }
+}
+
 // MARK: - Reading the sheet
 
 struct FontSpec: Equatable, CustomStringConvertible {
@@ -271,16 +365,23 @@ struct TokenSheet {
         return row[column]
     }
 
-    func hex(_ key: String) throws -> UInt32 {
-        let values = try hexes(key)
-        guard values.count == 1 else { throw Missing(what: "single hex for \"\(key)\"") }
+    /// The colour tables' columns: Midnight's value is the second, Daylight's the fourth
+    /// (after the usage, so the usage stays the third column for every reader).
+    enum Palette: Int {
+        case midnight = 1
+        case daylight = 3
+    }
+
+    func hex(_ key: String, _ palette: Palette = .midnight) throws -> UInt32 {
+        let values = try hexes(key, palette)
+        guard values.count == 1 else { throw Missing(what: "single \(palette) hex for \"\(key)\"") }
         return values[0]
     }
 
-    func hexes(_ key: String) throws -> [UInt32] {
-        let value = try cell(firstColumn: key, column: 1)
+    func hexes(_ key: String, _ palette: Palette = .midnight) throws -> [UInt32] {
+        let value = try cell(firstColumn: key, column: palette.rawValue)
         let values = Self.matches(of: "#([0-9A-Fa-f]{6})", in: value).compactMap { UInt32($0[1], radix: 16) }
-        guard !values.isEmpty else { throw Missing(what: "hex for \"\(key)\"") }
+        guard !values.isEmpty else { throw Missing(what: "\(palette) hex for \"\(key)\"") }
         return values
     }
 

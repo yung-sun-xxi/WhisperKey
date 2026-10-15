@@ -304,9 +304,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.usageStatsRange, .last30Days)
     }
 
-    func testThemeDefaultsToClassicWhenEmpty() {
+    func testThemeDefaultsToDaylightWhenEmpty() {
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
-        XCTAssertEqual(store.theme, .classic)
+        XCTAssertEqual(store.theme, .daylight)
     }
 
     func testThemePersistsAcrossInstances() {
@@ -316,10 +316,10 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.theme, .midnight)
     }
 
-    func testUnknownStoredThemeLoadsAsClassic() {
+    func testUnknownStoredThemeLoadsAsDaylight() {
         defaults.set("no-such-theme", forKey: "WhisperKey.settings.theme")
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
-        XCTAssertEqual(store.theme, .classic)
+        XCTAssertEqual(store.theme, .daylight)
     }
 
     func testMakeProviderReturnsOpenAIWhenKeyPresent() {

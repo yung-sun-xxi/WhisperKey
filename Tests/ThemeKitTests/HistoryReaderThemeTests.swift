@@ -65,7 +65,7 @@ final class HistoryReaderThemeTests: XCTestCase {
     }
 
     func testBothThemesShareTheHistoryReader() {
-        XCTAssertEqual(ThemeTokens.classic.historyReader, midnight.historyReader)
+        XCTAssertEqual(ThemeTokens.daylight.historyReader, midnight.historyReader)
     }
 
     // MARK: - Words and timing
@@ -314,7 +314,7 @@ final class HistoryReaderThemeTests: XCTestCase {
         let host = NSHostingView(rootView: ThemedRoot("test", source: source) { reader() })
         settle(host)
         let before = host.fittingSize
-        store.theme = .classic
+        store.theme = .daylight
         settle(host)
         XCTAssertEqual(host.fittingSize, before)
         store.theme = .midnight
@@ -348,12 +348,13 @@ final class HistoryReaderThemeTests: XCTestCase {
         window.setFrameOrigin(NSPoint(x: 123, y: 234))
         let frame = window.frame
 
-        for theme in [AppTheme.classic, .midnight] {
+        for theme in [AppTheme.daylight, .midnight] {
             window.backgroundColor = .systemPink
-            window.appearance = NSAppearance(named: .aqua)
+            // The opposite of the theme's appearance, so the switch has to set it.
+            window.appearance = NSAppearance(named: theme.tokens.windowAppearance == .dark ? .aqua : .darkAqua)
             store.theme = theme
             XCTAssertEqual(window.backgroundColor, theme.tokens.colors.surface.nsColor, "\(theme)")
-            XCTAssertEqual(window.appearance?.name, .darkAqua, "\(theme)")
+            XCTAssertEqual(window.appearance?.name, theme.tokens.windowAppearance.nsAppearance?.name, "\(theme)")
             XCTAssertEqual(window.frame, frame, "\(theme)")
         }
     }

@@ -1,9 +1,12 @@
-# Design tokens: Midnight (dark) theme
+# Design tokens: Midnight (dark) and Daylight (light) themes
 
-Source of truth: the "Token sheet" section of [`dark/master-design.dc.html`](dark/master-design.dc.html).
-This file transcribes it; if the two disagree, the design file wins.
+Source of truth: the "Token sheet" section of [`dark/master-design.dc.html`](dark/master-design.dc.html)
+for Midnight, and the "Token table" section of [`light/master-design.dc.html`](light/master-design.dc.html)
+for Daylight's colours. This file transcribes them; if they disagree, the design files win.
 
-The second theme (Classic) currently equals Midnight and will differ from it only in colours.
+The second theme, Daylight, is Midnight in a light palette: it differs only in colours (and the window
+appearance that follows them). The "Daylight" column gives its value for each colour token; every
+other table holds for both themes.
 
 Values and usage notes are copied as the sheet states them. A leading **+** marks an item the sheet
 says was added in the last design round because a surface needed it. Numbers without a unit are
@@ -11,30 +14,30 @@ points.
 
 ## Greys
 
-| Token | Value | Usage |
-|---|---|---|
-| 01 | `#14161A` | bars: status, footer, titlebar, tab well, action bar. Type on red |
-| 02 | `#1A1C21` | surface. Panels at 95% + blur 30, windows solid |
-| 03 | `#23262D` | cards, controls, tracks. Dividers on 02 |
-| 04 | `#2E323B` | hover and selected row, inactive keycap, off track. + a control sitting on a 03 card |
-| 05 | `#3B4150` | every edge: shell, control outline, active keycap, divider on 03 |
-| 06 | `#5A6070` | dashed failure edge, traffic lights. + unchecked checkbox edge. + empty-list glyph. Never text |
-| 07 | `#9BA1AF` | secondary type. 6.4:1 on 02 |
-| 07n | `#B4BAC6` | navigation at rest: inactive tabs and segments |
-| 08 | `#E8EAEF` | primary type. + checked checkbox fill |
-| + 00 | `#0E1013` | desktop behind this board. Presentation only, not in the app |
+| Token | Midnight | Usage | Daylight |
+|---|---|---|---|
+| 01 | `#14161A` | bars: status, footer, titlebar, tab well, action bar. Type on red | `#F8F9FB` |
+| 02 | `#1A1C21` | surface. Panels at 95% + blur 30, windows solid | `#EFF0F3`. Panels at 95% |
+| 03 | `#23262D` | cards, controls, tracks. Dividers on 02 | `#E0E2E6` |
+| 04 | `#2E323B` | hover and selected row, inactive keycap, off track. + a control sitting on a 03 card | `#D0D3D8` |
+| 05 | `#3B4150` | every edge: shell, control outline, active keycap, divider on 03 | `#B8BCC4` |
+| 06 | `#5A6070` | dashed failure edge, traffic lights. + unchecked checkbox edge. + empty-list glyph. Never text | `#8C929F` |
+| 07 | `#9BA1AF` | secondary type. 6.4:1 on 02 | `#515763`. 6.4:1 on 02 |
+| 07n | `#B4BAC6` | navigation at rest: inactive tabs and segments | `#424854` |
+| 08 | `#E8EAEF` | primary type. + checked checkbox fill | `#16181D` |
+| + 00 | `#0E1013` | desktop behind this board. Presentation only, not in the app | `#F2F2F7` |
 
 ## Brand, state, system
 
-| Token | Value | Usage |
-|---|---|---|
-| red | `#E24631` | oklch 0.60 0.196 31°. Trigger caps, active segment and tab, toggle on, 2pt selected-row bar. + default button. + stop button while recording |
-| red hover | `#D0331F` | hover and pressed on any red fill |
-| on red | `#14161A` | all type and glyphs on red, 4.4:1 |
-| green | `#78BE20` | 6pt dot only: Connected, Saved. + Granted. + 7pt idle dot in the popover header, copied check on a history row, API key saved |
-| failure | hatch `#8A909E` at 18% on `#1E2126`, 1px dashed 06 | Failed row, rejected key. + Needs access badge. + permission banner. + Invalid key badge |
-| system red | `#FF3B30` | drawn by macOS in alerts. Never on a WhisperKey surface |
-| off knob | `#8A909E` | off-toggle knob and hatch stroke. Shapes only |
+| Token | Midnight | Usage | Daylight |
+|---|---|---|---|
+| red | `#E24631` | oklch 0.60 0.196 31°. Trigger caps, active segment and tab, toggle on, 2pt selected-row bar. + default button. + stop button while recording | `#FF7B5D`. oklch 0.78 0.205 32°, the light design file's "custom" accent at its default; chosen 2026-10-15 |
+| red hover | `#D0331F` | hover and pressed on any red fill | `#FF6A4D`. The same hue 0.05 darker |
+| on red | `#14161A` | all type and glyphs on red, 4.4:1 | `#16181D` |
+| green | `#78BE20` | 6pt dot only: Connected, Saved. + Granted. + 7pt idle dot in the popover header, copied check on a history row, API key saved | `#4F8E00` |
+| failure | hatch `#8A909E` at 18% on `#1E2126`, 1px dashed 06 | Failed row, rejected key. + Needs access badge. + permission banner. + Invalid key badge | hatch `#666C78` at 18% on `#E8E9ED`, 1px dashed 06 |
+| system red | `#FF3B30` | drawn by macOS in alerts. Never on a WhisperKey surface | `#FF3B30`, unchanged |
+| off knob | `#8A909E` | off-toggle knob and hatch stroke. Shapes only | `#666C78` |
 
 ## Type (SF)
 
@@ -118,13 +121,13 @@ was on purpose.
 
 ## Quick paste popup
 
-Same sizes in Midnight and Classic; only the colours differ (Classic in brackets).
+Same sizes in Midnight and Daylight; only the colours differ (Daylight in brackets).
 
 | Part | Value |
 |---|---|
 | header bar | **36** tall (panel bar), full width inside the shell, clipped by the shell's radius 12 |
-| header fill | **01** `#14161A` (Classic `#F8F9FB`) |
-| header separator | **1px 03** `#23262D` (Classic `#E0E2E6`), under the bar; rows start below it |
+| header fill | **01** `#14161A` (Daylight `#F8F9FB`) |
+| header separator | **1px 03** `#23262D` (Daylight `#E0E2E6`), under the bar; rows start below it |
 | header label | "CLIPBOARD", 11/500 caps, 0.06em, 07, text edge 16 |
 | rows | list row 34, inset 8 from the shell (8 above the first row), 8 inside |
 | selection | 04 fill, 2×18 red bar at the row's leading edge |
@@ -147,7 +150,11 @@ Values that follow from a sheet token (a 6pt dot at radius 3, a 2pt bar at radiu
 
 1. **Shadows.** The sheet has no shadow tokens, yet every shell carries one: panels
    `0 22px 48px rgba(0,0,0,0.5)`, windows `0 24px 52px rgba(0,0,0,0.45)`, actions menu
-   `0 18px 36px rgba(0,0,0,0.5)`, the mock alert `0 20px 44px rgba(0,0,0,0.6)`.
+   `0 18px 36px rgba(0,0,0,0.5)`, the mock alert `0 20px 44px rgba(0,0,0,0.6)`. Daylight keeps the
+   offsets and blurs with a lighter black, as the light design file draws them: light panels
+   `0 22px 48px rgba(0,0,0,0.16)`, light windows `0 24px 52px rgba(0,0,0,0.14)`, light actions menu
+   `0 18px 36px rgba(0,0,0,0.16)`, light mock alert `0 20px 44px rgba(0,0,0,0.2)`. The light token
+   table lists panel, window and alert sheet; the actions menu value is from the file's mockup.
 2. **Weight 500 on red fills.** The active period segment ("All") is 11/500, the active Settings
    tab and the active "Hold" segment are 12/500. The sheet lists 11/500 only for caps headers and
    has no 12/500; 13/500 appears only for the default button.

@@ -4,7 +4,7 @@ import SettingsStore
 /// Everything a surface needs to know about the look of one theme: colours, type,
 /// radii, sizes, spacing and shadows (#160, part of #105).
 ///
-/// There is one value set per `AppTheme` case, `ThemeTokens.classic` and
+/// There is one value set per `AppTheme` case, `ThemeTokens.daylight` and
 /// `ThemeTokens.midnight`, and `AppTheme.tokens` picks it. A third theme is one new
 /// `AppTheme` case plus one value set; the switch in `AppTheme.tokens` refuses to
 /// compile until the value set exists.
@@ -16,7 +16,7 @@ import SettingsStore
 /// The names follow the roles of the Midnight token sheet (`docs/design/tokens.md`);
 /// each doc comment quotes the sheet's number or usage. The themes differ only in
 /// colours (decided 2026-10-11): one layout, one set of drawn controls, one window
-/// chrome. Classic is Midnight under its own id until it gets its own palette.
+/// chrome. Daylight is Midnight in a light palette.
 public struct ThemeTokens: Equatable, Sendable {
     public var theme: AppTheme
     public var colors: Colors
@@ -95,7 +95,7 @@ public extension AppTheme {
     /// The value set this theme draws with.
     var tokens: ThemeTokens {
         switch self {
-        case .classic: return .classic
+        case .daylight: return .daylight
         case .midnight: return .midnight
         }
     }
