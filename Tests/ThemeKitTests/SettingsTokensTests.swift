@@ -5,15 +5,15 @@ import XCTest
 /// The Settings window's tokens (#162). The themes differ only in colours
 /// (`ThemeParityTests`); Midnight is held to the token sheet in `TokenSheetTests`.
 final class SettingsTokensTests: XCTestCase {
-    private let classic = ThemeTokens.classic
+    private let daylight = ThemeTokens.daylight
     private let midnight = ThemeTokens.midnight
 
     // MARK: - Window
 
-    /// Both themes are dark for now; the appearance is a token so a light palette can
-    /// set it.
-    func testBothThemesGiveTheWindowADarkAppearance() {
-        XCTAssertEqual(classic.windowAppearance, .dark)
+    /// The appearance follows the palette: Daylight is light, Midnight dark, so the
+    /// system's titlebar, menus and alerts match.
+    func testEachThemeGivesTheWindowItsPalettesAppearance() {
+        XCTAssertEqual(daylight.windowAppearance, .light)
         XCTAssertEqual(midnight.windowAppearance, .dark)
         XCTAssertEqual(WindowAppearance.dark.nsAppearance?.name, .darkAqua)
         XCTAssertEqual(WindowAppearance.light.nsAppearance?.name, .aqua)
@@ -21,7 +21,7 @@ final class SettingsTokensTests: XCTestCase {
 
     /// 520 wide, rows of 32 back to back, the same row-area padding and text edge.
     func testBothThemesShareTheSettingsWindowsWidthAndRows() {
-        for tokens in [classic, midnight] {
+        for tokens in [daylight, midnight] {
             let window = tokens.settingsWindow
             let theme = tokens.theme.rawValue
             XCTAssertEqual(window.width, 520, theme)
@@ -39,7 +39,7 @@ final class SettingsTokensTests: XCTestCase {
 
     /// The tab well's track metrics.
     func testTheTabTrackMetrics() {
-        for tokens in [classic, midnight] {
+        for tokens in [daylight, midnight] {
             let window = tokens.settingsWindow
             XCTAssertEqual(window.tabSegmentHeight, 26, tokens.theme.rawValue)
             XCTAssertEqual(window.tabTrackPadding, 2, tokens.theme.rawValue)
@@ -55,7 +55,7 @@ final class SettingsTokensTests: XCTestCase {
         for rows in 0...8 {
             for hints in 0...1 {
                 XCTAssertEqual(
-                    SettingsWindowGeometry.contentHeight(classic, rows: rows, hintLines: hints),
+                    SettingsWindowGeometry.contentHeight(daylight, rows: rows, hintLines: hints),
                     SettingsWindowGeometry.contentHeight(midnight, rows: rows, hintLines: hints),
                     "rows \(rows), hints \(hints)"
                 )
@@ -71,9 +71,9 @@ final class SettingsTokensTests: XCTestCase {
         XCTAssertEqual(SettingsWindowGeometry.headerHeight(midnight), 60)
         XCTAssertEqual(SettingsWindowGeometry.paneHeight(midnight, rows: 4), 154)
         XCTAssertEqual(SettingsWindowGeometry.contentHeight(midnight, rows: 4), 214)
-        XCTAssertEqual(SettingsWindowGeometry.contentHeight(classic, rows: 4), 214)
+        XCTAssertEqual(SettingsWindowGeometry.contentHeight(daylight, rows: 4), 214)
         // Quick paste on: five rows and the hint line.
-        XCTAssertEqual(SettingsWindowGeometry.paneHeight(classic, rows: 5, hintLines: 1), 202)
+        XCTAssertEqual(SettingsWindowGeometry.paneHeight(daylight, rows: 5, hintLines: 1), 202)
     }
 
     /// The Theme chips keep the app's earlier sizes at the control height.

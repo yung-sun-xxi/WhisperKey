@@ -26,8 +26,8 @@ final class ThemeTokensSourceTests: XCTestCase {
         return store
     }
 
-    func testStartsInClassicUntilItFollowsAStore() {
-        XCTAssertEqual(ThemeTokensSource().tokens, .classic)
+    func testStartsInDaylightUntilItFollowsAStore() {
+        XCTAssertEqual(ThemeTokensSource().tokens, .daylight)
     }
 
     func testTakesTheStoresThemeAtOnce() {
@@ -38,7 +38,7 @@ final class ThemeTokensSourceTests: XCTestCase {
 
     /// The live update: a theme switched in Settings reaches an already-built root.
     func testFollowsEveryThemeChange() {
-        let store = makeStore(theme: .classic)
+        let store = makeStore(theme: .daylight)
         let source = ThemeTokensSource()
         source.follow(store)
         var published: [AppTheme] = []
@@ -46,15 +46,15 @@ final class ThemeTokensSourceTests: XCTestCase {
 
         store.theme = .midnight
         XCTAssertEqual(source.tokens, .midnight)
-        store.theme = .classic
-        XCTAssertEqual(source.tokens, .classic)
-        XCTAssertEqual(published, [.midnight, .classic])
+        store.theme = .daylight
+        XCTAssertEqual(source.tokens, .daylight)
+        XCTAssertEqual(published, [.midnight, .daylight])
         subscription.cancel()
     }
 
     /// Several roots follow the same store; the source must not republish per root.
     func testFollowingTheSameStoreAgainChangesNothing() {
-        let store = makeStore(theme: .classic)
+        let store = makeStore(theme: .daylight)
         let source = ThemeTokensSource()
         source.follow(store)
         var published = 0
@@ -81,7 +81,7 @@ final class ThemeTokensSourceTests: XCTestCase {
     }
 
     func testFollowingAnotherStoreLeavesTheFirst() {
-        let first = makeStore(theme: .classic)
+        let first = makeStore(theme: .daylight)
         let second = makeStore(theme: .midnight)
         let source = ThemeTokensSource()
         source.follow(first)
@@ -89,7 +89,7 @@ final class ThemeTokensSourceTests: XCTestCase {
         XCTAssertEqual(source.tokens, .midnight)
 
         first.theme = .midnight
-        first.theme = .classic
+        first.theme = .daylight
         XCTAssertEqual(source.tokens, .midnight, "the first store no longer drives it")
     }
 }

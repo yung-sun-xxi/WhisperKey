@@ -56,8 +56,8 @@ final class QuickPasteThemeTests: XCTestCase {
     }
 
     func testBothThemesShareOneGeometry() {
-        XCTAssertEqual(ThemeTokens.classic.quickPasteMetrics, midnight.quickPasteMetrics)
-        XCTAssertEqual(ThemeTokens.classic.quickPasteMarker, midnight.quickPasteMarker)
+        XCTAssertEqual(ThemeTokens.daylight.quickPasteMetrics, midnight.quickPasteMetrics)
+        XCTAssertEqual(ThemeTokens.daylight.quickPasteMarker, midnight.quickPasteMarker)
     }
 
     func testPanelSizeFromTheTokens() {

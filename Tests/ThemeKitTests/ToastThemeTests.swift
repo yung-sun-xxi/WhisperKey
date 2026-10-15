@@ -52,8 +52,8 @@ final class ToastThemeTests: XCTestCase {
     }
 
     func testBothThemesShareTheToast() {
-        XCTAssertEqual(ThemeTokens.classic.toast, midnight.toast)
-        XCTAssertEqual(ThemeTokens.classic.toastWindowWidth, midnight.toastWindowWidth)
+        XCTAssertEqual(ThemeTokens.daylight.toast, midnight.toast)
+        XCTAssertEqual(ThemeTokens.daylight.toastWindowWidth, midnight.toastWindowWidth)
     }
 
     /// The window is the card plus the margin on both sides, and rests where the card used
@@ -121,7 +121,7 @@ final class ToastThemeTests: XCTestCase {
             let host = NSHostingView(rootView: ThemedRoot("test", source: source) { view(content) })
             settle(host)
             let before = host.fittingSize
-            store.theme = .classic
+            store.theme = .daylight
             settle(host)
             XCTAssertEqual(host.fittingSize, before, content.message)
             store.theme = .midnight

@@ -51,17 +51,19 @@ public enum TranscriptionProviderID: String, CaseIterable, Codable, Sendable {
     public var keychainAccount: String { "apiKey" }
 }
 
-/// The app's look, chosen in General settings. Both themes render the existing light
-/// look for now; the Midnight colours arrive with #105. A third theme is a new case here.
+/// The app's look, chosen in General settings: Daylight (light) or Midnight (dark), one
+/// layout in two palettes. A third theme is a new case here.
 public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
-    case classic
+    /// Stored as "classic", the theme's name before it became Daylight, so the setting
+    /// of existing users still resolves.
+    case daylight = "classic"
     case midnight
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
-        case .classic: return "Classic"
+        case .daylight: return "Daylight"
         case .midnight: return "Midnight"
         }
     }
@@ -307,8 +309,8 @@ public final class SettingsStore: ObservableObject {
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.usageStatsRange = (defaults.string(forKey: DefaultsKey.usageStatsRange).flatMap(UsageStatsRange.init(rawValue:))) ?? .today
-        // Missing or unknown (a theme removed in a later version) falls back to Classic.
-        self.theme = (defaults.string(forKey: DefaultsKey.theme).flatMap(AppTheme.init(rawValue:))) ?? .classic
+        // Missing or unknown (a theme removed in a later version) falls back to Daylight.
+        self.theme = (defaults.string(forKey: DefaultsKey.theme).flatMap(AppTheme.init(rawValue:))) ?? .daylight
         self.quickPasteEnabled = (defaults.object(forKey: DefaultsKey.quickPasteEnabled) as? Bool) ?? false
         let storedHoldDuration = (defaults.object(forKey: DefaultsKey.quickPasteHoldDuration) as? Double)
             ?? Self.defaultQuickPasteHoldDuration

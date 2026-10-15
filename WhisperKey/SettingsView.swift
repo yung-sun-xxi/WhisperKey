@@ -1905,7 +1905,7 @@ private enum APIKeyDeletionConfirmation {
 }
 
 /// The Theme row: one chip per theme — the theme's icon and its name — the selected
-/// chip outlined in the brand colour (the accent colour in Classic), the others in
+/// chip outlined in the brand colour, the others in
 /// `chipEdge`. The chips fit the control height, so the row keeps the pane's rhythm.
 private struct ThemePicker: View {
     @Binding var selection: AppTheme
@@ -1955,7 +1955,7 @@ private struct ThemePicker: View {
 
     private static func iconName(for theme: AppTheme) -> String {
         switch theme {
-        case .classic: "ThemeIconClassic"
+        case .daylight: "ThemeIconClassic"
         case .midnight: "ThemeIconMidnight"
         }
     }

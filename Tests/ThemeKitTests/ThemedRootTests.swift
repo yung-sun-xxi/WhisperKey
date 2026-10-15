@@ -47,7 +47,7 @@ final class ThemedRootTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
-        store.theme = .classic
+        store.theme = .daylight
         let source = ThemeTokensSource()
         source.follow(store)
 
@@ -56,14 +56,14 @@ final class ThemedRootTests: XCTestCase {
             Reader(seen: seen)
         })
         render(host)
-        XCTAssertEqual(seen.themes.last, .classic)
+        XCTAssertEqual(seen.themes.last, .daylight)
 
         store.theme = .midnight
         render(host)
         XCTAssertEqual(seen.themes.last, .midnight)
 
-        store.theme = .classic
+        store.theme = .daylight
         render(host)
-        XCTAssertEqual(seen.themes.last, .classic)
+        XCTAssertEqual(seen.themes.last, .daylight)
     }
 }
