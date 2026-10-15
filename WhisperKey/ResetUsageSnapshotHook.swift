@@ -72,22 +72,30 @@ enum ResetUsageSnapshotHook {
             settings.theme = theme
             await settle()
             for state in states {
-                UsageResetWindowController.show(
-                    currentKey: current,
-                    initialSelection: state.selection,
-                    parent: nil,
-                    onReset: { keys in log.info("hook reset tapped for \(keys.count) models") }
-                )
-                await settle()
-                guard let window = UsageResetWindowController.openWindow else {
+                // A click anywhere else dismisses the window (the transient stack's
+                // outside-click monitor), so a vanished window is opened again.
+                var shown: NSWindow?
+                for attempt in 1...3 where shown == nil {
+                    UsageResetWindowController.show(
+                        currentKey: current,
+                        initialSelection: state.selection,
+                        parent: nil,
+                        onReset: { keys in log.info("hook reset tapped for \(keys.count) models") }
+                    )
+                    await settle()
+                    shown = UsageResetWindowController.openWindow
+                    if shown == nil { lines.append("window dismissed on attempt \(attempt)") }
+                }
+                guard let window = shown else {
                     lines.append("error: no reset window")
                     continue
                 }
+                lines.append(await shoot(window, name: "reset-usage-\(theme.rawValue)\(state.suffix)", in: directory))
                 if state.suffix.isEmpty, let other = AppTheme.allCases.first(where: { $0 != theme }) {
                     lines += await switchTheme(to: other, settings: settings, window: window)
+                    lines.append(await shoot(window, name: "reset-usage-\(theme.rawValue)-switched-to-\(other.rawValue)", in: directory))
                     lines += await switchTheme(to: theme, settings: settings, window: window)
                 }
-                lines.append(await shoot(window, name: "reset-usage-\(theme.rawValue)\(state.suffix)", in: directory))
                 UsageResetWindowController.hide()
                 await settle()
             }
