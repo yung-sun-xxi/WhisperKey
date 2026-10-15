@@ -48,6 +48,8 @@ public struct ThemeTokens: Equatable, Sendable {
     public var historyReader: HistoryReaderMetrics
     /// The Reset usage window: its width, card, rows and Current pill.
     public var resetUsage: ResetUsageMetrics
+    /// The Usage by model window: its width, picker band, card and table columns.
+    public var usageBreakdown: UsageBreakdownMetrics
 
     public init(
         theme: AppTheme,
@@ -66,7 +68,8 @@ public struct ThemeTokens: Equatable, Sendable {
         toast: ToastMetrics,
         fullHistory: FullHistoryMetrics,
         historyReader: HistoryReaderMetrics,
-        resetUsage: ResetUsageMetrics
+        resetUsage: ResetUsageMetrics,
+        usageBreakdown: UsageBreakdownMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -85,6 +88,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.fullHistory = fullHistory
         self.historyReader = historyReader
         self.resetUsage = resetUsage
+        self.usageBreakdown = usageBreakdown
     }
 }
 
@@ -1105,6 +1109,65 @@ public extension ThemeTokens {
             self.mixedMarkRadius = mixedMarkRadius
             self.actionGap = actionGap
             self.visibleRows = visibleRows
+        }
+    }
+}
+
+// MARK: - The Usage by model window
+
+public extension ThemeTokens {
+    /// The Usage by model window (#184): the system titlebar, a `divider` line, the
+    /// popover's period picker on a `bar` band, another `divider` line, then a `card` of
+    /// `radii.card` holding a table of `sizes.listRow` rows padded `spacing.rowPadding`:
+    /// the caps header over an `edge` line, one row per model with `edge` hairlines
+    /// between them, and the Total row under an `edge` line across the card. The sizes the
+    /// sheet does not name are here.
+    struct UsageBreakdownMetrics: Equatable, Sendable {
+        /// The window's content width, under the titlebar, for every period.
+        public var contentWidth: CGFloat
+        /// The picker band's padding above and below the picker; on each side it is
+        /// `spacing.windowTextEdge`.
+        public var barPaddingVertical: CGFloat
+        /// The content's padding above and below the card; on each side it is
+        /// `spacing.windowTextEdge`.
+        public var contentPaddingTop: CGFloat
+        public var contentPaddingBottom: CGFloat
+        /// The card's padding on the sides and below the last row.
+        public var cardInset: CGFloat
+        /// The three figure columns, after the model column that takes the rest.
+        public var wordsColumn: CGFloat
+        public var audioColumn: CGFloat
+        public var costColumn: CGFloat
+        /// Between two columns.
+        public var columnGap: CGFloat
+        /// The empty period's card: its padding around the one line.
+        public var emptyPaddingVertical: CGFloat
+        public var emptyPaddingHorizontal: CGFloat
+
+        public init(
+            contentWidth: CGFloat,
+            barPaddingVertical: CGFloat,
+            contentPaddingTop: CGFloat,
+            contentPaddingBottom: CGFloat,
+            cardInset: CGFloat,
+            wordsColumn: CGFloat,
+            audioColumn: CGFloat,
+            costColumn: CGFloat,
+            columnGap: CGFloat,
+            emptyPaddingVertical: CGFloat,
+            emptyPaddingHorizontal: CGFloat
+        ) {
+            self.contentWidth = contentWidth
+            self.barPaddingVertical = barPaddingVertical
+            self.contentPaddingTop = contentPaddingTop
+            self.contentPaddingBottom = contentPaddingBottom
+            self.cardInset = cardInset
+            self.wordsColumn = wordsColumn
+            self.audioColumn = audioColumn
+            self.costColumn = costColumn
+            self.columnGap = columnGap
+            self.emptyPaddingVertical = emptyPaddingVertical
+            self.emptyPaddingHorizontal = emptyPaddingHorizontal
         }
     }
 }

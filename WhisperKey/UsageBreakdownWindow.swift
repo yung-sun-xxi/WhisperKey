@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import ThemeKit
 import SettingsStore
@@ -6,11 +7,21 @@ import UsageStatsStore
 
 /// The popover's usage summary split by provider and model (#139). It follows the
 /// period picked in the popover and redraws when a new entry is recorded.
+///
+/// The look is ThemeKit's (#184): `ThemedUsageBreakdownView` in the shared small-window
+/// chrome, `ThemedSurfaceWindow`. This file maps the usage store into plain rows.
 @MainActor
 enum UsageBreakdownWindowController {
     private static let stackID = "usageBreakdown"
     private static var window: NSWindow?
+    private static var themeFollower: AnyCancellable?
     private static let delegate = UsageBreakdownWindowDelegate()
+
+    /// The window while it is on screen, for the Debug build's snapshot hook.
+    static var openWindow: NSWindow? {
+        guard let window, window.isVisible else { return nil }
+        return window
+    }
 
     static func show(usageStats: UsageStatsStore, settings: SettingsStore) {
         if let existing = window {
@@ -23,7 +34,7 @@ enum UsageBreakdownWindowController {
 
         ThemeTokensSource.shared.follow(settings)
         let host = NSHostingController(rootView: ThemedRoot("usageByModel") {
-            UsageBreakdownView(usageStats: usageStats, settings: settings)
+            UsageBreakdownContent(usageStats: usageStats, settings: settings)
         })
         host.sizingOptions = [.preferredContentSize]
         let window = NSWindow(contentViewController: host)
@@ -31,7 +42,8 @@ enum UsageBreakdownWindowController {
         window.title = "Usage by model"
         window.isReleasedWhenClosed = false
         window.level = .floating
-        window.backgroundColor = SettingsWindowLayout.backgroundColor
+        ThemedSurfaceWindow.configure(window, tokens: ThemeTokensSource.shared.tokens)
+        themeFollower = ThemedSurfaceWindow.follow(ThemeTokensSource.shared, window: window)
         window.center()
         window.delegate = delegate
 
@@ -50,9 +62,20 @@ enum UsageBreakdownWindowController {
         window.orderOut(nil)
     }
 
+    /// Closes the window and lets it go, as its close button does, so the next `show`
+    /// builds it again. For the Debug build's snapshot hook, which shows it over another
+    /// usage store.
+    static func close() {
+        guard let closing = window else { return }
+        closing.delegate = nil
+        windowDidClose()
+        closing.close()
+    }
+
     static func windowDidClose() {
         TransientWindowStack.shared.unregister(id: stackID)
         window = nil
+        themeFollower = nil
     }
 
     private static func register(_ window: NSWindow) {
@@ -75,99 +98,44 @@ private final class UsageBreakdownWindowDelegate: NSObject, NSWindowDelegate {
     }
 }
 
-private struct UsageBreakdownView: View {
+/// The store's rows for the period picked, as the drawn view takes them, with the
+/// popover's period picker on the band.
+private struct UsageBreakdownContent: View {
     @ObservedObject var usageStats: UsageStatsStore
     @ObservedObject var settings: SettingsStore
 
-    /// Wide enough for the longest "Provider · model" name next to the three figures,
-    /// so names are never truncated and the window does not resize between periods.
-    private static let contentWidth: CGFloat = 540
-    private static let figureColumnWidth: CGFloat = 76
-
     var body: some View {
         let range = settings.usageStatsRange
-        let rows = usageStats.breakdown(range: range)
 
-        VStack(alignment: .leading, spacing: 14) {
-            HeaderPeriodPicker(selection: $settings.usageStatsRange)
-
-            if rows.isEmpty {
-                Text("No usage in this period.")
-                    .font(PopoverTypography.base)
-                    .foregroundColor(PopoverTypography.secondaryColor)
-                    .frame(maxWidth: .infinity, minHeight: 72, alignment: .center)
-                    .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 8))
-            } else {
-                table(rows: rows, total: usageStats.totalSummary(range: range))
-            }
+        ThemedUsageBreakdownView(
+            rows: usageStats.breakdown(range: range).map { Self.line(for: $0) },
+            total: Self.figures(for: usageStats.totalSummary(range: range))
+        ) {
+            ThemedPeriodPicker(
+                "Usage stats range",
+                selection: $settings.usageStatsRange,
+                options: UsageStatsRange.allCases,
+                title: { $0.compactLabel },
+                help: { $0.displayName }
+            )
+            .help("Choose the usage stats range")
         }
-        .padding(SettingsWindowLayout.contentPadding)
-        .frame(width: Self.contentWidth, alignment: .topLeading)
-        .font(PopoverTypography.base)
-        .foregroundColor(PopoverTypography.primaryColor)
     }
 
-    private func table(rows: [UsageBreakdownRow], total: UsageSummary) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 0) {
-            GridRow {
-                Text("Model")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                figureHeader("Words")
-                figureHeader("Audio")
-                figureHeader("Cost")
-            }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundColor(PopoverTypography.secondaryColor)
-            .padding(.bottom, 7)
-
-            Divider()
-
-            ForEach(rows) { row in
-                GridRow {
-                    Text(Self.modelName(for: row.key))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    figures(for: row.summary)
-                }
-                .padding(.vertical, 7)
-
-                if row.id != rows.last?.id {
-                    Divider().opacity(0.5)
-                }
-            }
-
-            Divider()
-
-            GridRow {
-                Text("Total")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                figures(for: total)
-            }
-            .font(PopoverTypography.strongSectionTitle)
-            .padding(.top, 8)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(HeaderSurfaceColor.bar, in: RoundedRectangle(cornerRadius: 8))
+    private static func line(for row: UsageBreakdownRow) -> UsageBreakdownLine {
+        UsageBreakdownLine(
+            id: "\(row.key.providerID)/\(row.key.modelID)",
+            title: modelName(for: row.key),
+            figures: figures(for: row.summary)
+        )
     }
 
-    private func figureHeader(_ title: String) -> some View {
-        Text(title)
-            .frame(width: Self.figureColumnWidth, alignment: .trailing)
-    }
-
-    @ViewBuilder
-    private func figures(for summary: UsageSummary) -> some View {
-        figure(UsageLineFormatter.wordsLabel(summary.wordCount))
-        figure(UsageLineFormatter.compactAudioDurationLabel(summary.audioDurationSeconds))
-        figure(Self.costText(for: summary))
-    }
-
-    private func figure(_ text: String) -> some View {
-        Text(text)
-            .monospacedDigit()
-            .lineLimit(1)
-            .frame(width: Self.figureColumnWidth, alignment: .trailing)
+    private static func figures(for summary: UsageSummary) -> UsageBreakdownFigures {
+        UsageBreakdownFigures(
+            words: UsageLineFormatter.wordsLabel(summary.wordCount),
+            audio: UsageLineFormatter.compactAudioDurationLabel(summary.audioDurationSeconds),
+            cost: costText(for: summary)
+        )
     }
 
     private static func modelName(for key: ProviderModelKey) -> String {

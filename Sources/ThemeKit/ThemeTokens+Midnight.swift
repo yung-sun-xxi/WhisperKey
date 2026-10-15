@@ -291,6 +291,22 @@ public extension ThemeTokens {
             actionGap: 8,               // the action bar, "gap:8px;padding:0 20px"
             // The app's earlier 160 pt list showed about six rows; the design shows four.
             visibleRows: 6
+        ),
+        // Not on the sheet: the USAGE BY MODEL section of the design file, quoted where it
+        // draws the value (#184).
+        usageBreakdown: UsageBreakdownMetrics(
+            contentWidth: 540,          // "width:540px", every period
+            barPaddingVertical: 14,     // the picker band, "padding:14px 20px"
+            contentPaddingTop: 14,      // the content, "padding:14px 20px 20px"
+            contentPaddingBottom: 20,
+            cardInset: 4,               // the card, "padding:0 4px 4px"
+            // "grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px"
+            wordsColumn: 56,
+            audioColumn: 64,
+            costColumn: 48,
+            columnGap: 12,
+            emptyPaddingVertical: 40,   // the empty card, "padding:40px 16px"
+            emptyPaddingHorizontal: 16
         )
     )
 }
