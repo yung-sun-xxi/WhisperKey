@@ -854,8 +854,11 @@ private struct UsageMetricColumn: View {
 
 // MARK: - Themed Popover end
 
+/// The Usage by model window's period picker, not yet restyled (#184). Its selected
+/// segment already takes the theme's colours: `onBrand` on a `brand` fill (#176).
 struct HeaderPeriodPicker: View {
     @Binding var selection: UsageStatsRange
+    @Environment(\.themeTokens) private var tokens
 
     var body: some View {
         HStack(spacing: 0) {
@@ -870,11 +873,11 @@ struct HeaderPeriodPicker: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(selection == range ? Color.white : PopoverTypography.primaryColor)
+                .foregroundColor(selection == range ? tokens.colors.onBrand.color : PopoverTypography.primaryColor)
                 .background {
                     if selection == range {
                         RoundedRectangle(cornerRadius: 5)
-                            .fill(Color.accentColor)
+                            .fill(tokens.colors.brand.color)
                     }
                 }
                 .help(range.displayName)
