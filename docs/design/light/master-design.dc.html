@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+  body { margin:0; background:#F2F2F7; }
+  a { color:#16181D; }
+  a:hover { color:var(--wk-accent-text, #5B3FE0); }
+</style>
+</helmet>
+<section style="background:#F2F2F7;padding:56px 56px 80px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Helvetica,sans-serif;-webkit-font-smoothing:antialiased;box-sizing:border-box;min-width:1680px">
+
+  <div style="display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:22px;font-weight:600;letter-spacing:-0.01em;color:#16181D">WhisperKey — master design file</div>
+    <div style="font-size:12px;color:#515763">light · real size · accent {{ accentName }} {{ accentHex }}</div>
+    <div style="margin-left:auto;align-self:center;display:flex;align-items:center;gap:8px"><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763">ACCENT</div><div style="display:flex;gap:6px;padding:4px;background:#E0E2E6;border-radius:12px"><sc-for list="{{ accents }}" as="ac" hint-placeholder-count="6"><div onClick="{{ ac.pick }}" title="{{ ac.name }}" style="width:20px;height:20px;border-radius:10px;cursor:pointer;background:{{ ac.a }};box-shadow:{{ ac.ring }}"></div></sc-for></div></div>
+  </div>
+  <div style="margin-top:6px;font-size:13px;color:#515763;max-width:720px;line-height:1.45;text-wrap:pretty">Everything below is drawn from this sheet and nothing else. Items marked + were added this round because a surface needed them.</div>
+
+  <!-- TOKEN SHEET -->
+  <div data-screen-label="Token sheet" style="margin-top:28px;border:1px solid #E0E2E6;border-radius:10px;padding:22px 24px 24px;display:grid;grid-template-columns:1.2fr 1.1fr 0.9fr 1fr 1.25fr;gap:32px">
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:12px">GREYS</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#F8F9FB;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><div><div style="font-size:12px;color:#16181D">01 #F8F9FB</div><div style="font-size:11px;color:#515763;line-height:1.4">bars: status, footer, titlebar, tab well, action bar. + checkbox mark</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#EFF0F3;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><div><div style="font-size:12px;color:#16181D">02 #EFF0F3</div><div style="font-size:11px;color:#515763;line-height:1.4">surface. Panels at 95% + blur 30, windows solid</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#E0E2E6;flex:none"></div><div><div style="font-size:12px;color:#16181D">03 #E0E2E6</div><div style="font-size:11px;color:#515763;line-height:1.4">cards, controls, tracks. Dividers on 02</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#D0D3D8;flex:none"></div><div><div style="font-size:12px;color:#16181D">04 #D0D3D8</div><div style="font-size:11px;color:#515763;line-height:1.4">hover and selected row, inactive keycap, off track. + a control sitting on a 03 card</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#B8BCC4;flex:none"></div><div><div style="font-size:12px;color:#16181D">05 #B8BCC4</div><div style="font-size:11px;color:#515763;line-height:1.4">every edge: shell, control outline, active keycap, divider on 03. 1.67:1 on 02, 1.47:1 on 03</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#8C929F;flex:none"></div><div><div style="font-size:12px;color:#16181D">06 #8C929F</div><div style="font-size:11px;color:#515763;line-height:1.4">dashed failure edge, traffic lights. + unchecked checkbox edge. + empty-list glyph. Never text</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#515763;flex:none"></div><div><div style="font-size:12px;color:#16181D">07 #515763</div><div style="font-size:11px;color:#515763;line-height:1.4">secondary type. 6.4:1 on 02</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#424854;flex:none"></div><div><div style="font-size:12px;color:#16181D">07n #424854</div><div style="font-size:11px;color:#515763;line-height:1.4">navigation at rest: inactive tabs and segments. 7.1:1 on the 03 tab well</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#16181D;flex:none"></div><div><div style="font-size:12px;color:#16181D">08 #16181D</div><div style="font-size:11px;color:#515763;line-height:1.4">primary type. 15.6:1 on 02. + checked checkbox fill</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#F2F2F7;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><div><div style="font-size:12px;color:#16181D">+ 00 #F2F2F7</div><div style="font-size:11px;color:#515763;line-height:1.4">desktop behind this board. Presentation only, not in the app</div></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:12px">BRAND · STATE · SYSTEM</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:var(--wk-accent, #7B61FF);flex:none"></div><div><div style="font-size:12px;color:#16181D">{{ accentName }} {{ accentHex }}</div><div style="font-size:11px;color:#515763;line-height:1.4">oklch 0.66 0.226 31°. Trigger caps, active segment and tab, toggle on, 2pt selected-row bar. + default button</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:var(--wk-accent-hover, #6A4EF0);flex:none"></div><div><div style="font-size:12px;color:#16181D">{{ accentName }} hover {{ accentHoverHex }}</div><div style="font-size:11px;color:#515763;line-height:1.4">hover and pressed on any red fill</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:var(--wk-accent, #7B61FF);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--wk-on-accent, #FFFFFF);flex:none">⌥</div><div><div style="font-size:12px;color:#16181D">on red #16181D</div><div style="font-size:11px;color:#515763;line-height:1.4">all type and glyphs on red, 5.1:1 (4.2:1 on red hover)</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#EFF0F3;border:1px solid #B8BCC4;box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:6px;height:6px;border-radius:3px;background:#4F8E00"></div></div><div><div style="font-size:12px;color:#16181D">green #4F8E00</div><div style="font-size:11px;color:#515763;line-height:1.4">6pt dot only: Connected, Saved. + Granted</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.4) 0 3px,rgba(102,108,120,0) 3px 7px);border:1px dashed #8C929F;box-sizing:border-box;flex:none"></div><div><div style="font-size:12px;color:#16181D">failure</div><div style="font-size:11px;color:#515763;line-height:1.4">hatch #666C78 at 18% on #E8E9ED, 1px dashed 06. Failed row, rejected key. + Needs access badge</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#FF3B30;flex:none"></div><div><div style="font-size:12px;color:#16181D">system red #FF3B30</div><div style="font-size:11px;color:#515763;line-height:1.4">drawn by macOS in alerts. Never on a WhisperKey surface</div></div></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><div style="width:22px;height:22px;border-radius:6px;background:#D0D3D8;flex:none;position:relative"><div style="position:absolute;top:5px;left:4px;width:12px;height:12px;border-radius:6px;background:#666C78"></div></div><div><div style="font-size:12px;color:#16181D">off knob #666C78</div><div style="font-size:11px;color:#515763;line-height:1.4">off-toggle knob and hatch stroke. Shapes only</div></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:12px">TYPE · SF</div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div><div style="font-size:15px;font-weight:600;color:#16181D">15/600 · 90k</div><div style="font-size:11px;color:#515763;line-height:1.4">stat values, tabular</div></div>
+        <div><div style="font-size:13px;font-weight:600;color:#16181D">13/600 · Settings</div><div style="font-size:11px;color:#515763;line-height:1.4">window title, alert title. + in-window heading</div></div>
+        <div><div style="font-size:13px;color:#16181D">13/400 · Launch at login</div><div style="font-size:11px;color:#515763;line-height:1.4">row labels, values, buttons, body text. Body line-height 1.45</div></div>
+        <div><div style="font-size:12px;color:#16181D">12/400 · Full history</div><div style="font-size:11px;color:#515763;line-height:1.4">status line, footer, tabs. + description lines in 07</div></div>
+        <div><div style="font-size:11px;color:#16181D">11/400 · 14m · ⌘K</div><div style="font-size:11px;color:#515763;line-height:1.4">timestamps, keycaps, units, badges</div></div>
+        <div><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#16181D">11/500 · RECENT</div><div style="font-size:11px;color:#515763;line-height:1.4">caps headers, 0.06em. Floor is 11</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:12px">RADII · SIZES</div>
+      <div style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:#16181D;line-height:1.4">
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:12px;border:1px solid #8C929F;flex:none"></div>12 · panel shell (popover, quick paste, toast)</div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:10px;border:1px solid #8C929F;flex:none"></div>10 · window shell, actions menu</div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:8px;border:1px solid #8C929F;flex:none"></div>8 · rows, cards, tracks, toggles</div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:6px;border:1px solid #8C929F;flex:none"></div>6 · keycaps, fields, buttons, badges</div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="width:20px;height:20px;border-radius:4px;border:1px solid #8C929F;flex:none"></div>+ 4 · checkbox</div>
+        <div style="height:1px;background:#E0E2E6;margin:5px 0"></div>
+        <div><span style="color:#515763">list row</span> 34 <span style="color:#515763">· popover, quick paste, full history, checklist</span></div>
+        <div><span style="color:#515763">form row</span> 32 <span style="color:#515763">· Settings</span></div>
+        <div><span style="color:#515763">panel bar</span> 36 · <span style="color:#515763">titlebar</span> 44 · <span style="color:#515763">+ action bar</span> 48</div>
+        <div><span style="color:#515763">menu item</span> 30 · <span style="color:#515763">control</span> 26 · <span style="color:#515763">keycap, badge</span> 18</div>
+        <div><span style="color:#515763">toggle</span> 28×16 · <span style="color:#515763">+ checkbox</span> 14 · <span style="color:#515763">dot</span> 6 · <span style="color:#515763">bar</span> 2×18</div>
+        <div><span style="color:#515763">widths</span> panel 320 · quick paste 328 · toast 380</div>
+        <div><span style="color:#515763">+ settings window</span> 520 <span style="color:#515763">· Settings, both themes</span></div>
+        <div><span style="color:#515763">+ empty-list glyph</span> 22 <span style="color:#515763">· SF title size, tray in Full history</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:12px">SPACING · EDGES</div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:2px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">2</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:3px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">3</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:4px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">4</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:6px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">6</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:8px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">8</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:10px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">10</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:14px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">14</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:16px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">16</div></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:20px;height:14px;background:#8C929F"></div><div style="font-size:11px;color:#515763">20</div></div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#16181D;line-height:1.5">Text edge 16 in panels, 20 in windows. Rows inset 8 from the shell with 8 inside. Stat tile inset 9×10 stays as drawn.</div>
+      <div style="margin-top:16px;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:8px">+ ADDED THIS ROUND</div>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#16181D;line-height:1.4">
+        <div><strong style="font-weight:600">Default button</strong> <span style="color:#515763">— red fill, 13/500 on-red label. Welcome only</span></div>
+        <div><strong style="font-weight:600">Disabled control</strong> <span style="color:#515763">— no fill, 05 edge, 07 label</span></div>
+        <div><strong style="font-weight:600">Checkbox</strong> <span style="color:#515763">— 14, radius 4. Off: 06 edge on 02. On and mixed: 08 fill, 01 mark</span></div>
+        <div><strong style="font-weight:600">Action bar</strong> <span style="color:#515763">— 48 on 01, the panel footer at window scale</span></div>
+        <div><strong style="font-weight:600">Row names</strong> <span style="color:#515763">— 34 is now “list row”, 40 “form row”</span></div>
+        <div><strong style="font-weight:600">Theme picker</strong> <span style="color:#515763">— 40 icon, radius 8. Selected: 2pt red outline, offset 2. Rest: 05 edge, hover 04 fill</span></div>
+        <div><strong style="font-weight:600">Green, failure</strong> <span style="color:#515763">— extended to Granted and Needs access</span></div>
+        <div><strong style="font-weight:600">Empty list</strong> <span style="color:#515763">— tray glyph 22 in 06, 4 above a 13/400 line in 07, centred both ways</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MENU BAR POPOVER + SETTINGS -->
+  <div style="margin-top:56px;display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:15px;font-weight:600;color:#16181D">Menu bar popover and Settings</div>
+    <div style="font-size:12px;color:#515763">popover 320 under the menu bar · Settings 520, four tabs</div>
+  </div>
+  <div style="margin-top:22px">
+    <div style="display:flex;gap:44px;align-items:flex-start">
+
+      <!-- ── POPOVER ──────────────────────────────────────── -->
+      <div style="width:320px;flex:none" data-screen-label="Popover">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">POPOVER · 320 WIDE</div>
+        <sc-if value="{{ showNotch }}" hint-placeholder-val="{{ true }}">
+          <div style="width:0;height:0;margin-left:24px;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:8px solid #EFF0F3"></div>
+        </sc-if>
+        <div style="width:320px;background:rgba(239,240,243,0.95);backdrop-filter:blur(30px);border:1px solid #B8BCC4;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.16);overflow:hidden">
+
+          <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 16px;background:#F8F9FB">
+            <div style="display:flex;gap:3px;flex:none">
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:11px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">⌥</div>
+              <div style="min-width:18px;height:18px;padding:0 5px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:11px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">Space</div>
+            </div>
+            <div style="font-size:12px;color:#16181D">Ready · hold to dictate</div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 16px;border-top:1px solid #E0E2E6;border-bottom:1px solid #E0E2E6">
+            <div style="flex:1;min-width:0;font-size:12px;color:#515763;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-transcribe</div>
+            <div style="display:flex;align-items:center;gap:6px;flex:none">
+              <div style="font-size:11px;color:#515763">Connected</div>
+              <div style="width:6px;height:6px;border-radius:3px;background:#4F8E00"></div>
+            </div>
+          </div>
+
+          <div style="padding:14px 16px 0">
+            <div style="font-size:11px;font-weight:500;color:#515763;letter-spacing:0.06em;margin-bottom:8px">USAGE</div>
+            <div style="display:flex;background:#E0E2E6;border-radius:8px;overflow:hidden;cursor:default" style-hover="background:#D0D3D8">
+              <div style="flex:1;padding:9px 10px;text-align:center">
+                <div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">90k</div>
+                <div style="font-size:11px;color:#515763;margin-top:2px">words</div>
+              </div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center">
+                <div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">17h 18m</div>
+                <div style="font-size:11px;color:#515763;margin-top:2px">audio</div>
+              </div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center">
+                <div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">~$3.1</div>
+              </div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="width:26px;flex:none;display:flex;align-items:center;justify-content:center"><div style="width:6px;height:6px;border-top:1.5px solid #515763;border-right:1.5px solid #515763;transform:rotate(45deg);margin-left:-3px"></div></div>
+            </div>
+            <div style="display:flex;gap:2px;background:#E0E2E6;border-radius:8px;padding:2px;margin-top:8px">
+              <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">Today</div>
+              <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">7d</div>
+              <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">30d</div>
+              <div style="flex:1;text-align:center;font-size:11px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:24px;border-radius:6px;background:var(--wk-accent, #7B61FF)">All</div>
+            </div>
+          </div>
+
+          <div style="padding:10px 8px 0">
+            <div style="display:flex;align-items:center;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;font-size:13px;color:#16181D">Clipboard</div>
+              <div style="width:28px;height:16px;border-radius:8px;background:var(--wk-accent, #7B61FF);position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#16181D"></div></div>
+            </div>
+            <div style="display:flex;align-items:center;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;font-size:13px;color:#16181D">Auto-paste</div>
+              <div style="width:28px;height:16px;border-radius:8px;background:var(--wk-accent, #7B61FF);position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#16181D"></div></div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;height:34px;padding:0 16px">
+            <div style="flex:1;font-size:11px;font-weight:500;color:#515763;letter-spacing:0.06em">RECENT</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums">7</div>
+          </div>
+
+          <div style="padding:0 8px 8px">
+            <div style="position:relative;display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px;background:#D0D3D8">
+              <div style="position:absolute;left:0;top:8px;width:2px;height:18px;border-radius:1px;background:var(--wk-accent, #7B61FF)"></div>
+              <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Что касается их вопросов... Вопрос один…</div>
+              <div style="display:flex;align-items:center;gap:6px;flex:none">
+                <div style="font-size:11px;color:#515763">Paste</div>
+                <div style="display:flex;gap:3px">
+                  <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#B8BCC4;font-size:11px;color:#16181D;display:flex;align-items:center;justify-content:center">⌘</div>
+                  <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#B8BCC4;font-size:11px;color:#16181D;display:flex;align-items:center;justify-content:center">↩</div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Прогон закончился, анализирую его.</div>
+              <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums">14m</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">В summary мне не очень нравится после…</div>
+              <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums">1h</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Я понял, короче, это будет очень долго, я…</div>
+              <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums">2h</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Мне кажется, или если мы начинаем дик…</div>
+              <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums">3h</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">
+              <div style="flex:1;min-width:0;font-size:13px;color:#515763;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">No speech detected</div>
+              <div style="display:flex;align-items:center;gap:4px;flex:none">
+                <div style="font-size:11px;color:#16181D;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F">Retry</div>
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;justify-content:center">⌘R</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+              <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Не получается сделать, как ты говоришь....</div>
+              <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums">Yst</div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;height:36px;padding:0 16px;border-top:1px solid #E0E2E6;background:#F8F9FB">
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:12px;color:#16181D">Full history</div>
+              <sc-if value="{{ showKeycaps }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:3px">
+                  <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;justify-content:center">⌘</div>
+                  <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;justify-content:center">F</div>
+                </div>
+              </sc-if>
+            </div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:12px;color:#16181D">Actions</div>
+              <div style="display:flex;gap:3px">
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#B8BCC4;font-size:11px;color:#16181D;display:flex;align-items:center;justify-content:center">⌘</div>
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#B8BCC4;font-size:11px;color:#16181D;display:flex;align-items:center;justify-content:center">K</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="width:212px;margin-left:104px;margin-top:-4px;background:#E0E2E6;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 18px 36px rgba(0,0,0,0.16);padding:8px 8px 6px;box-sizing:border-box">
+          <div style="font-size:11px;font-weight:500;color:#515763;letter-spacing:0.06em;padding:0 8px 6px">ACTIONS</div>
+          <div style="display:flex;align-items:center;height:30px;padding:0 8px;border-radius:8px;background:#D0D3D8">
+            <div style="flex:1;font-size:12px;color:#16181D">Clear history…</div>
+            <div style="display:flex;gap:3px">
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#B8BCC4;font-size:11px;color:#16181D;display:flex;align-items:center;justify-content:center">⌘</div>
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#B8BCC4;font-size:11px;color:#16181D;display:flex;align-items:center;justify-content:center">⌫</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;height:30px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;font-size:12px;color:#16181D">Settings</div>
+            <div style="display:flex;gap:3px">
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;justify-content:center">⌘</div>
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;justify-content:center">,</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;height:30px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;font-size:12px;color:#16181D">Quit WhisperKey</div>
+            <div style="display:flex;gap:3px">
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;justify-content:center">⌘</div>
+              <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;justify-content:center">Q</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:28px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">STATUS LINE · TWO STATES</div>
+          <div style="width:320px;border:1px solid #B8BCC4;border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 16px;background:#F8F9FB">
+              <div style="display:flex;gap:3px;flex:none">
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:11px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">⌥</div>
+                <div style="min-width:18px;height:18px;padding:0 5px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:11px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">Space</div>
+              </div>
+              <div style="font-size:12px;color:#16181D">Ready · hold to dictate</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 16px;background:#F8F9FB;border-top:1px solid #E0E2E6">
+              <div style="display:flex;align-items:flex-end;gap:2px;height:14px;flex:none">
+                <div style="width:2px;height:6px;border-radius:1px;background:var(--wk-accent, #7B61FF)"></div>
+                <div style="width:2px;height:12px;border-radius:1px;background:var(--wk-accent, #7B61FF)"></div>
+                <div style="width:2px;height:8px;border-radius:1px;background:var(--wk-accent, #7B61FF)"></div>
+                <div style="width:2px;height:14px;border-radius:1px;background:var(--wk-accent, #7B61FF)"></div>
+              </div>
+              <div style="font-size:12px;color:var(--wk-accent-text, #5B3FE0);flex:1">Recording · 0:04</div>
+              <div style="display:flex;align-items:center;gap:6px;flex:none">
+                <div style="font-size:11px;color:#515763">Cancel</div>
+                <div style="min-width:18px;height:18px;padding:0 4px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;justify-content:center">esc</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:28px" data-screen-label="Popover usage block">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">USAGE BLOCK · AT REST, HOVER</div>
+          <div style="width:320px;background:rgba(239,240,243,0.95);border:1px solid #B8BCC4;border-radius:12px;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;background:#E0E2E6;border-radius:8px;overflow:hidden">
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">90k</div><div style="font-size:11px;color:#515763;margin-top:2px">words</div></div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">17h 18m</div><div style="font-size:11px;color:#515763;margin-top:2px">audio</div></div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">~$3.1</div></div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="width:26px;flex:none;display:flex;align-items:center;justify-content:center"><div style="width:6px;height:6px;border-top:1.5px solid #515763;border-right:1.5px solid #515763;transform:rotate(45deg);margin-left:-3px"></div></div>
+            </div>
+            <div style="display:flex;background:#D0D3D8;border-radius:8px;overflow:hidden">
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">90k</div><div style="font-size:11px;color:#515763;margin-top:2px">words</div></div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">17h 18m</div><div style="font-size:11px;color:#515763;margin-top:2px">audio</div></div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="flex:1;padding:9px 10px;text-align:center"><div style="font-size:15px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">~$3.1</div></div>
+              <div style="width:1px;background:#B8BCC4;margin:9px 0"></div>
+              <div style="width:26px;flex:none;display:flex;align-items:center;justify-content:center"><div style="width:6px;height:6px;border-top:1.5px solid #16181D;border-right:1.5px solid #16181D;transform:rotate(45deg);margin-left:-3px"></div></div>
+            </div>
+          </div>
+          <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty">Totals across every provider and model for the period. The whole block is one button that opens Usage by model; hover is the 04 row fill and the chevron turns 08. The chevron's 26 segment sits outside the three stats so they stay equal width.</div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:22px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Where the red goes, and why.</strong></div>
+        <div style="margin-top:8px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">1 · The trigger caps</strong>, filled, top-left. The one thing the app does is start listening, so the brand sits on the key that starts it — and turns into red type when it is listening.</div>
+        <div style="margin-top:6px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">2 · The active period segment.</strong> The only choice in the usage block; filled red says which number you are reading.</div>
+        <div style="margin-top:6px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">3 · Toggle on-state.</strong> Binary settings read at a glance from the fill alone, with no label to parse.</div>
+        <div style="margin-top:6px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">4 · A 2pt bar on the selected row.</strong> Marks where Return will land, structurally, so the keycaps can stay grey and the history reads as text.</div>
+        <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty">Retry and the failed row stay greyscale: hatch fill, grey label, dashed outline. Failure is a state, not a brand moment.</div>
+        </sc-if>
+      </div>
+
+      <!-- ── SETTINGS ─────────────────────────────────────── -->
+      <div style="width:580px;flex:none">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">SETTINGS WINDOW · 520 WIDE</div>
+
+        <div style="width:520px;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box" data-screen-label="Settings General">
+          <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+            <div style="display:flex;gap:8px">
+              <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+              <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+              <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+            </div>
+            <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">WhisperKey Settings</div>
+          </div>
+          <div style="padding:14px 20px;background:#F8F9FB;border-top:1px solid #E0E2E6">
+            <div style="display:flex;gap:2px;background:#E0E2E6;border-radius:8px;padding:2px">
+              <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:26px;border-radius:6px;background:var(--wk-accent, #7B61FF)">General</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Recording</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Transcription</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Quick paste</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #E0E2E6;padding:10px 20px 16px">
+            <div style="display:flex;align-items:center;height:32px">
+              <div style="flex:1;font-size:13px;color:#16181D">Launch at login</div>
+              <div style="width:28px;height:16px;border-radius:8px;background:var(--wk-accent, #7B61FF);position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#16181D"></div></div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0 10px"><div style="flex:1;font-size:13px;color:#16181D;line-height:40px">Theme</div><div style="display:flex;gap:12px"><sc-if value="{{ classicSel }}" hint-placeholder-val="{{ true }}"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid var(--wk-accent, #7B61FF);outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#16181D">Classic</div></div></sc-if><sc-if value="{{ midnightSel }}" hint-placeholder-val="{{ false }}"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px" onClick="{{ pickClassic }}"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #B8BCC4" style-hover="background:#D0D3D8"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#424854">Classic</div></div></sc-if><sc-if value="{{ midnightSel }}" hint-placeholder-val="{{ false }}"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid var(--wk-accent, #7B61FF);outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#16181D">Midnight</div></div></sc-if><sc-if value="{{ classicSel }}" hint-placeholder-val="{{ true }}"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px" onClick="{{ pickMidnight }}"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #B8BCC4" style-hover="background:#D0D3D8"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#424854">Midnight</div></div></sc-if></div></div>
+            <div style="display:flex;align-items:center;gap:6px;height:32px">
+              <div style="flex:1;font-size:13px;color:#16181D">History size</div>
+              <div style="display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box">
+                <div style="font-size:13px;color:#16181D;font-variant-numeric:tabular-nums">30</div>
+                <div style="font-size:11px;color:#515763">entries</div>
+              </div>
+              <div style="width:22px;height:26px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+                <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:4px solid #515763"></div>
+                <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #515763"></div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;height:32px">
+              <div style="flex:1;font-size:13px;color:#16181D">Usage data</div>
+              <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Reset usage…</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="width:580px;margin-top:16px" data-screen-label="Theme row states">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">THEME ROW · SETTINGS › GENERAL</div>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px"><div><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:8px">CLASSIC · DEFAULT</div><div style="background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;padding:0 14px"><div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0 10px"><div style="flex:1;font-size:13px;color:#16181D;line-height:40px">Theme</div><div style="display:flex;gap:12px"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid var(--wk-accent, #7B61FF);outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#16181D">Classic</div></div><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #B8BCC4"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#424854">Midnight</div></div></div></div></div></div><div><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:8px">MIDNIGHT</div><div style="background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;padding:0 14px"><div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0 10px"><div style="flex:1;font-size:13px;color:#16181D;line-height:40px">Theme</div><div style="display:flex;gap:12px"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #B8BCC4"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#424854">Classic</div></div><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid var(--wk-accent, #7B61FF);outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#16181D">Midnight</div></div></div></div></div></div><div><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:8px">HOVER · UNSELECTED</div><div style="background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;padding:0 14px"><div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0 10px"><div style="flex:1;font-size:13px;color:#16181D;line-height:40px">Theme</div><div style="display:flex;gap:12px"><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid transparent;outline:2px solid var(--wk-accent, #7B61FF);outline-offset:2px"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #C8C8C8;border-radius:4px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#E3E3E3"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#C7C7CC"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#007AFF"></div></div></div><div style="font-size:11px;line-height:13px;color:#16181D">Classic</div></div><div style="width:48px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:40px;height:40px;box-sizing:border-box;border-radius:8px;flex:none;cursor:pointer;border:1px solid #B8BCC4;background:#D0D3D8"><div style="position:absolute;left:5px;top:7px;width:28px;height:24px;box-sizing:border-box;border:1px solid #3B4150;border-radius:4px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:5px;background:#14161A"></div><div style="position:absolute;left:7px;top:9px;width:14px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:13px;width:10px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:7px;top:17px;width:12px;height:2px;border-radius:1px;background:#5A6070"></div><div style="position:absolute;left:3px;top:7px;width:2px;height:6px;border-radius:1px;background:#E24631"></div></div></div><div style="font-size:11px;line-height:13px;color:#424854">Midnight</div></div></div></div></div></div></div>
+          <div style="margin-top:20px"><div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">ICONS · 2× FOR EXPORT</div><div style="display:flex;gap:24px"><div style="display:flex;flex-direction:column;gap:8px"><div style="background:#EFF0F3;border-radius:10px;padding:16px;width:max-content"><div id="theme-icon-classic-2x" data-screen-label="Theme icon Classic 2x" style="position:relative;width:80px;height:80px;border-radius:16px"><div style="position:absolute;left:12px;top:16px;width:56px;height:48px;box-sizing:border-box;border:2px solid #C8C8C8;border-radius:8px;background:#F5F5F5;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:10px;background:#E3E3E3"></div><div style="position:absolute;left:14px;top:18px;width:28px;height:4px;border-radius:2px;background:#C7C7CC"></div><div style="position:absolute;left:14px;top:26px;width:20px;height:4px;border-radius:2px;background:#C7C7CC"></div><div style="position:absolute;left:14px;top:34px;width:24px;height:4px;border-radius:2px;background:#C7C7CC"></div><div style="position:absolute;left:6px;top:14px;width:4px;height:12px;border-radius:2px;background:#007AFF"></div></div></div></div><div style="font-size:11px;color:#515763">theme-classic@2x · 80 × 80</div></div><div style="display:flex;flex-direction:column;gap:8px"><div style="background:#EFF0F3;border-radius:10px;padding:16px;width:max-content"><div id="theme-icon-midnight-2x" data-screen-label="Theme icon Midnight 2x" style="position:relative;width:80px;height:80px;border-radius:16px"><div style="position:absolute;left:12px;top:16px;width:56px;height:48px;box-sizing:border-box;border:2px solid #3B4150;border-radius:8px;background:#1A1C21;overflow:hidden"><div style="position:absolute;left:0;right:0;top:0;height:10px;background:#14161A"></div><div style="position:absolute;left:14px;top:18px;width:28px;height:4px;border-radius:2px;background:#5A6070"></div><div style="position:absolute;left:14px;top:26px;width:20px;height:4px;border-radius:2px;background:#5A6070"></div><div style="position:absolute;left:14px;top:34px;width:24px;height:4px;border-radius:2px;background:#5A6070"></div><div style="position:absolute;left:6px;top:14px;width:4px;height:12px;border-radius:2px;background:#E24631"></div></div></div></div><div style="font-size:11px;color:#515763">theme-midnight@2x · 80 × 80</div></div></div></div>
+          <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:12px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty">The row grows past 40 to hold a 40 icon, 6 gap and an 11 name; the label centres on the icons. A click repaints every window at once, so there is no Save. Classic’s preview is the only place macOS system greys and system blue #007AFF appear: it describes the other theme. Exports are transparent outside the shell so the app can draw edge, hover fill and outline itself.</div>
+          </sc-if>
+        </div>
+
+        <div style="width:520px;margin-top:28px;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box" data-screen-label="Settings Transcription">
+          <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+            <div style="display:flex;gap:8px">
+              <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+              <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+              <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+            </div>
+            <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">WhisperKey Settings</div>
+          </div>
+          <div style="padding:14px 20px;background:#F8F9FB;border-top:1px solid #E0E2E6">
+            <div style="display:flex;gap:2px;background:#E0E2E6;border-radius:8px;padding:2px">
+              <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">General</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Recording</div>
+              <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:26px;border-radius:6px;background:var(--wk-accent, #7B61FF)">Transcription</div>
+              <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Quick paste</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #E0E2E6;padding:10px 20px 16px">
+            <div style="display:flex;align-items:center;height:32px">
+              <div style="flex:1;font-size:13px;color:#16181D">Provider</div>
+              <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box;min-width:150px">
+                <div style="flex:1;font-size:13px;color:#16181D">OpenAI</div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:3.5px solid #515763"></div>
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-top:3.5px solid #515763"></div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;height:32px">
+              <div style="flex:1;font-size:13px;color:#16181D">Model</div>
+              <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box;min-width:150px">
+                <div style="flex:1;font-size:13px;color:#16181D">gpt-transcribe</div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:3.5px solid #515763"></div>
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-top:3.5px solid #515763"></div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;height:32px">
+              <div style="flex:1;font-size:13px;color:#16181D">API key</div>
+              <div style="display:flex;align-items:center;gap:5px;flex:none">
+                <div style="width:6px;height:6px;border-radius:3px;background:#4F8E00"></div>
+                <div style="font-size:11px;color:#515763">Saved</div>
+              </div>
+              <div style="width:150px;height:26px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box;display:flex;align-items:center;font-size:13px;color:#515763;letter-spacing:0.12em">•••••••••••</div>
+              <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Delete</div>
+            </div>
+            <div style="display:flex;align-items:center;height:32px">
+              <div style="flex:1;font-size:13px;color:#16181D">Language</div>
+              <div style="display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box;min-width:150px">
+                <div style="flex:1;font-size:13px;color:#16181D">Auto</div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:3.5px solid #515763"></div>
+                  <div style="width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-top:3.5px solid #515763"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:24px;margin-top:16px;align-items:flex-start">
+          <div style="width:278px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:8px">KEY REJECTED — SAME ROW</div>
+            <div style="background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;padding:2px 16px">
+              <div style="display:flex;align-items:center;gap:8px;height:40px">
+                <div style="flex:1;font-size:13px;color:#16181D">API key</div>
+                <div style="font-size:11px;color:#16181D;line-height:20px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F">Rejected</div>
+                <div style="width:96px;height:26px;padding:0 10px;border-radius:6px;border:1px dashed #8C929F;box-sizing:border-box;display:flex;align-items:center;font-size:13px;color:#515763;letter-spacing:0.12em;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">••••••</div>
+              </div>
+            </div>
+            <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty">Hatch and dash, exactly as the failed history row. No red — the key is broken, not dangerous.</div>
+            </sc-if>
+          </div>
+          <div style="width:278px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:8px">AT THE CLICK — macOS ALERT</div>
+            <div style="background:#F2F2F7;border-radius:10px;padding:20px;display:flex;justify-content:center">
+              <div style="width:230px;background:#E0E2E6;border:1px solid #B8BCC4;border-radius:12px;box-shadow:0 20px 44px rgba(0,0,0,0.2);padding:18px 18px 14px;box-sizing:border-box;text-align:center">
+                <div style="font-size:13px;font-weight:600;color:#16181D">Reset usage data?</div>
+                <div style="margin-top:6px;font-size:11px;line-height:1.45;color:#515763;text-wrap:pretty">Word, audio and cost totals return to zero. Your transcriptions are not affected.</div>
+                <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px">
+                  <div style="font-size:13px;font-weight:500;color:#fff;line-height:26px;border-radius:6px;background:#FF3B30">Reset usage</div>
+                  <div style="font-size:13px;color:#16181D;line-height:26px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Cancel</div>
+                </div>
+              </div>
+            </div>
+            <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#515763;text-wrap:pretty">System red #FF3B30, drawn by macOS, on a sheet that covers the window. It never shares a screen with the brand orange-red.</div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="width:580px;margin-top:28px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">RECORDING · QUICK PASTE · SAME GRAMMAR</div>
+          <div style="display:flex;flex-direction:column;gap:28px">
+            <div style="width:580px;flex:none">
+              <div style="width:520px;box-shadow:0 24px 52px rgba(0,0,0,0.14);background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-sizing:border-box;overflow:hidden" data-screen-label="Settings Recording">
+                <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+                  <div style="display:flex;gap:8px">
+                    <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+                    <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+                    <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+                  </div>
+                  <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D">WhisperKey Settings</div>
+                </div>
+                <div style="padding:14px 20px;background:#F8F9FB;border-top:1px solid #E0E2E6">
+                  <div style="display:flex;gap:2px;background:#E0E2E6;border-radius:8px;padding:2px">
+                    <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">General</div>
+                    <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:26px;border-radius:6px;background:var(--wk-accent, #7B61FF)">Recording</div>
+                    <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Transcription</div>
+                    <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Quick paste</div>
+                  </div>
+                </div>
+                <div style="border-top:1px solid #E0E2E6;padding:10px 20px 16px">
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Trigger</div>
+                    <div style="display:flex;gap:4px">
+                      <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:12px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">⌥</div>
+                      <div style="min-width:24px;height:24px;padding:0 8px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:12px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">Space</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Mode</div>
+                    <div style="display:flex;gap:2px;background:#E0E2E6;border-radius:6px;padding:2px;width:150px">
+                      <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:22px;border-radius:4px;background:var(--wk-accent, #7B61FF)">Hold</div>
+                      <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:22px;border-radius:4px">Toggle</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Esc cancels recording</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:var(--wk-accent, #7B61FF);position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#16181D"></div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Sound effects</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:var(--wk-accent, #7B61FF);position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#16181D"></div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Pause music while recording</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:#D0D3D8;position:relative"><div style="position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:6px;background:#666C78"></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="width:580px;flex:none">
+              <div style="width:520px;box-shadow:0 24px 52px rgba(0,0,0,0.14);background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-sizing:border-box;overflow:hidden" data-screen-label="Settings Quick paste">
+                <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+                  <div style="display:flex;gap:8px">
+                    <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+                    <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+                    <div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div>
+                  </div>
+                  <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D">WhisperKey Settings</div>
+                </div>
+                <div style="padding:14px 20px;background:#F8F9FB;border-top:1px solid #E0E2E6">
+                  <div style="display:flex;gap:2px;background:#E0E2E6;border-radius:8px;padding:2px">
+                    <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">General</div>
+                    <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Recording</div>
+                    <div style="flex:1;text-align:center;font-size:12px;color:#424854;line-height:26px;border-radius:6px">Transcription</div>
+                    <div style="flex:1;text-align:center;font-size:12px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:26px;border-radius:6px;background:var(--wk-accent, #7B61FF)">Quick paste</div>
+                  </div>
+                </div>
+                <div style="border-top:1px solid #E0E2E6;padding:10px 20px 16px">
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Show quick paste popup</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:var(--wk-accent, #7B61FF);position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#16181D"></div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Trigger</div>
+                    <div style="display:flex;gap:4px">
+                      <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:12px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">⌘</div>
+                      <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:12px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">⇧</div>
+                      <div style="min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:var(--wk-accent, #7B61FF);font-size:12px;color:var(--wk-on-accent, #FFFFFF);display:flex;align-items:center;justify-content:center">V</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Hold trigger to keep open</div>
+                    <div style="width:28px;height:16px;border-radius:8px;background:var(--wk-accent, #7B61FF);position:relative"><div style="position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:6px;background:#16181D"></div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Entries</div>
+                    <div style="display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box">
+                      <div style="font-size:13px;color:#16181D;font-variant-numeric:tabular-nums">10</div>
+                      <div style="font-size:11px;color:#515763">entries</div>
+                    </div>
+                    <div style="width:22px;height:26px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+                      <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:4px solid #515763"></div>
+                      <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #515763"></div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;height:32px">
+                    <div style="flex:1;font-size:13px;color:#16181D">Paste history</div>
+                    <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Clear history…</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOATING PANELS -->
+  <div style="margin-top:56px;display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:15px;font-weight:600;color:#16181D">Floating panels</div>
+    <div style="font-size:12px;color:#515763">the popover’s shell: 02 at 95% + blur, 05 edge, radius 12, no chrome</div>
+  </div>
+  <div style="margin-top:22px;display:flex;gap:56px;align-items:flex-start">
+
+    <div style="width:328px;flex:none" data-screen-label="Quick paste">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">1 · QUICK PASTE · 328</div>
+      <div style="width:328px;background:rgba(239,240,243,0.95);backdrop-filter:blur(30px);border:1px solid #B8BCC4;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.16);overflow:hidden;box-sizing:border-box">
+        <div style="height:36px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB;border-bottom:1px solid #E0E2E6">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763">CLIPBOARD</div>
+        </div>
+        <div style="padding:8px;display:flex;flex-direction:column">
+        <div style="position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px">
+          <div style="width:14px;height:11px;display:flex;align-items:flex-end;justify-content:center;gap:2px;flex:none"><div style="width:2px;height:5px;border-radius:1px;background:#515763"></div><div style="width:2px;height:10px;border-radius:1px;background:#515763"></div><div style="width:2px;height:7px;border-radius:1px;background:#515763"></div><div style="width:2px;height:11px;border-radius:1px;background:#515763"></div></div>
+          <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Диалог «Вечерняя проверка готовности по…</div>
+        </div>
+        <div style="position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px;background:#D0D3D8">
+          <div style="position:absolute;left:0;top:8px;width:2px;height:18px;border-radius:1px;background:var(--wk-accent, #7B61FF)"></div>
+          <div style="width:14px;height:11px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;line-height:11px;color:#515763;flex:none">⌘</div>
+          <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Ручная проверка Открой в своём Chrome h…</div>
+          <div style="font-size:11px;color:#515763;flex:none">Release to paste</div>
+        </div>
+        <div style="position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px">
+          <div style="width:14px;height:11px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;line-height:11px;color:#515763;flex:none">⌘</div>
+          <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">https://www.linkedin.com/jobs/search/?keywords=design</div>
+        </div>
+        <div style="position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px">
+          <div style="width:14px;height:11px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;line-height:11px;color:#515763;flex:none">⌘</div>
+          <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">SELECT display_name, start_date, termination_date</div>
+        </div>
+        <div style="position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px">
+          <div style="width:14px;height:11px;display:flex;align-items:flex-end;justify-content:center;gap:2px;flex:none"><div style="width:2px;height:5px;border-radius:1px;background:#515763"></div><div style="width:2px;height:10px;border-radius:1px;background:#515763"></div><div style="width:2px;height:7px;border-radius:1px;background:#515763"></div><div style="width:2px;height:11px;border-radius:1px;background:#515763"></div></div>
+          <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Your posting says the team owns the metrics layer</div>
+        </div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> the popover shell, its 34 list row and its selection (04 fill + 2pt red bar). The header is a 36 panel bar in 01 with a 1px 03 line under it, clipped by the shell’s radius 12. Every row leads with a marker in 07, 11pt in a 14 column, 8 before the text: <span style="color:#16181D">waveform</span> (semibold) for dictated, <span style="color:#16181D">command</span> (semibold) for copied with ⌘C.</div>
+      </sc-if>
+    </div>
+
+    <div style="width:380px;flex:none;display:flex;flex-direction:column;gap:16px" data-screen-label="Toast">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:-6px">2 · TOAST · 380 · ERROR, NOTICE, PLAIN</div>
+
+      <div style="width:380px;background:rgba(239,240,243,0.95);backdrop-filter:blur(30px);border:1px solid #B8BCC4;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.16);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #515763"></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#515763">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">No response from OpenAI within 30 seconds. It may be your network or OpenAI; no response arrived, so WhisperKey cannot tell which</div>
+          <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Retry</div></div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#515763;flex:none">✕</div>
+      </div>
+
+      <div style="width:380px;background:rgba(239,240,243,0.95);backdrop-filter:blur(30px);border:1px solid #B8BCC4;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.16);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #515763;position:relative"><div style="position:absolute;left:-3px;right:-3px;top:8px;height:1.5px;background:#515763;transform:rotate(-38deg)"></div></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#515763">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">Microphone access is required to record</div>
+          <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Open Settings</div></div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#515763;flex:none">✕</div>
+      </div>
+
+      <div style="width:380px;background:rgba(239,240,243,0.95);backdrop-filter:blur(30px);border:1px solid #B8BCC4;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.16);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #515763;position:relative"><div style="position:absolute;left:-3px;right:-3px;top:8px;height:1.5px;background:#515763;transform:rotate(-38deg)"></div></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#515763">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#16181D">No speech detected</div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#515763;flex:none">✕</div>
+      </div>
+
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-top:8px;margin-bottom:-6px">2b · TOAST · QUICK PASTE · NOTICE</div>
+
+      <div style="width:380px;background:rgba(239,240,243,0.95);backdrop-filter:blur(30px);border:1px solid #B8BCC4;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.16);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #515763;position:relative"><div style="position:absolute;left:-3px;right:-3px;top:8px;height:1.5px;background:#515763;transform:rotate(-38deg)"></div></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#515763">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">Can’t paste here right now — macOS is blocking input from other apps. Try again in a moment, or paste into a different field</div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#515763;flex:none">✕</div>
+      </div>
+
+      <div style="width:380px;background:rgba(239,240,243,0.95);backdrop-filter:blur(30px);border:1px solid #B8BCC4;border-radius:12px;box-shadow:0 22px 48px rgba(0,0,0,0.16);box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:14px 14px 14px 16px">
+        <div style="width:18px;display:flex;justify-content:center;flex:none;padding-top:8px"><div style="width:14px;height:18px;border-radius:7px;box-shadow:inset 0 0 0 1.5px #515763;position:relative"><div style="position:absolute;left:-3px;right:-3px;top:8px;height:1.5px;background:#515763;transform:rotate(-38deg)"></div></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:#515763">WhisperKey</div>
+          <div style="margin-top:1px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">Couldn’t copy the entry, so nothing was pasted. Try again</div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#515763;flex:none">✕</div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> the popover shell and Settings’ push button. The earlier round’s mic glyph stays, grey: slashed when nothing reached the mic, plain when the recording was made and transcription failed. Quick paste notices are the notice variant with no action: transient, no button. The app drops the final full stop, as on every toast.</div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- STANDARD WINDOWS -->
+  <div style="margin-top:64px;display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:15px;font-weight:600;color:#16181D">Standard windows</div>
+    <div style="font-size:12px;color:#515763">Settings chrome: 44 titlebar on 01, grey traffic lights, 13/600 centred title, 02 body, radius 10</div>
+  </div>
+  <div style="margin-top:22px;display:flex;gap:48px;align-items:flex-start">
+
+    <div style="width:560px;flex:none" data-screen-label="Full history">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">3 · FULL HISTORY · 560 × 500</div>
+      <div style="width:560px;height:500px;display:flex;flex-direction:column;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;flex:none;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">WhisperKey History</div>
+        </div>
+        <div style="height:48px;flex:none;display:flex;align-items:center;gap:6px;padding:0 20px;background:#F8F9FB;border-top:1px solid #E0E2E6;box-sizing:border-box">
+          <div style="font-size:13px;color:#16181D;font-variant-numeric:tabular-nums">30</div>
+          <div style="font-size:11px;color:#515763;flex:1">entries</div>
+          <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Clear history…</div>
+        </div>
+        <div style="flex:1;min-height:0;overflow:hidden;border-top:1px solid #E0E2E6;padding:8px 12px">
+          <div style="position:relative;display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px;background:#D0D3D8">
+            <div style="position:absolute;left:0;top:8px;width:2px;height:18px;border-radius:1px;background:var(--wk-accent, #7B61FF)"></div>
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Что касается их вопросов... Вопрос один про DBT. Ну, скажем, да. Тут, короче, нечего</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:37</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Прогон закончился, анализирую его.</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:34</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">В summary мне не очень нравится последний абзац. Хотя, точнее, он состоит всего</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:33</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Я понял, короче, это будет очень долго, я сделаю сам. Смотри, ты должен сделать</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:21</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Мне кажется, или если мы начинаем диктовать, то NumPad должен закрываться, по</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:18</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border-radius:8px;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">
+            <div style="flex:1;min-width:0;font-size:13px;color:#515763">No speech detected</div>
+            <div style="font-size:11px;color:#16181D;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F;flex:none">Retry</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none;margin-left:2px">18 Sep 12:15</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Не получается сделать, как ты говоришь. Там очень много в этом списке, когда я</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:15</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Так, мы только что сделали тикет новый на дизайн, редизайн. Тебе нужно подготовить</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:10</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Первую вакансию, да, будем подаваться. Ее берем.</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:08</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Окей, давай так, давай так и сделаем, да.</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">18 Sep 12:07</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Хорошо, тогда я сначала посмотрю список, а потом вернусь к этому вопросу</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">17 Sep 19:42</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:8px">
+            <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Давай перенесём созвон на четверг, если это удобно</div>
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums;flex:none">17 Sep 18:05</div>
+          </div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Settings’ chrome, with the tab well turned into the count bar; the rows are the popover’s rows unchanged, only the timestamp is absolute.</div>
+      </sc-if>
+    </div>
+
+    <div style="width:560px;flex:none" data-screen-label="Full history empty">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">3b · FULL HISTORY · EMPTY</div>
+      <div style="width:560px;height:500px;display:flex;flex-direction:column;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;flex:none;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">WhisperKey History</div>
+        </div>
+        <div style="height:48px;flex:none;display:flex;align-items:center;gap:6px;padding:0 20px;background:#F8F9FB;border-top:1px solid #E0E2E6;box-sizing:border-box">
+          <div style="font-size:13px;color:#16181D;font-variant-numeric:tabular-nums">0</div>
+          <div style="font-size:11px;color:#515763;flex:1">entries</div>
+          <div style="font-size:13px;color:#515763;line-height:24px;padding:0 10px;border-radius:6px;background:transparent;border:1px solid #B8BCC4">Clear history</div>
+        </div>
+        <div style="flex:1;min-height:0;overflow:hidden;border-top:1px solid #E0E2E6;padding:8px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+          <div title="SF Symbol tray, 22" style="position:relative;width:24px;height:18px;flex:none">
+            <div style="position:absolute;inset:0;border:1.5px solid #8C929F;border-radius:4px;box-sizing:border-box"></div>
+            <div style="position:absolute;left:0;top:9px;width:8px;height:1.5px;background:#8C929F"></div>
+            <div style="position:absolute;right:0;top:9px;width:8px;height:1.5px;background:#8C929F"></div>
+            <div style="position:absolute;left:6.5px;right:6.5px;top:9px;height:4.5px;border:1.5px solid #8C929F;border-top:none;border-radius:0 0 2px 2px;box-sizing:border-box"></div>
+          </div>
+          <div style="font-size:13px;color:#515763">No transcriptions yet</div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Full history unchanged down to the list area. Clear history is the sheet’s disabled control. The list area holds only the tray glyph (22 in 06) and one 13/400 line in 07, 4 apart, centred both ways.</div>
+      </sc-if>
+    </div>
+
+    <div style="width:480px;flex:none;display:flex;flex-direction:column;gap:40px">
+      <div data-screen-label="History reader">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">4 · HISTORY READER · 480 × 280</div>
+        <div style="width:480px;height:280px;display:flex;flex-direction:column;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+          <div style="position:relative;height:44px;flex:none;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+            <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+            <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">Transcription</div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:14px 20px;border-top:1px solid #E0E2E6">
+            <div style="font-size:11px;color:#515763;font-variant-numeric:tabular-nums">19 Sep 2026 at 9:22</div>
+            <div style="flex:1;min-height:0;background:#E0E2E6;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">Погоди, а так зачем мы сразу так пишем про спонсоршип? Что если они готовы по B2B нанимать? Короче, не понимаю.</div>
+          </div>
+          <div style="height:48px;flex:none;display:flex;align-items:center;gap:8px;padding:0 20px;background:#F8F9FB;border-top:1px solid #E0E2E6;box-sizing:border-box">
+            <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Copy</div>
+            <div style="flex:1"></div>
+            <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Close</div>
+          </div>
+        </div>
+        <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:12px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Settings’ chrome and buttons; the text sits in a 03 card like the usage block, and the popover footer returns as the action bar.</div>
+        </sc-if>
+      </div>
+
+      <div data-screen-label="Welcome">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">6 · WELCOME · 390</div>
+        <div style="width:390px;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+          <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+            <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+            <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">Welcome to WhisperKey</div>
+          </div>
+          <div style="padding:16px 20px;border-top:1px solid #E0E2E6;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">Go to Settings to set up your preferences, or you can do it later</div>
+          <div style="height:48px;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 20px;background:#F8F9FB;border-top:1px solid #E0E2E6;box-sizing:border-box">
+            <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Later</div>
+            <div style="font-size:13px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:24px;padding:0 10px;border-radius:6px;background:var(--wk-accent, #7B61FF);border:1px solid var(--wk-accent, #7B61FF)">Go to Settings</div>
+          </div>
+        </div>
+        <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:12px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Settings’ chrome; the default button is the active tab’s red fill, placed rightmost per macOS so Return lands on it.</div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="width:420px;flex:none" data-screen-label="Reset usage">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">5 · RESET USAGE · 420</div>
+      <div style="width:420px;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">Reset usage</div>
+        </div>
+        <div style="padding:14px 20px 16px;border-top:1px solid #E0E2E6">
+          <div style="font-size:12px;line-height:1.45;color:#515763;text-wrap:pretty">Select models to clear. This will only delete usage data - transcription history is not affected.</div>
+          <div style="margin-top:14px;background:#E0E2E6;border-radius:8px;padding:0 4px 4px">
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-bottom:1px solid #B8BCC4">
+              <div style="width:14px;height:14px;border-radius:4px;background:#16181D;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:8px;height:2px;border-radius:1px;background:#F8F9FB"></div></div>
+              <div style="font-size:13px;color:#16181D">Select all</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px">
+              <div style="width:14px;height:14px;border-radius:4px;background:#16181D;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#F8F9FB;flex:none">✓</div>
+              <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-transcribe</div>
+              <div style="height:18px;padding:0 6px;border-radius:6px;background:#D0D3D8;font-size:11px;color:#515763;display:flex;align-items:center;flex:none">Current</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px">
+              <div style="width:14px;height:14px;border-radius:4px;background:#16181D;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#F8F9FB;flex:none">✓</div>
+              <div style="flex:1;min-width:0;font-size:13px;color:#16181D;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-4o-mini-transcribe</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px">
+              <div style="width:14px;height:14px;border-radius:4px;background:#EFF0F3;border:1px solid #8C929F;box-sizing:border-box;flex:none"></div>
+              <div style="flex:1;font-size:13px;color:#16181D">Groq · whisper-large-v3</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px">
+              <div style="width:14px;height:14px;border-radius:4px;background:#EFF0F3;border:1px solid #8C929F;box-sizing:border-box;flex:none"></div>
+              <div style="flex:1;font-size:13px;color:#16181D">Groq · whisper-large-v3-turbo</div>
+            </div>
+          </div>
+        </div>
+        <div style="height:48px;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 20px;background:#F8F9FB;border-top:1px solid #E0E2E6;box-sizing:border-box">
+          <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Cancel</div>
+          <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Reset selected…</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+        <div style="font-size:11px;color:#515763">Nothing ticked</div>
+        <div style="height:48px;flex:1;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 20px;background:#F8F9FB;border:1px solid #E0E2E6;border-radius:8px;box-sizing:border-box">
+          <div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#E0E2E6;border:1px solid #B8BCC4">Cancel</div>
+          <div style="font-size:13px;color:#515763;line-height:24px;padding:0 10px;border-radius:6px;background:transparent;border:1px solid #B8BCC4">Reset selected…</div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Settings’ chrome and buttons, the usage block’s 03 card and hairline, and the keycap for the Current pill. Reset selected looks like Cancel; the macOS alert carries the warning.</div>
+      </sc-if>
+    </div>
+  </div>
+
+  <div style="margin-top:48px;display:flex;gap:48px;align-items:flex-start">
+    <div style="width:540px;flex:none" data-screen-label="Usage by model">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">8a · USAGE BY MODEL · 540 · FROM THE POPOVER’S USAGE BLOCK</div>
+      <div style="width:540px;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">Usage by model</div>
+        </div>
+        <div style="padding:14px 20px;background:#F8F9FB;border-top:1px solid #E0E2E6">
+          <div style="display:flex;gap:2px;background:#E0E2E6;border-radius:8px;padding:2px">
+            <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">Today</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">7d</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">30d</div>
+            <div style="flex:1;text-align:center;font-size:11px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:24px;border-radius:6px;background:var(--wk-accent, #7B61FF)">All</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid #E0E2E6;padding:14px 20px 20px">
+          <div style="background:#E0E2E6;border-radius:8px;padding:0 4px 4px">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;border-bottom:1px solid #B8BCC4;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763">
+              <div>MODEL</div><div style="text-align:right">WORDS</div><div style="text-align:right">AUDIO</div><div style="text-align:right">COST</div>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;font-size:13px;color:#16181D;font-variant-numeric:tabular-nums">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-transcribe</div><div style="text-align:right">41k</div><div style="text-align:right">9h 02m</div><div style="text-align:right">~$1.6</div>
+            </div>
+            <div style="height:1px;background:#B8BCC4;margin:0 8px"></div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;font-size:13px;color:#16181D;font-variant-numeric:tabular-nums">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OpenAI · gpt-4o-mini-transcribe</div><div style="text-align:right">38k</div><div style="text-align:right">6h 40m</div><div style="text-align:right">~$1.2</div>
+            </div>
+            <div style="height:1px;background:#B8BCC4;margin:0 8px"></div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;font-size:13px;color:#16181D;font-variant-numeric:tabular-nums">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Groq · whisper-large-v3-turbo</div><div style="text-align:right">11k</div><div style="text-align:right">1h 36m</div><div style="text-align:right">~$0.3</div>
+            </div>
+            <div style="height:1px;background:#B8BCC4;margin:0 -4px"></div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px 48px;gap:12px;align-items:center;height:34px;padding:0 8px;font-size:13px;font-weight:600;color:#16181D;font-variant-numeric:tabular-nums">
+              <div>Total</div><div style="text-align:right">90k</div><div style="text-align:right">17h 18m</div><div style="text-align:right">~$3.1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:12px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Settings’ chrome with the popover’s period picker in the tab well, bound to the same setting; the usage block’s 03 card; Reset usage’s 34 row and 05 hairline. Rows sort longest audio first. Cost reads “-” when a model has no single-currency price. Floating, closable, 540 for every period.</div>
+      </sc-if>
+    </div>
+
+    <div style="width:540px;flex:none" data-screen-label="Usage by model empty">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">8b · USAGE BY MODEL · EMPTY PERIOD</div>
+      <div style="width:540px;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">Usage by model</div>
+        </div>
+        <div style="padding:14px 20px;background:#F8F9FB;border-top:1px solid #E0E2E6">
+          <div style="display:flex;gap:2px;background:#E0E2E6;border-radius:8px;padding:2px">
+            <div style="flex:1;text-align:center;font-size:11px;font-weight:500;color:var(--wk-on-accent, #FFFFFF);line-height:24px;border-radius:6px;background:var(--wk-accent, #7B61FF)">Today</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">7d</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">30d</div>
+            <div style="flex:1;text-align:center;font-size:11px;color:#424854;line-height:24px;border-radius:6px">All</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid #E0E2E6;padding:14px 20px 20px">
+          <div style="background:#E0E2E6;border-radius:8px;padding:40px 16px;text-align:center;font-size:13px;color:#515763">No usage in this period.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:48px;display:flex;gap:48px;align-items:flex-start">
+    <div style="width:520px;flex:none" data-screen-label="Permissions needs access">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">7a · PERMISSIONS · 520 · NEEDS ACCESS</div>
+      <div style="width:520px;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">WhisperKey Permissions</div>
+        </div>
+        <div style="padding:16px 20px 20px;border-top:1px solid #E0E2E6">
+          <div style="font-size:13px;font-weight:600;color:#16181D">WhisperKey needs permissions</div>
+          <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#515763">Grant both permissions to record from the menu bar hotkey.</div>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;font-size:13px;color:#16181D">Microphone</div>
+                <div style="font-size:11px;color:#16181D;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">Needs access</div>
+              </div>
+              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Used only while recording after the hotkey starts capture.</div>
+              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
+            </div>
+            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;font-size:13px;color:#16181D">Accessibility</div>
+                <div style="font-size:11px;color:#16181D;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">Needs access</div>
+              </div>
+              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Required for the global hotkey to work while other apps are focused.</div>
+              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:520px;flex:none" data-screen-label="Permissions granted">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;margin-bottom:10px">7b · PERMISSIONS · MICROPHONE GRANTED</div>
+      <div style="width:520px;background:#EFF0F3;border:1px solid #B8BCC4;border-radius:10px;box-shadow:0 24px 52px rgba(0,0,0,0.14);overflow:hidden;box-sizing:border-box">
+        <div style="position:relative;height:44px;display:flex;align-items:center;padding:0 16px;background:#F8F9FB">
+          <div style="display:flex;gap:8px"><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div><div style="width:12px;height:12px;border-radius:6px;background:#8C929F"></div></div>
+          <div style="position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:#16181D;pointer-events:none">WhisperKey Permissions</div>
+        </div>
+        <div style="padding:16px 20px 20px;border-top:1px solid #E0E2E6">
+          <div style="font-size:13px;font-weight:600;color:#16181D">WhisperKey needs permissions</div>
+          <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#515763">Grant both permissions to record from the menu bar hotkey.</div>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;font-size:13px;color:#16181D">Microphone</div>
+                <div style="display:flex;align-items:center;gap:6px;height:18px"><div style="width:6px;height:6px;border-radius:3px;background:#4F8E00"></div><div style="font-size:11px;color:#515763">Granted</div></div>
+              </div>
+              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Used only while recording after the hotkey starts capture.</div>
+              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#515763;line-height:24px;padding:0 10px;border-radius:6px;background:transparent;border:1px solid #B8BCC4">Open System Settings</div></div>
+            </div>
+            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;font-size:13px;color:#16181D">Accessibility</div>
+                <div style="font-size:11px;color:#16181D;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">Needs access</div>
+              </div>
+              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Required for the global hotkey to work while other apps are focused.</div>
+              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+      <div style="width:300px;padding-top:26px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Settings’ chrome and the API key row’s two states: the rejected-key badge (hatch + dash) for Needs access, the Saved dot and grey label for Granted. The button stays in place, disabled, so the card doesn’t jump.</div>
+    </sc-if>
+  </div>
+
+  <!-- ALERTS -->
+  <div style="margin-top:64px;display:flex;align-items:baseline;gap:12px">
+    <div style="font-size:15px;font-weight:600;color:#16181D">Alerts</div>
+    <div style="font-size:12px;color:#515763">text only; macOS draws them. Destructive button labels repeat the control that opened the alert</div>
+  </div>
+  <div data-screen-label="Alerts" style="margin-top:22px;display:grid;grid-template-columns:repeat(3,minmax(0,420px));gap:48px">
+
+    <div style="border-top:1px solid #B8BCC4;padding-top:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763">DELETE API KEY · from Settings › Delete</div>
+      <div style="margin-top:12px;font-size:13px;font-weight:600;color:#16181D">Delete the saved API key?</div>
+      <div style="margin-top:4px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">The key is removed from this Mac. You’ll need to enter it again before you can transcribe.</div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#515763">
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#16181D">Delete Key</div><div>destructive · system red</div></div>
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#16181D">Cancel</div><div>default · Return and Esc</div></div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid #B8BCC4;padding-top:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763">CLEAR HISTORY · from Actions › Clear history…</div>
+      <div style="margin-top:12px;font-size:13px;font-weight:600;color:#16181D">Clear all transcription history?</div>
+      <div style="margin-top:4px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">Every saved transcription is permanently removed from this Mac. This can’t be undone.</div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#515763">
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#16181D">Clear History</div><div>destructive · system red</div></div>
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#16181D">Cancel</div><div>default · Return and Esc</div></div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid #B8BCC4;padding-top:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763">API KEY VALIDATION · three outcomes, one button</div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#16181D">API key saved</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#16181D">{Provider} accepted the key.</div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#16181D">{Provider} rejected this API key</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">Check that the whole key was pasted and that it’s still active in your {Provider} account.</div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#16181D">Couldn’t verify the API key</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#16181D;text-wrap:pretty">{Provider} didn’t respond. Check your internet connection and try again.</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;font-size:12px;color:#515763"><div style="width:110px;color:#16181D">OK</div><div>default · nothing destructive</div></div>
+    </div>
+
+    <div style="border-top:1px solid #B8BCC4;padding-top:14px">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763">LOWER HISTORY SIZE · sheet on Settings › History size</div>
+      <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#515763">when the new size is below the current entry count</div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#16181D">Delete 5 oldest entries?</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#16181D">Their audio is deleted too. This can’t be undone.</div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#16181D">Delete the oldest entry?</div>
+          <div style="margin-top:2px;font-size:13px;line-height:1.45;color:#16181D">Its audio is deleted too. This can’t be undone.</div>
+        </div>
+        <div style="font-size:12px;color:#515763">New size 0: <span style="color:#16181D">Delete all 5 entries?</span> · <span style="color:#16181D">Delete the only entry?</span></div>
+      </div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#515763">
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#16181D">Delete 5 Entries</div><div>destructive · system red, filled · singular Delete 1 Entry</div></div>
+        <div style="display:flex;gap:10px"><div style="width:110px;color:#16181D">Cancel</div><div>Esc</div></div>
+      </div>
+      <div style="margin-top:14px;border:1px dashed #8C929F;border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763">OPEN · NOT DECIDED</div>
+        <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#16181D;text-wrap:pretty">In the current build Delete N Entries takes Return. That conflicts with the rule below: Cancel holds the default slot, so Return never deletes.</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:18px;font-size:12px;color:#515763;line-height:1.5;max-width:900px;text-wrap:pretty">Title case on alert buttons follows macOS. Cancel holds the default slot in every destructive alert, so Return never deletes; the destructive button uses hasDestructiveAction and gets system red from macOS.</div>
+
+  <div data-screen-label="Token table" style="margin-top:56px;max-width:1240px">
+    <div style="font-size:15px;font-weight:600;color:#16181D">Colour tokens · Midnight → Light</div>
+    <div style="margin-top:4px;font-size:12px;color:#515763">one row per token · WCAG 2 contrast ratios, measured</div>
+    <div style="margin-top:16px;display:grid;grid-template-columns:140px minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr)">
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;border-top:none">TOKEN</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;border-top:none">ROLE</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;border-top:none">MIDNIGHT</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;border-top:none">LIGHT</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-size:11px;font-weight:500;letter-spacing:0.06em;color:#515763;border-top:none">CONTRAST</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">00</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">desktop behind the board (presentation only)</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#0E1013;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#0E1013</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#F2F2F7;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#F2F2F7</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">01</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">bars, tab-well bar, checkbox mark</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#14161A;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#14161A</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#F8F9FB;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#F8F9FB</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">02</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">surface</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#1A1C21;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#1A1C21</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#EFF0F3;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#EFF0F3</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">02 · panel shell</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">panel surface over blur 30</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:rgba(26,28,33,0.95);border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#1A1C21 at 95%</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:rgba(239,240,243,0.95);border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#EFF0F3 at 95%</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">03</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">cards, controls, tracks, tab well</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#23262D;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#23262D</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#E0E2E6;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#E0E2E6</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">04</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">hover, selected row, off track</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#2E323B;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#2E323B</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#D0D3D8;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#D0D3D8</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">05</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">every edge</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#3B4150;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#3B4150</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#B8BCC4;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#B8BCC4</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">on 02 1.67:1 · on 03 1.47:1 (Midnight 1.67:1 · 1.48:1)</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">06</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">muted edge: dashed failure, unchecked checkbox, traffic lights. + empty-list glyph</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#5A6070;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#5A6070</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#8C929F;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#8C929F</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">on 02 2.74:1 (Midnight 2.71:1)</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">07</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">secondary type</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#9BA1AF;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#9BA1AF</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#515763;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#515763</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">on 02 6.4:1 · floor 4.5 (Midnight 6.6:1)</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">07n</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">navigation at rest</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#B4BAC6;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#B4BAC6</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#424854;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#424854</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">on 03 tab well 7.1:1 · floor 4.5 (Midnight 7.8:1)</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">08</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">primary type, checked checkbox fill</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#E8EAEF;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#E8EAEF</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#16181D;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#16181D</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">on 02 15.6:1 · floor 12 (Midnight 14.2:1)</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">red</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">brand accent, oklch 0.60 0.196 31° → 0.66 0.226 31°</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#E24631;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#E24631</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:var(--wk-accent, #7B61FF);border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>{{ accentHex }}</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">as text on 01 (Recording) 3.3:1 (Midnight 4.4:1) · no floor set</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">red hover</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">hover and pressed on red</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#D0331F;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#D0331F</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:var(--wk-accent-hover, #6A4EF0);border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>{{ accentHoverHex }}</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">on red</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">type and glyphs on red, knob on red track</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#14161A;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#14161A</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#16181D;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#16181D</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">on red 5.1:1 · floor 4.5 · on red hover 4.2:1 (Midnight 4.4:1 · 3.6:1)</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">green</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">6pt status dot</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#78BE20;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#78BE20</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#4F8E00;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#4F8E00</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">on 02 3.5:1 (Midnight 7.5:1)</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">failure fill</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">failed row, rejected key, Needs access</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#1E2126;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#1E2126</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#E8E9ED;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#E8E9ED</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">failure hatch</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">hatch stroke over the fill</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:;border:1px solid #B8BCC4;box-sizing:border-box;flex:none;background-color:#1E2126;background-image:repeating-linear-gradient(135deg,rgba(138,144,158,0.4) 0 3px,rgba(138,144,158,0) 3px 7px)"></div><span>#8A909E at 18% (swatch 40%)</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:;border:1px solid #B8BCC4;box-sizing:border-box;flex:none;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.4) 0 3px,rgba(102,108,120,0) 3px 7px)"></div><span>#666C78 at 18% (swatch 40%)</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">failure edge</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">1px dashed</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#5A6070;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>06 #5A6070</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#8C929F;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>06 #8C929F</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">off knob</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">off-toggle knob, hatch stroke</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#8A909E;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#8A909E</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#666C78;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#666C78</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">on 04 off track 3.5:1 (Midnight 4.0:1)</div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">system red</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">drawn by macOS, unchanged</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#FF3B30;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#FF3B30</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#FF3B30;border:1px solid #B8BCC4;box-sizing:border-box;flex:none"></div><span>#FF3B30</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">shadow · panel</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">0 22 48</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#1A1C21;border:1px solid #B8BCC4;box-sizing:border-box;flex:none;box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div><span>#000000 at 50%</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#EFF0F3;border:1px solid #B8BCC4;box-sizing:border-box;flex:none;box-shadow:0 2px 6px rgba(0,0,0,0.16)"></div><span>#000000 at 16%</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">shadow · window</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">0 24 52</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#1A1C21;border:1px solid #B8BCC4;box-sizing:border-box;flex:none;box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div><span>#000000 at 45%</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#EFF0F3;border:1px solid #B8BCC4;box-sizing:border-box;flex:none;box-shadow:0 2px 6px rgba(0,0,0,0.16)"></div><span>#000000 at 14%</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+      <div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;font-weight:600">shadow · alert sheet</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763">0 20 44</div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#1A1C21;border:1px solid #B8BCC4;box-sizing:border-box;flex:none;box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div><span>#000000 at 60%</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;display:flex;gap:8px;align-items:center"><div style="width:16px;height:16px;border-radius:4px;background:#EFF0F3;border:1px solid #B8BCC4;box-sizing:border-box;flex:none;box-shadow:0 2px 6px rgba(0,0,0,0.16)"></div><span>#000000 at 20%</span></div><div style="font-size:12px;color:#16181D;padding:7px 12px 7px 0;border-top:1px solid #E0E2E6;line-height:1.4;color:#515763"></div>
+    </div>
+  </div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;violet&quot;,&quot;pink&quot;,&quot;green&quot;,&quot;yellow&quot;,&quot;blue&quot;,&quot;red&quot;,&quot;brick&quot;,&quot;custom&quot;],&quot;default&quot;:&quot;custom&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;customHue&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0,&quot;max&quot;:360,&quot;step&quot;:1,&quot;unit&quot;:&quot;°&quot;,&quot;default&quot;:32,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Custom accent&quot;},&quot;customChroma&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0,&quot;max&quot;:0.25,&quot;step&quot;:0.005,&quot;default&quot;:0.205,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Custom accent&quot;},&quot;customLightness&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.4,&quot;max&quot;:0.9,&quot;step&quot;:0.01,&quot;default&quot;:0.78,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Custom accent&quot;},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showNotch&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showKeycaps&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  static ACCENTS = {
+    violet: { name: 'violet', a: '#7B61FF', h: '#6A4EF0', on: '#FFFFFF', t: '#5B3FE0' },
+    pink: { name: 'pink', a: '#FF5FA2', h: '#F0438B', on: '#16181D', t: '#C8246B' },
+    green: { name: 'green', a: '#3DDC84', h: '#28C872', on: '#16181D', t: '#11804A' },
+    yellow: { name: 'yellow', a: '#FFD23F', h: '#F5C21B', on: '#16181D', t: '#8F6B00' },
+    blue: { name: 'blue', a: '#2EA8FF', h: '#1593EE', on: '#16181D', t: '#0A6BB8' },
+    red: { name: 'red', a: '#FE442B', h: '#EC2E14', on: '#16181D', t: '#D0331F' },
+    brick: { name: 'brick', a: '#E2654F', h: '#D3533D', on: '#16181D', t: '#B0412E' }
+  };
+  static hex(L, C, H) {
+    const r = H * Math.PI / 180, a = C * Math.cos(r), b = C * Math.sin(r);
+    const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3, s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+    const f = x => { x = Math.max(0, Math.min(1, x)); x = x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055; return Math.round(x * 255).toString(16).padStart(2, '0'); };
+    return ('#' + f(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s) + f(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s) + f(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)).toUpperCase();
+  }
+  custom() {
+    const H = this.props.customHue ?? 32, C = this.props.customChroma ?? 0.205, L = this.props.customLightness ?? 0.78, X = Component.hex;
+    return { name: 'custom', a: X(L, C, H), h: X(L - 0.05, C, H), on: L >= 0.64 ? '#16181D' : '#FFFFFF', t: X(Math.min(L, 0.52), C, H) };
+  }
+  key() { const A = Component.ACCENTS; const k = (this.state && this.state.accent) || this.props.accent || 'custom'; return k === 'custom' || A[k] ? k : 'violet'; }
+  col(k) { return k === 'custom' ? this.custom() : Component.ACCENTS[k]; }
+  apply() { const c = this.col(this.key()); const s = document.documentElement.style; s.setProperty('--wk-accent', c.a); s.setProperty('--wk-accent-hover', c.h); s.setProperty('--wk-on-accent', c.on); s.setProperty('--wk-accent-text', c.t); }
+  componentDidMount() { this.apply(); }
+  componentDidUpdate(pp) {
+    const p = this.props, tuned = pp.customHue !== p.customHue || pp.customChroma !== p.customChroma || pp.customLightness !== p.customLightness;
+    if (tuned && p.accent !== 'custom' && (this.state && this.state.accent) !== 'custom') this.setState({ accent: 'custom' });
+    else if (pp.accent !== p.accent && this.state && this.state.accent) this.setState({ accent: null });
+    this.apply();
+  }
+  renderVals() {
+    const k = this.key(), c = this.col(k);
+    return {
+      showNotes: this.props.showNotes ?? true,
+      showNotch: this.props.showNotch ?? true,
+      showKeycaps: this.props.showKeycaps ?? true,
+      classicSel: (this.state && this.state.theme || 'classic') === 'classic',
+      midnightSel: (this.state && this.state.theme) === 'midnight',
+      pickClassic: () => this.setState({ theme: 'classic' }),
+      pickMidnight: () => this.setState({ theme: 'midnight' }),
+      accentName: c.name, accentHex: c.a, accentHoverHex: c.h,
+      accents: [...Object.keys(Component.ACCENTS), 'custom'].map(id => ({ ...this.col(id), pick: () => this.setState({ accent: id }), ring: id === k ? '0 0 0 2px #F2F2F7, 0 0 0 3.5px #16181D' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>
