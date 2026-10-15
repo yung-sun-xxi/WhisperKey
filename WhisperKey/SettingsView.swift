@@ -2004,8 +2004,8 @@ private extension View {
 
 // MARK: - Themed Settings end
 
-/// What the Reset usage and Usage by model windows still read from the Settings window's
-/// old layout. They move onto tokens with those windows (#163, #170).
+/// What the Usage by model window still reads from the Settings window's old layout. It
+/// moves onto tokens with that window (#170).
 extension SettingsWindowLayout {
     static let contentPadding: CGFloat = 18
     static let backgroundColor = NSColor.controlBackgroundColor
@@ -2025,14 +2025,21 @@ private let allUsageResetKeys: [ProviderModelKey] = {
     return openai + groq
 }()
 
+// MARK: - Themed Reset usage begin
+
 @MainActor
-private enum UsageResetWindowController {
+enum UsageResetWindowController {
     private static var window: NSWindow?
+    private static var themeFollower: AnyCancellable?
+
+    /// The window while it is open, for the Debug build's snapshot hook.
+    static var openWindow: NSWindow? { window }
     private static var parentWindow: NSWindow?
     private static var delegate: WindowDelegate?
 
     static func show(
         currentKey: ProviderModelKey,
+        initialSelection: Set<ProviderModelKey> = [],
         parent: NSWindow?,
         onReset: @escaping (Set<ProviderModelKey>) -> Void
     ) {
@@ -2048,16 +2055,24 @@ private enum UsageResetWindowController {
 
         let content = UsageResetView(
             currentKey: currentKey,
-            onReset: { keys in
-                onReset(keys)
-                hide()
+            initialSelection: initialSelection,
+            onRequestReset: { keys in
+                UsageResetConfirmation.present(
+                    UsageResetPrompt(modelCount: keys.count),
+                    from: Self.window,
+                    completion: { confirmed in
+                        guard confirmed else { return }
+                        onReset(keys)
+                        hide()
+                    }
+                )
             },
             onCancel: { hide() }
         )
 
         let hostingView = NSHostingView(rootView: ThemedRoot("resetUsage") { content })
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 1),
+            contentRect: NSRect(origin: .zero, size: hostingView.fittingSize),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -2067,7 +2082,8 @@ private enum UsageResetWindowController {
         window.setContentSize(hostingView.fittingSize)
         window.isReleasedWhenClosed = false
         window.level = .floating
-        window.backgroundColor = SettingsWindowLayout.backgroundColor
+        ThemedResetUsageWindow.configure(window, tokens: ThemeTokensSource.shared.tokens)
+        themeFollower = ThemedResetUsageWindow.follow(ThemeTokensSource.shared, window: window)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
 
@@ -2098,6 +2114,7 @@ private enum UsageResetWindowController {
         window = nil
         parentWindow = nil
         delegate = nil
+        themeFollower = nil
         closingWindow.close()
     }
 
@@ -2150,6 +2167,7 @@ private enum UsageResetWindowController {
         window = nil
         parentWindow = nil
         delegate = nil
+        themeFollower = nil
     }
 
     private static func register(_ window: NSWindow) {
@@ -2175,82 +2193,25 @@ private enum UsageResetWindowController {
 
 private struct UsageResetView: View {
     let currentKey: ProviderModelKey
-    let onReset: (Set<ProviderModelKey>) -> Void
+    let initialSelection: Set<ProviderModelKey>
+    let onRequestReset: (Set<ProviderModelKey>) -> Void
     let onCancel: () -> Void
-    @State private var selection: Set<ProviderModelKey> = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Reset usage")
-                .font(.title3.weight(.semibold))
-            Text("Select models to clear. This will only delete usage data - transcription history is not affected.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                Button(allKeysSelected ? "Deselect all" : "Select all") {
-                    if allKeysSelected {
-                        selection.removeAll()
-                    } else {
-                        selection = Set(allUsageResetKeys)
-                    }
-                }
-                .controlSize(.small)
-                Spacer()
-            }
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(allUsageResetKeys, id: \.self) { key in
-                        Toggle(isOn: binding(for: key)) {
-                            HStack(alignment: .center, spacing: 6) {
-                                Text(displayName(for: key))
-                                if key == currentKey {
-                                    CurrentModelBadge()
-                                }
-                            }
-                            .frame(minHeight: 18, alignment: .center)
-                        }
-                        .toggleStyle(.checkbox)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 160)
-
-            HStack(spacing: 8) {
-                Button(role: .destructive) {
-                    onReset(selection)
-                } label: {
-                    Text("Reset selected")
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(selection.isEmpty)
-                Spacer()
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-            }
-        }
-        .padding(20)
-        .frame(width: 420)
-    }
-
-    private var allKeysSelected: Bool {
-        !allUsageResetKeys.isEmpty && selection.count == allUsageResetKeys.count
-    }
-
-    private func binding(for key: ProviderModelKey) -> Binding<Bool> {
-        Binding(
-            get: { selection.contains(key) },
-            set: { include in
-                if include {
-                    selection.insert(key)
-                } else {
-                    selection.remove(key)
-                }
-            }
+        ThemedResetUsageView(
+            rows: allUsageResetKeys.map { key in
+                ResetUsageRow(id: Self.id(of: key), title: displayName(for: key), isCurrent: key == currentKey)
+            },
+            initialSelection: Set(initialSelection.map(Self.id(of:))),
+            onRequestReset: { ids in
+                onRequestReset(Set(allUsageResetKeys.filter { ids.contains(Self.id(of: $0)) }))
+            },
+            onCancel: onCancel
         )
+    }
+
+    private static func id(of key: ProviderModelKey) -> String {
+        "\(key.providerID)/\(key.modelID)"
     }
 
     private func displayName(for key: ProviderModelKey) -> String {
@@ -2259,16 +2220,43 @@ private struct UsageResetView: View {
     }
 }
 
-private struct CurrentModelBadge: View {
-    var body: some View {
-        Text("Current")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 5)
-            .frame(height: 16, alignment: .center)
-            .background(
-                Color.secondary.opacity(0.15),
-                in: Capsule()
-            )
+/// The question asked before "Reset selected…" clears counters (#183).
+@MainActor
+enum UsageResetConfirmation {
+    /// The alert, configured but not shown, so it can also be rendered on its own.
+    static func makeAlert(prompt: UsageResetPrompt) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.informativeText
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: UsageResetPrompt.confirmButtonTitle)
+        alert.addButton(withTitle: UsageResetPrompt.cancelButtonTitle)
+        alert.buttons.first?.hasDestructiveAction = true
+        // A solid red fill: the destructive flag alone draws only pale red on glass.
+        alert.buttons.first?.bezelColor = .systemRed
+        alert.buttons.first?.keyEquivalent = "\r"
+        alert.buttons.dropFirst().first?.keyEquivalent = "\u{1b}"
+        return alert
+    }
+
+    /// Shows the alert as a sheet on `window`; `completion` gets true only for Reset, and
+    /// false when there is no window to show it on.
+    static func present(
+        _ prompt: UsageResetPrompt,
+        from window: NSWindow?,
+        completion: @escaping @MainActor (Bool) -> Void
+    ) {
+        guard let window else {
+            completion(false)
+            return
+        }
+
+        makeAlert(prompt: prompt).beginSheetModal(for: window) { response in
+            Task { @MainActor in
+                completion(response == .alertFirstButtonReturn)
+            }
+        }
     }
 }
+
+// MARK: - Themed Reset usage end

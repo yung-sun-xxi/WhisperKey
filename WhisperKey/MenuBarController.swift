@@ -70,6 +70,7 @@ final class MenuBarController: NSObject {
         ToastSnapshotHook.startIfRequested(settings: coordinator.settings)
         FullHistorySnapshotHook.startIfRequested(coordinator: coordinator)
         HistoryReaderSnapshotHook.startIfRequested(settings: coordinator.settings)
+        ResetUsageSnapshotHook.startIfRequested(settings: coordinator.settings)
         #endif
     }
 
