@@ -1,15 +1,19 @@
 import AppKit
 import AVFoundation
+import Combine
 import SwiftUI
 import ThemeKit
 
-private enum OnboardingWindowLayout {
-    static let width: CGFloat = 520
-}
-
+/// The permissions onboarding window.
+///
+/// The look is ThemeKit's (#186): `ThemedPermissionsView` in the shared small-window
+/// chrome, `ThemedSurfaceWindow`, which follows the theme while the window is open. This
+/// file maps the coordinator's permissions onto the view and keeps the window's
+/// behaviour: its z-order, when it shows and when it closes.
 final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private let coordinator: AppCoordinator
     private var window: NSWindow?
+    private var themeFollower: AnyCancellable?
     private var zOrderState: PermissionWindowZOrderState = .aboveOrdinaryApps
     private var userExplicitlyClosed = false
     private var closingForGrantedPermissions = false
@@ -69,12 +73,26 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let content = OnboardingView()
-            .environmentObject(coordinator)
         ThemeTokensSource.shared.follow(coordinator.settings)
+        let window = Self.makeWindow(
+            LivePermissionsView()
+                .environmentObject(coordinator)
+        )
+        window.delegate = self
+        themeFollower = ThemedSurfaceWindow.follow(ThemeTokensSource.shared, window: window)
+        center(window)
+        self.window = window
+        applyZOrder(zOrderState, bringToFront: zOrderState == .aboveOrdinaryApps)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// The window as drawn, not yet placed or shown: `content` at its fitting size, in the
+    /// surface chrome with the current theme. Shared with the Debug build's snapshot hook,
+    /// which passes a view of fixed states.
+    static func makeWindow(_ content: some View) -> NSWindow {
         let hostingView = NSHostingView(rootView: ThemedRoot("permissions") { content })
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: OnboardingWindowLayout.width, height: 1),
+            contentRect: NSRect(origin: .zero, size: hostingView.fittingSize),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -83,12 +101,35 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window.contentView = hostingView
         window.setContentSize(hostingView.fittingSize)
         window.isReleasedWhenClosed = false
-        window.delegate = self
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        center(window)
-        self.window = window
-        applyZOrder(zOrderState, bringToFront: zOrderState == .aboveOrdinaryApps)
-        NSApp.activate(ignoringOtherApps: true)
+        ThemedSurfaceWindow.configure(window, tokens: ThemeTokensSource.shared.tokens)
+        return window
+    }
+
+    /// What each card's button does.
+    struct PermissionActions {
+        var microphone: () -> Void
+        var accessibility: () -> Void
+    }
+
+    /// The drawn view for `permissions`. The microphone card offers "Allow Microphone"
+    /// until macOS has asked, "Open System Settings" after; the accessibility card always
+    /// "Open System Settings".
+    static func permissionsView(for permissions: PermissionState, actions: PermissionActions) -> ThemedPermissionsView {
+        ThemedPermissionsView(
+            microphone: .init(
+                isGranted: permissions.microphoneGranted,
+                buttonTitle: permissions.microphoneStatus == .notDetermined
+                    ? "Allow Microphone"
+                    : "Open System Settings",
+                action: actions.microphone
+            ),
+            accessibility: .init(
+                isGranted: permissions.accessibilityGranted,
+                buttonTitle: "Open System Settings",
+                action: actions.accessibility
+            )
+        )
     }
 
     private func closeForGrantedPermissions() {
@@ -116,48 +157,26 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             userExplicitlyClosed = true
         }
         window = nil
+        themeFollower = nil
     }
 }
 
-private struct OnboardingView: View {
+/// The window's content: the coordinator's permissions as they are now, redrawn when they
+/// change.
+private struct LivePermissionsView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("WhisperKey needs permissions")
-                    .font(.title2.weight(.semibold))
-                Text("Grant both permissions to record from the menu bar hotkey.")
-                    .foregroundStyle(.secondary)
-            }
-
-            PermissionCard(
-                symbolName: "mic",
-                title: "Microphone",
-                message: "Used only while recording after the hotkey starts capture.",
-                isGranted: coordinator.permissions.microphoneGranted,
-                buttonTitle: microphoneButtonTitle,
-                action: microphoneAction
-            )
-
-            PermissionCard(
-                symbolName: "accessibility",
-                title: "Accessibility",
-                message: "Required for the global hotkey to work while other apps are focused.",
-                isGranted: coordinator.permissions.accessibilityGranted,
-                buttonTitle: "Open System Settings",
-                action: coordinator.openAccessibilitySettings
-            )
-        }
-        .padding(24)
-        .frame(width: OnboardingWindowLayout.width)
-        .fixedSize(horizontal: false, vertical: true)
+        OnboardingWindowController.permissionsView(for: coordinator.permissions, actions: actions)
     }
 
-    private var microphoneButtonTitle: String {
-        coordinator.permissions.microphoneStatus == .notDetermined
-            ? "Allow Microphone"
-            : "Open System Settings"
+    /// The microphone button asks while macOS has not, and opens its pane otherwise,
+    /// decided when it is tapped.
+    private var actions: OnboardingWindowController.PermissionActions {
+        OnboardingWindowController.PermissionActions(
+            microphone: microphoneAction,
+            accessibility: coordinator.openAccessibilitySettings
+        )
     }
 
     private func microphoneAction() {
@@ -165,48 +184,6 @@ private struct OnboardingView: View {
             coordinator.requestMicrophonePermission()
         } else {
             coordinator.openMicrophoneSettings()
-        }
-    }
-}
-
-private struct PermissionCard: View {
-    let symbolName: String
-    let title: String
-    let message: String
-    let isGranted: Bool
-    let buttonTitle: String
-    let action: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: symbolName)
-                .font(.title2)
-                .frame(width: 32, height: 32)
-                .foregroundStyle(isGranted ? .green : .orange)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(title)
-                        .font(.headline)
-                    Spacer()
-                    Label(isGranted ? "Granted" : "Needs access", systemImage: isGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(isGranted ? .green : .orange)
-                }
-
-                Text(message)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-
-                Button(buttonTitle, action: action)
-                    .disabled(isGranted)
-            }
-        }
-        .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isGranted ? Color.green.opacity(0.35) : Color.orange.opacity(0.45), lineWidth: 1)
         }
     }
 }

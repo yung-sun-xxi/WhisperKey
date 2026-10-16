@@ -62,6 +62,7 @@ final class ThemeParityTests: XCTestCase {
         XCTAssertEqual(daylight.resetUsage, midnight.resetUsage, "resetUsage")
         XCTAssertEqual(daylight.usageBreakdown, midnight.usageBreakdown, "usageBreakdown")
         XCTAssertEqual(daylight.welcome, midnight.welcome, "welcome")
+        XCTAssertEqual(daylight.permissions, midnight.permissions, "permissions")
         // Relaxed on purpose (#176): the appearance follows the palette.
         XCTAssertEqual(daylight.windowAppearance, .light, "windowAppearance")
         XCTAssertEqual(midnight.windowAppearance, .dark, "windowAppearance")

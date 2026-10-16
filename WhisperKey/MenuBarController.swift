@@ -73,6 +73,7 @@ final class MenuBarController: NSObject {
         ResetUsageSnapshotHook.startIfRequested(settings: coordinator.settings)
         UsageBreakdownSnapshotHook.startIfRequested(coordinator: coordinator)
         WelcomeSnapshotHook.startIfRequested(settings: coordinator.settings)
+        PermissionsSnapshotHook.startIfRequested(settings: coordinator.settings)
         #endif
     }
 

@@ -81,24 +81,32 @@ private struct DrawnSwitch: View {
 
 /// A push button: `sizes.control` tall, `card` with an `edge` outline, the title in
 /// `body`. A destructive one takes `destructiveText`, which looks like its neighbours
-/// (#105 rule 2).
+/// (#105 rule 2). One sitting on a `card` (`onCard`) is filled `raisedControl` instead,
+/// the sheet's 04 "control sitting on a 03 card", and `edge` while pressed. Disabled,
+/// either keeps its size and its `edge` outline, drops the fill and greys the title to
+/// `secondaryText`.
 public struct ThemedPushButton: View {
     @Environment(\.themeTokens) private var tokens
     private let title: String
     private let role: ButtonRole?
+    private let onCard: Bool
     private let action: () -> Void
 
-    public init(_ title: String, role: ButtonRole? = nil, action: @escaping () -> Void) {
+    public init(_ title: String, role: ButtonRole? = nil, onCard: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.role = role
+        self.onCard = onCard
         self.action = action
     }
 
     public var body: some View {
+        let colors = tokens.colors
         Button(title, role: role, action: action)
             .buttonStyle(DrawnPushButtonStyle(
                 tokens: tokens,
-                label: role == .destructive ? tokens.colors.destructiveText : tokens.colors.primaryText
+                label: role == .destructive ? colors.destructiveText : colors.primaryText,
+                fill: onCard ? colors.raisedControl : colors.card,
+                pressedFill: onCard ? colors.edge : colors.raisedControl
             ))
     }
 }
@@ -106,9 +114,11 @@ public struct ThemedPushButton: View {
 private struct DrawnPushButtonStyle: ButtonStyle {
     let tokens: ThemeTokens
     let label: ThemeColor
+    let fill: ThemeColor
+    let pressedFill: ThemeColor
 
     func makeBody(configuration: Configuration) -> some View {
-        DrawnPushButton(configuration: configuration, tokens: tokens, label: label)
+        DrawnPushButton(configuration: configuration, tokens: tokens, label: label, fill: fill, pressedFill: pressedFill)
     }
 }
 
@@ -116,6 +126,8 @@ private struct DrawnPushButton: View {
     let configuration: ButtonStyleConfiguration
     let tokens: ThemeTokens
     let label: ThemeColor
+    let fill: ThemeColor
+    let pressedFill: ThemeColor
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
@@ -126,7 +138,7 @@ private struct DrawnPushButton: View {
             .lineLimit(1)
             .padding(.horizontal, tokens.controlMetrics.horizontalPadding)
             .frame(height: tokens.sizes.control)
-            .drawnControlBox(tokens, fill: isEnabled ? (configuration.isPressed ? colors.raisedControl : colors.card) : nil)
+            .drawnControlBox(tokens, fill: isEnabled ? (configuration.isPressed ? pressedFill : fill) : nil)
             .contentShape(Rectangle())
     }
 }
