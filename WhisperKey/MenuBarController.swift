@@ -72,6 +72,7 @@ final class MenuBarController: NSObject {
         HistoryReaderSnapshotHook.startIfRequested(settings: coordinator.settings)
         ResetUsageSnapshotHook.startIfRequested(settings: coordinator.settings)
         UsageBreakdownSnapshotHook.startIfRequested(coordinator: coordinator)
+        WelcomeSnapshotHook.startIfRequested(settings: coordinator.settings)
         #endif
     }
 
