@@ -5,3 +5,4 @@ The four `settings-*.png` and `settings-theme-row.png` (the "Theme row states" s
 `full-history-empty.png` (the "Full history empty" section) was added on 2026-10-13: the Full history window with no entries.
 Every PNG was re-exported on 2026-10-15, when the design was revised to govern the look only (#173), and `reset-usage-confirmation.png` (the "Reset usage confirmation" section inside Alerts) was added.
 To regenerate: [`scripts/export-mockups.mjs`](../../../scripts/export-mockups.mjs) opens the design file in headless Chrome and takes an element screenshot of each named `[data-screen-label]` section at device scale factor 2, with 24 pt of page background around it for the shadow and the rest of the board hidden.
+`permissions-needs-access.png` and `permissions-granted.png` were re-exported on 2026-10-16, when each permission card took back its leading glyph (#186).

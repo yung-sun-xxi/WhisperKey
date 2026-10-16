@@ -106,6 +106,7 @@
       <div style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#16181D;line-height:1.4">
         <div><strong style="font-weight:600">Default button</strong> <span style="color:#515763">— red fill, 13/500 on-red label. Welcome only</span></div>
         <div><strong style="font-weight:600">Disabled control</strong> <span style="color:#515763">— no fill, 05 edge, 07 label</span></div>
+        <div><strong style="font-weight:600">+ Push button, pressed</strong> <span style="color:#515763">— 05 fill while held; at rest 04 fill, 05 edge on a 03 card</span></div>
         <div><strong style="font-weight:600">Checkbox</strong> <span style="color:#515763">— 14, radius 4. Off: 06 edge on 02. On and mixed: 08 fill, 01 mark</span></div>
         <div><strong style="font-weight:600">Action bar</strong> <span style="color:#515763">— 48 on 01, the panel footer at window scale</span></div>
         <div><strong style="font-weight:600">Row names</strong> <span style="color:#515763">— 34 is now “list row”, 40 “form row”</span></div>
@@ -973,21 +974,23 @@
           <div style="font-size:13px;font-weight:600;color:#16181D">WhisperKey needs permissions</div>
           <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#515763">Grant both permissions to record from the menu bar hotkey.</div>
           <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
-            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px">
-              <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px;display:grid;grid-template-columns:22px minmax(0,1fr);column-gap:12px">
+              <div style="grid-row:1;grid-column:1;align-self:center;justify-self:center;display:flex"><div title="SF Symbol mic, 18" style="width:13px;height:18px;display:flex;flex-direction:column;align-items:center"><div style="width:8px;height:12px;border-radius:4px;box-sizing:border-box;border:1.5px solid #515763;flex:none"></div><div style="width:13px;height:7px;margin-top:-4px;box-sizing:border-box;border:1.5px solid #515763;border-top:none;border-radius:0 0 6.5px 6.5px;flex:none"></div><div style="width:1.5px;height:3px;background:#515763;flex:none"></div></div></div>
+              <div style="grid-row:1;grid-column:2;display:flex;align-items:center;gap:8px">
                 <div style="flex:1;font-size:13px;color:#16181D">Microphone</div>
                 <div style="font-size:11px;color:#16181D;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">Needs access</div>
               </div>
-              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Used only while recording after the hotkey starts capture.</div>
-              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
+              <div style="grid-row:2;grid-column:2;margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Used only while recording after the hotkey starts capture.</div>
+              <div style="grid-row:3;grid-column:2;margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
             </div>
-            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px">
-              <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px;display:grid;grid-template-columns:22px minmax(0,1fr);column-gap:12px">
+              <div style="grid-row:1;grid-column:1;align-self:center;justify-self:center;display:flex"><div title="SF Symbol accessibility, 18" style="position:relative;width:18px;height:18px;border-radius:9px;box-sizing:border-box;border:1.5px solid #515763"><div style="position:absolute;left:6px;top:2px;width:3px;height:3px;border-radius:1.5px;background:#515763"></div><div style="position:absolute;left:3px;top:6px;width:9px;height:1.5px;border-radius:1px;background:#515763"></div><div style="position:absolute;left:6.75px;top:6px;width:1.5px;height:4px;background:#515763"></div><div style="position:absolute;left:6.75px;top:9.5px;width:1.5px;height:4px;border-radius:1px;background:#515763;transform-origin:50% 0;transform:rotate(22deg)"></div><div style="position:absolute;left:6.75px;top:9.5px;width:1.5px;height:4px;border-radius:1px;background:#515763;transform-origin:50% 0;transform:rotate(-22deg)"></div></div></div>
+              <div style="grid-row:1;grid-column:2;display:flex;align-items:center;gap:8px">
                 <div style="flex:1;font-size:13px;color:#16181D">Accessibility</div>
                 <div style="font-size:11px;color:#16181D;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">Needs access</div>
               </div>
-              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Required for the global hotkey to work while other apps are focused.</div>
-              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
+              <div style="grid-row:2;grid-column:2;margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Required for the global hotkey to work while other apps are focused.</div>
+              <div style="grid-row:3;grid-column:2;margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
             </div>
           </div>
         </div>
@@ -1005,21 +1008,23 @@
           <div style="font-size:13px;font-weight:600;color:#16181D">WhisperKey needs permissions</div>
           <div style="margin-top:4px;font-size:12px;line-height:1.45;color:#515763">Grant both permissions to record from the menu bar hotkey.</div>
           <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
-            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px">
-              <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px;display:grid;grid-template-columns:22px minmax(0,1fr);column-gap:12px">
+              <div style="grid-row:1;grid-column:1;align-self:center;justify-self:center;display:flex"><div title="SF Symbol mic, 18" style="width:13px;height:18px;display:flex;flex-direction:column;align-items:center"><div style="width:8px;height:12px;border-radius:4px;box-sizing:border-box;border:1.5px solid #515763;flex:none"></div><div style="width:13px;height:7px;margin-top:-4px;box-sizing:border-box;border:1.5px solid #515763;border-top:none;border-radius:0 0 6.5px 6.5px;flex:none"></div><div style="width:1.5px;height:3px;background:#515763;flex:none"></div></div></div>
+              <div style="grid-row:1;grid-column:2;display:flex;align-items:center;gap:8px">
                 <div style="flex:1;font-size:13px;color:#16181D">Microphone</div>
                 <div style="display:flex;align-items:center;gap:6px;height:18px"><div style="width:6px;height:6px;border-radius:3px;background:#4F8E00"></div><div style="font-size:11px;color:#515763">Granted</div></div>
               </div>
-              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Used only while recording after the hotkey starts capture.</div>
-              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#515763;line-height:24px;padding:0 10px;border-radius:6px;background:transparent;border:1px solid #B8BCC4">Open System Settings</div></div>
+              <div style="grid-row:2;grid-column:2;margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Used only while recording after the hotkey starts capture.</div>
+              <div style="grid-row:3;grid-column:2;margin-top:10px;display:flex"><div style="font-size:13px;color:#515763;line-height:24px;padding:0 10px;border-radius:6px;background:transparent;border:1px solid #B8BCC4">Open System Settings</div></div>
             </div>
-            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px">
-              <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:#E0E2E6;border-radius:8px;padding:12px 14px 14px;display:grid;grid-template-columns:22px minmax(0,1fr);column-gap:12px">
+              <div style="grid-row:1;grid-column:1;align-self:center;justify-self:center;display:flex"><div title="SF Symbol accessibility, 18" style="position:relative;width:18px;height:18px;border-radius:9px;box-sizing:border-box;border:1.5px solid #515763"><div style="position:absolute;left:6px;top:2px;width:3px;height:3px;border-radius:1.5px;background:#515763"></div><div style="position:absolute;left:3px;top:6px;width:9px;height:1.5px;border-radius:1px;background:#515763"></div><div style="position:absolute;left:6.75px;top:6px;width:1.5px;height:4px;background:#515763"></div><div style="position:absolute;left:6.75px;top:9.5px;width:1.5px;height:4px;border-radius:1px;background:#515763;transform-origin:50% 0;transform:rotate(22deg)"></div><div style="position:absolute;left:6.75px;top:9.5px;width:1.5px;height:4px;border-radius:1px;background:#515763;transform-origin:50% 0;transform:rotate(-22deg)"></div></div></div>
+              <div style="grid-row:1;grid-column:2;display:flex;align-items:center;gap:8px">
                 <div style="flex:1;font-size:13px;color:#16181D">Accessibility</div>
                 <div style="font-size:11px;color:#16181D;line-height:18px;padding:0 8px;border-radius:6px;border:1px dashed #8C929F;background-color:#E8E9ED;background-image:repeating-linear-gradient(135deg,rgba(102,108,120,0.18) 0 4px,rgba(102,108,120,0) 4px 9px)">Needs access</div>
               </div>
-              <div style="margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Required for the global hotkey to work while other apps are focused.</div>
-              <div style="margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
+              <div style="grid-row:2;grid-column:2;margin-top:3px;font-size:12px;line-height:1.45;color:#515763">Required for the global hotkey to work while other apps are focused.</div>
+              <div style="grid-row:3;grid-column:2;margin-top:10px;display:flex"><div style="font-size:13px;color:#16181D;line-height:24px;padding:0 10px;border-radius:6px;background:#D0D3D8;border:1px solid #B8BCC4">Open System Settings</div></div>
             </div>
           </div>
         </div>
@@ -1027,7 +1032,7 @@
     </div>
 
     <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
-      <div style="width:300px;padding-top:26px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Settings’ chrome and the API key row’s two states: the rejected-key badge (hatch + dash) for Needs access, the Saved dot and grey label for Granted. The button stays in place, disabled, so the card doesn’t jump.</div>
+      <div style="width:300px;padding-top:26px;font-size:12px;color:#515763;line-height:1.5;text-wrap:pretty"><strong style="font-weight:600;color:#16181D">Borrows</strong> Settings’ chrome and the API key row’s two states: the rejected-key badge (hatch + dash) for Needs access, the Saved dot and grey label for Granted. The button stays in place, disabled, so the card doesn’t jump. Each card leads with its SF glyph, mic or accessibility, 18 in 07 in a 22 column 12 from the text, centred on the title row; it stays 07 when granted.</div>
     </sc-if>
   </div>
 
