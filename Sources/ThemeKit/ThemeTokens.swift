@@ -50,6 +50,8 @@ public struct ThemeTokens: Equatable, Sendable {
     public var resetUsage: ResetUsageMetrics
     /// The Usage by model window: its width, picker band, card and table columns.
     public var usageBreakdown: UsageBreakdownMetrics
+    /// The welcome window: its width and the gaps of its centred stack.
+    public var welcome: WelcomeMetrics
 
     public init(
         theme: AppTheme,
@@ -69,7 +71,8 @@ public struct ThemeTokens: Equatable, Sendable {
         fullHistory: FullHistoryMetrics,
         historyReader: HistoryReaderMetrics,
         resetUsage: ResetUsageMetrics,
-        usageBreakdown: UsageBreakdownMetrics
+        usageBreakdown: UsageBreakdownMetrics,
+        welcome: WelcomeMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -89,6 +92,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.historyReader = historyReader
         self.resetUsage = resetUsage
         self.usageBreakdown = usageBreakdown
+        self.welcome = welcome
     }
 }
 
@@ -1168,6 +1172,41 @@ public extension ThemeTokens {
             self.columnGap = columnGap
             self.emptyPaddingVertical = emptyPaddingVertical
             self.emptyPaddingHorizontal = emptyPaddingHorizontal
+        }
+    }
+}
+
+// MARK: - The welcome window
+
+public extension ThemeTokens {
+    /// The welcome window (#185): the system titlebar, a `divider` line, then a centred
+    /// stack on `surface`: the `type.title` heading, the `type.body` line in `primaryText`
+    /// at `type.bodyLineHeight`, and the default button before a push button, both
+    /// `sizes.control` tall. The sizes the sheet does not name are here.
+    struct WelcomeMetrics: Equatable, Sendable {
+        /// The window's content width, under the titlebar.
+        public var contentWidth: CGFloat
+        /// The body's padding on every side.
+        public var padding: CGFloat
+        /// Between the heading and the line.
+        public var headingGap: CGFloat
+        /// Between the line and the buttons.
+        public var buttonsGap: CGFloat
+        /// Between the two buttons.
+        public var buttonGap: CGFloat
+
+        public init(
+            contentWidth: CGFloat,
+            padding: CGFloat,
+            headingGap: CGFloat,
+            buttonsGap: CGFloat,
+            buttonGap: CGFloat
+        ) {
+            self.contentWidth = contentWidth
+            self.padding = padding
+            self.headingGap = headingGap
+            self.buttonsGap = buttonsGap
+            self.buttonGap = buttonGap
         }
     }
 }

@@ -131,6 +131,55 @@ private struct DrawnPushButton: View {
     }
 }
 
+// MARK: - Default button
+
+/// The window's default action (#185): the push button's box, `sizes.control` tall and
+/// padded `horizontalPadding` at `radii.control`, filled and edged in `brand` —
+/// `brandHover` while pressed — with its label in `type.defaultButton` and `onBrand`.
+/// Off, it is a disabled push button. The caller adds `.keyboardShortcut(.defaultAction)`.
+public struct ThemedDefaultButton: View {
+    @Environment(\.themeTokens) private var tokens
+    private let title: String
+    private let action: () -> Void
+
+    public init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(title, action: action)
+            .buttonStyle(DrawnDefaultButtonStyle(tokens: tokens))
+    }
+}
+
+private struct DrawnDefaultButtonStyle: ButtonStyle {
+    let tokens: ThemeTokens
+
+    func makeBody(configuration: Configuration) -> some View {
+        DrawnDefaultButton(configuration: configuration, tokens: tokens)
+    }
+}
+
+private struct DrawnDefaultButton: View {
+    let configuration: ButtonStyleConfiguration
+    let tokens: ThemeTokens
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        let colors = tokens.colors
+        let fill = configuration.isPressed ? colors.brandHover : colors.brand
+        configuration.label
+            .font(tokens.type.defaultButton.font)
+            .foregroundStyle((isEnabled ? colors.onBrand : colors.secondaryText).color)
+            .lineLimit(1)
+            .padding(.horizontal, tokens.controlMetrics.horizontalPadding)
+            .frame(height: tokens.sizes.control)
+            .drawnControlBox(tokens, fill: isEnabled ? fill : nil, edge: isEnabled ? fill : nil)
+            .contentShape(Rectangle())
+    }
+}
+
 // MARK: - Segmented control
 
 /// A choice of a few options side by side: a `card` track `segmentedWidth` wide,
@@ -322,10 +371,10 @@ public struct ThemedSecureField: View {
 
 extension View {
     /// The box every drawn control sits in: `fill` (none for a disabled control), an
-    /// `edge` outline, `radii.control`.
-    func drawnControlBox(_ tokens: ThemeTokens, fill: ThemeColor?) -> some View {
+    /// outline in `edge` (the `edge` token unless given), `radii.control`.
+    func drawnControlBox(_ tokens: ThemeTokens, fill: ThemeColor?, edge: ThemeColor? = nil) -> some View {
         let box = RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
         return background((fill ?? .system(.clear)).color, in: box)
-            .overlay(box.strokeBorder(tokens.colors.edge.color, lineWidth: tokens.controlMetrics.edgeWidth))
+            .overlay(box.strokeBorder((edge ?? tokens.colors.edge).color, lineWidth: tokens.controlMetrics.edgeWidth))
     }
 }

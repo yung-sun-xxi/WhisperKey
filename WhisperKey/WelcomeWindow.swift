@@ -1,14 +1,21 @@
 import AppKit
+import Combine
 import os
 import SwiftUI
 import ThemeKit
 
+/// The first-launch welcome window.
+///
+/// The look is ThemeKit's (#185): `ThemedWelcomeView` in the shared small-window chrome,
+/// `ThemedSurfaceWindow`, which follows the theme while the window is open. This file
+/// keeps the window's behaviour.
 @MainActor
 final class WelcomeWindowController: NSObject, NSWindowDelegate {
     private static let log = Logger(subsystem: "WhisperKey", category: "WelcomeWindow")
 
     private let coordinator: AppCoordinator
     private var window: NSWindow?
+    private var themeFollower: AnyCancellable?
     private var completingFromAction = false
 
     init(coordinator: AppCoordinator) {
@@ -23,7 +30,8 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
         }
 
         Self.log.info("creating welcome window")
-        let content = WelcomeView(
+        ThemeTokensSource.shared.follow(coordinator.settings)
+        let window = Self.makeWindow(
             goToSettings: { [weak self] in
                 self?.complete(openSettings: true)
             },
@@ -31,25 +39,35 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
                 self?.complete(openSettings: false)
             }
         )
-        ThemeTokensSource.shared.follow(coordinator.settings)
-        let hostingView = NSHostingView(rootView: ThemedRoot("welcome") { content })
+        window.delegate = self
+        themeFollower = ThemedSurfaceWindow.follow(ThemeTokensSource.shared, window: window)
+        center(window)
+        self.window = window
+        present(window)
+    }
+
+    /// The window as drawn, not yet placed or shown: the content at the drawn view's
+    /// fitting size, in the surface chrome with the current theme. Shared with the Debug
+    /// build's snapshot hook, which passes its own actions.
+    static func makeWindow(goToSettings: @escaping () -> Void, doLater: @escaping () -> Void) -> NSWindow {
+        let hostingView = NSHostingView(rootView: ThemedRoot("welcome") {
+            ThemedWelcomeView(goToSettings: goToSettings, doLater: doLater)
+        })
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 390, height: 148),
+            contentRect: NSRect(origin: .zero, size: hostingView.fittingSize),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Welcome to WhisperKey"
         window.contentView = hostingView
-        window.backgroundColor = .windowBackgroundColor
+        window.setContentSize(hostingView.fittingSize)
         window.isReleasedWhenClosed = false
-        window.delegate = self
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        ThemedSurfaceWindow.configure(window, tokens: ThemeTokensSource.shared.tokens)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
-        center(window)
-        self.window = window
-        present(window)
+        return window
     }
 
     func close() {
@@ -91,46 +109,10 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
         guard notification.object as AnyObject? === window else { return }
         Self.log.info("welcome window will close completingFromAction=\(self.completingFromAction, privacy: .public)")
         window = nil
+        themeFollower = nil
 
         if !completingFromAction {
             coordinator.completeWelcome(openSettings: false)
         }
-    }
-}
-
-private struct WelcomeView: View {
-    let goToSettings: () -> Void
-    let doLater: () -> Void
-
-    var body: some View {
-        VStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .center, spacing: 8) {
-                Text("Welcome to WhisperKey!")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-
-                Text("Go to Settings to set up your preferences, or you can do it later")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            }
-
-            HStack {
-                Button("Go to Settings", action: goToSettings)
-                    .controlSize(.regular)
-                    .keyboardShortcut(.defaultAction)
-                Spacer()
-                Button("Later", action: doLater)
-                    .controlSize(.regular)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 22)
-        .frame(width: 390, height: 148)
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 }

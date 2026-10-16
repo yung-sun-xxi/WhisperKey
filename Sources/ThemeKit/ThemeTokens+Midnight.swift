@@ -307,6 +307,15 @@ public extension ThemeTokens {
             columnGap: 12,
             emptyPaddingVertical: 40,   // the empty card, "padding:40px 16px"
             emptyPaddingHorizontal: 16
+        ),
+        // Not on the sheet: the WELCOME section of the design file, quoted where it
+        // draws the value (#185).
+        welcome: WelcomeMetrics(
+            contentWidth: 390,          // "width:390px"
+            padding: 20,                // the body, "padding:20px"
+            headingGap: 6,              // the line, "margin-top:6px"
+            buttonsGap: 16,             // the buttons, "margin-top:16px;display:flex;gap:8px"
+            buttonGap: 8
         )
     )
 }
