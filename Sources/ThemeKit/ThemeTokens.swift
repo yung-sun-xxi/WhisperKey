@@ -52,6 +52,8 @@ public struct ThemeTokens: Equatable, Sendable {
     public var usageBreakdown: UsageBreakdownMetrics
     /// The welcome window: its width and the gaps of its centred stack.
     public var welcome: WelcomeMetrics
+    /// The permissions onboarding window: its width, paddings, cards and glyph column.
+    public var permissions: PermissionsMetrics
 
     public init(
         theme: AppTheme,
@@ -72,7 +74,8 @@ public struct ThemeTokens: Equatable, Sendable {
         historyReader: HistoryReaderMetrics,
         resetUsage: ResetUsageMetrics,
         usageBreakdown: UsageBreakdownMetrics,
-        welcome: WelcomeMetrics
+        welcome: WelcomeMetrics,
+        permissions: PermissionsMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -93,6 +96,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.resetUsage = resetUsage
         self.usageBreakdown = usageBreakdown
         self.welcome = welcome
+        self.permissions = permissions
     }
 }
 
@@ -1207,6 +1211,85 @@ public extension ThemeTokens {
             self.headingGap = headingGap
             self.buttonsGap = buttonsGap
             self.buttonGap = buttonGap
+        }
+    }
+}
+
+// MARK: - The permissions onboarding window
+
+public extension ThemeTokens {
+    /// The permissions onboarding window (#186): the system titlebar, a `divider` line,
+    /// then on `surface` the `type.title` heading, the `type.small` subtitle in
+    /// `secondaryText` at `type.bodyLineHeight`, and two `card`s at `radii.card`. A card:
+    /// a leading glyph in `secondaryText`, the `type.body` title with its badge
+    /// (`sizes.keycap` tall) at the right, the `type.small` message in `secondaryText`,
+    /// then a push button. The sizes the sheet does not name are here.
+    struct PermissionsMetrics: Equatable, Sendable {
+        /// The window's content width, under the titlebar.
+        public var contentWidth: CGFloat
+        /// The body's padding above, at the sides and below.
+        public var paddingTop: CGFloat
+        public var paddingHorizontal: CGFloat
+        public var paddingBottom: CGFloat
+        /// Between the heading and the subtitle.
+        public var subtitleGap: CGFloat
+        /// Between the subtitle and the first card.
+        public var cardsGap: CGFloat
+        /// Between the two cards.
+        public var cardGap: CGFloat
+        /// A card's padding above, at the sides and below.
+        public var cardPaddingTop: CGFloat
+        public var cardPaddingHorizontal: CGFloat
+        public var cardPaddingBottom: CGFloat
+        /// The least room between a card's title and its badge.
+        public var headerGap: CGFloat
+        /// Between the title row and the message.
+        public var messageGap: CGFloat
+        /// Between the message and the button.
+        public var buttonGap: CGFloat
+        /// Between the Granted badge's dot and its word.
+        public var grantedDotGap: CGFloat
+        /// The card's leading glyph, the column it sits in, and the room before the text.
+        public var glyph: ThemeFont
+        public var glyphColumn: CGFloat
+        public var glyphGap: CGFloat
+
+        public init(
+            contentWidth: CGFloat,
+            paddingTop: CGFloat,
+            paddingHorizontal: CGFloat,
+            paddingBottom: CGFloat,
+            subtitleGap: CGFloat,
+            cardsGap: CGFloat,
+            cardGap: CGFloat,
+            cardPaddingTop: CGFloat,
+            cardPaddingHorizontal: CGFloat,
+            cardPaddingBottom: CGFloat,
+            headerGap: CGFloat,
+            messageGap: CGFloat,
+            buttonGap: CGFloat,
+            grantedDotGap: CGFloat,
+            glyph: ThemeFont,
+            glyphColumn: CGFloat,
+            glyphGap: CGFloat
+        ) {
+            self.contentWidth = contentWidth
+            self.paddingTop = paddingTop
+            self.paddingHorizontal = paddingHorizontal
+            self.paddingBottom = paddingBottom
+            self.subtitleGap = subtitleGap
+            self.cardsGap = cardsGap
+            self.cardGap = cardGap
+            self.cardPaddingTop = cardPaddingTop
+            self.cardPaddingHorizontal = cardPaddingHorizontal
+            self.cardPaddingBottom = cardPaddingBottom
+            self.headerGap = headerGap
+            self.messageGap = messageGap
+            self.buttonGap = buttonGap
+            self.grantedDotGap = grantedDotGap
+            self.glyph = glyph
+            self.glyphColumn = glyphColumn
+            self.glyphGap = glyphGap
         }
     }
 }

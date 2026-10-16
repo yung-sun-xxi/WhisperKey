@@ -316,6 +316,29 @@ public extension ThemeTokens {
             headingGap: 6,              // the line, "margin-top:6px"
             buttonsGap: 16,             // the buttons, "margin-top:16px;display:flex;gap:8px"
             buttonGap: 8
+        ),
+        // Not on the sheet: the PERMISSIONS section of the design file, quoted where it
+        // draws the value, and the owner's leading glyph (#186).
+        permissions: PermissionsMetrics(
+            contentWidth: 520,          // "width:520px"
+            paddingTop: 16,             // the body, "padding:16px 20px 20px"
+            paddingHorizontal: 20,
+            paddingBottom: 20,
+            subtitleGap: 4,             // the subtitle, "margin-top:4px"
+            cardsGap: 14,               // the cards, "margin-top:14px;…;gap:10px"
+            cardGap: 10,
+            cardPaddingTop: 12,         // a card, "padding:12px 14px 14px"
+            cardPaddingHorizontal: 14,
+            cardPaddingBottom: 14,
+            headerGap: 8,               // the title row, "gap:8px"
+            messageGap: 3,              // the message, "margin-top:3px"
+            buttonGap: 10,              // the button, "margin-top:10px"
+            grantedDotGap: 6,           // the Granted badge, "gap:6px"
+            // Not in the design, which drops the glyph; the owner keeps it (2026-10-16):
+            // the SF Symbol at 18 in a 22 column, 12 before the text. Judged by eye.
+            glyph: ThemeFont(size: 18, weight: .regular),
+            glyphColumn: 22,
+            glyphGap: 12
         )
     )
 }
