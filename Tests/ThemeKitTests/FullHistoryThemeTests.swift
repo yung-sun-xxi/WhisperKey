@@ -331,13 +331,16 @@ final class FullHistoryThemeTests: XCTestCase {
     /// A view drawn alone in `colour` on 02 at its own size: its size and where its ink
     /// lies in it, in points from its top-left corner.
     private func reference(_ content: some View, in colour: ThemeColor) throws -> (size: CGSize, ink: CGRect) {
-        let probe = NSHostingView(rootView: content.fixedSize())
-        let size = probe.fittingSize
+        // Measured in a window like the one the view under test draws in, so on a 2x screen
+        // both lay out in half points; drawn on a whole-point canvas from its top-left corner.
+        let size = Snapshot.fittingSize(content.fixedSize())
+        let canvas = CGSize(width: size.width.rounded(.up), height: size.height.rounded(.up))
         let drawn = content.foregroundStyle(colour.color).fixedSize()
             .frame(width: size.width, height: size.height)
+            .frame(width: canvas.width, height: canvas.height, alignment: .topLeading)
             .background(midnight.colors.surface.color)
-        let image = try XCTUnwrap(Snapshot.render(drawn, size: size))
-        let ink = try XCTUnwrap(image.inkBounds(in: CGRect(origin: .zero, size: size), background: midnight.colors.surface))
+        let image = try XCTUnwrap(Snapshot.render(drawn, size: canvas))
+        let ink = try XCTUnwrap(image.inkBounds(in: CGRect(origin: .zero, size: canvas), background: midnight.colors.surface))
         return (size, ink)
     }
 

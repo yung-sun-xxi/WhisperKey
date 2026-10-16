@@ -303,14 +303,31 @@ struct Snapshot {
     static func render(_ view: some View, size: CGSize) -> Snapshot? {
         let host = NSHostingView(rootView: view)
         host.frame = CGRect(origin: .zero, size: size)
-        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.contentView = host
+        let window = window(hosting: host)
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         host.layoutSubtreeIfNeeded()
         guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
         host.cacheDisplay(in: host.bounds, to: rep)
         return Snapshot(rep: rep, scale: CGFloat(rep.pixelsWide) / size.width)
+    }
+
+    /// The size `view` takes hosted the way `render` hosts it. SwiftUI rounds a view's
+    /// frame to the pixels of the window it sits in, so a size measured outside a window is
+    /// whole points even when `render` draws on a 2x screen, where the same text lays out
+    /// in half points: 8.11 wide comes to 9 alone and 8.5 in the window.
+    @MainActor
+    static func fittingSize(_ view: some View) -> CGSize {
+        let host = NSHostingView(rootView: view)
+        let window = window(hosting: host)
+        return withExtendedLifetime(window) { host.fittingSize }
+    }
+
+    @MainActor
+    private static func window(hosting host: NSView) -> NSWindow {
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        return window
     }
 
     /// The colour at view x and at screen y of a panel whose bottom is at y 0.
