@@ -222,6 +222,44 @@ final class PermissionsThemeTests: XCTestCase {
         }
     }
 
+    /// The words: "Needs access" in `primaryText` (the design's #E8EAEF on the hatch),
+    /// "Granted" in `secondaryText` (#9BA1AF). Read inside each badge's text box, clear of
+    /// the edge and the dot.
+    func testTheBadgeWordsTakeTheirTextColours() throws {
+        for theme in AppTheme.allCases {
+            let tokens = theme.tokens
+            let colors = tokens.colors
+            for (isGranted, word, other) in [(false, colors.primaryText, colors.secondaryText), (true, colors.secondaryText, colors.primaryText)] {
+                let root = ThemedRoot("test", source: ThemeTokensSource(theme: theme)) { ThemedPermissionBadge(isGranted: isGranted) }
+                let size = Snapshot.fittingSize(root)
+                let shot = try XCTUnwrap(Snapshot.render(root, size: size))
+                let step = 1 / shot.scale
+                let left = isGranted
+                    ? tokens.sizes.dot + tokens.permissions.grantedDotGap
+                    : tokens.controlMetrics.badgePadding
+                let right = isGranted ? size.width : size.width - tokens.controlMetrics.badgePadding
+                let inset = tokens.controlMetrics.edgeWidth + 1
+                var text: [Sample] = []
+                var y = inset
+                while y < size.height - inset {
+                    var x = left
+                    while x < right {
+                        text.append(shot.colour(x: x, screenY: y, height: size.height))
+                        x += step
+                    }
+                    y += step
+                }
+                let name = isGranted ? "Granted" : "Needs access"
+                XCTAssertTrue(text.contains { $0.matches(word) }, "\(theme) \(name): the word is not \(word)")
+                // One way round only for the 08 word: the edge of an 08 letter on the
+                // dark hatch passes through 07.
+                if isGranted {
+                    XCTAssertFalse(text.contains { $0.matches(other) }, "\(theme) \(name): the word is \(other)")
+                }
+            }
+        }
+    }
+
     /// Granted: 18 tall, the 6 `success` dot, 6 before the word in `secondaryText`, no box.
     func testTheGrantedBadgeIsTheDotAndAGreyWord() throws {
         for theme in AppTheme.allCases {
