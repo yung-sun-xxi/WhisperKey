@@ -61,7 +61,8 @@ final class PermissionsSourceScanTests: XCTestCase {
     func testTheWindowIsBuiltFromTheDrawnViewInTheSurfaceChrome() throws {
         let app = try Self.source(Self.app)
         let raw = try Self.raw(Self.app)
-        XCTAssertTrue(raw.contains("ThemedRoot(\"permissions\") {"))
+        XCTAssertTrue(raw.contains("ThemedRoot(\"permissions\") { content }"), "the window does not host the view it is given")
+        XCTAssertTrue(app.contains("static func makeWindow(_ content: some View) -> NSWindow"))
         XCTAssertTrue(app.contains("ThemedPermissionsView("), "the window does not host ThemedPermissionsView")
         XCTAssertTrue(app.contains("contentRect: NSRect(origin: .zero, size: hostingView.fittingSize)"))
         XCTAssertTrue(app.contains("window.setContentSize(hostingView.fittingSize)"))
