@@ -831,8 +831,9 @@ final class AppCoordinator: ObservableObject {
     }
 
     /// The one check of the stored key at launch (#104). A refusal marks the key in
-    /// Settings and shows the same toast a refused dictation does; no answer at all
-    /// (offline, timeout, rate limit, server error) stays silent.
+    /// Settings and shows the same toast a refused dictation does — the toast alone, with
+    /// no error sound and no error state in the menu bar. No answer at all (offline,
+    /// timeout, rate limit, server error) stays silent.
     func checkStoredAPIKeyAtLaunch() {
         #if DEBUG
         // A snapshot run shows staged state as it is: no network call, no mark changed.
@@ -854,7 +855,7 @@ final class AppCoordinator: ObservableObject {
             // Never over a recording, a transcription or a permission prompt: the mark in
             // Settings is already set, and the next refused dictation shows the toast.
             guard Self.canStartRecording(from: self.state), self.activeProcessingID == nil else { return }
-            self.handleTranscriptionFailure(
+            self.showFailureToast(
                 reason: .transcription(.unauthorized),
                 message: TranscriptionError.unauthorized(message: nil).errorDescription ?? "Invalid API key."
             )
@@ -1323,6 +1324,16 @@ final class AppCoordinator: ObservableObject {
         state = .error(message)
         setEngineAppState(.idle)
         playSound(.error)
+        showFailureToast(reason: reason, message: message, toastStyle: toastStyle)
+    }
+
+    /// The failure toast and its action, without the error state and sound. The launch
+    /// key check shows only this: nothing failed in front of the user then.
+    private func showFailureToast(
+        reason: ToastReason,
+        message: String,
+        toastStyle: ToastStyle = .warning
+    ) {
         let content = ToastDecision.content(
             reason: reason,
             message: message,
