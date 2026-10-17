@@ -834,6 +834,13 @@ final class AppCoordinator: ObservableObject {
     /// Settings and shows the same toast a refused dictation does; no answer at all
     /// (offline, timeout, rate limit, server error) stays silent.
     func checkStoredAPIKeyAtLaunch() {
+        #if DEBUG
+        // A snapshot run shows staged state as it is: no network call, no mark changed.
+        if let directory = UserDefaults.standard.string(forKey: SettingsSnapshotHook.directoryArgument),
+           !directory.isEmpty {
+            return
+        }
+        #endif
         Task { @MainActor [weak self] in
             guard let self else { return }
             let outcome = await self.settings.checkStoredAPIKeyAtLaunch { provider, key in

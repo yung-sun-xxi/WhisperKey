@@ -333,6 +333,16 @@ final class OpenAIProviderTests: XCTestCase {
         XCTAssertEqual(result, .unavailable(message: "OpenAI is rate limiting validation. The API key was not changed."))
     }
 
+    /// A request timeout says nothing about the key: it must not read as a rejection,
+    /// or the launch check would mark a working key (#104).
+    func testValidateAPIKeyReportsRequestTimeoutAsUnavailable() async {
+        StubURLProtocol.nextOutcome = .http(.init(statusCode: 408, body: Data(), headers: [:]))
+
+        let result = await OpenAIProvider.validateAPIKey("sk-timed-out", urlSession: makeSession())
+
+        XCTAssertEqual(result, .unavailable(message: "OpenAI did not answer in time. The API key was not changed."))
+    }
+
     func testValidateAPIKeyReportsNetworkAsUnavailable() async {
         StubURLProtocol.nextOutcome = .failure(URLError(.notConnectedToInternet))
 
