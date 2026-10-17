@@ -1195,6 +1195,14 @@ private struct TranscriptionSettingsPane: View {
             guard apiKeyValidationState != .checking else { return }
             resetAPIKeyInput(resetState: false)
         }
+        .onChange(of: storedKeyRejectedAt) {
+            // The mark can arrive while the window is open (a dictation refused, the
+            // launch check). A key being typed or checked keeps its own status.
+            guard apiKeyValidationState != .checking,
+                  apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return }
+            apiKeyValidationState = storedKeyState
+        }
     }
 
     @ViewBuilder private var modelPicker: some View {
@@ -1216,7 +1224,23 @@ private struct TranscriptionSettingsPane: View {
         }
     }
 
+    /// Trailing, so the field keeps its place when the rejection line shows under it —
+    /// the same shape as the launch-at-login error.
     @ViewBuilder private var apiKeyField: some View {
+        VStack(alignment: .trailing, spacing: tokens.settingsWindow.errorLineGap) {
+            apiKeyControls
+
+            if let rejectedAt = storedKeyRejectedAt {
+                Text(Self.rejectionSentence(provider: settings.provider, at: rejectedAt))
+                    .font(tokens.type.fieldCaption.font)
+                    .foregroundStyle(tokens.colors.failureText.color)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder private var apiKeyControls: some View {
         HStack(spacing: tokens.controlMetrics.rowControlGap) {
             if let status = apiKeyValidationState.status {
                 APIKeyValidationBadge(status: status)
@@ -1264,12 +1288,27 @@ private struct TranscriptionSettingsPane: View {
     }
 
     private var currentAPIKey: String {
-        switch settings.provider {
-        case .openai:
-            settings.openAIAPIKey
-        case .groq:
-            settings.groqAPIKey
+        settings.apiKey(for: settings.provider)
+    }
+
+    /// When the shown provider refused the stored key; nil when no key is stored.
+    private var storedKeyRejectedAt: Date? {
+        guard !currentAPIKey.isEmpty else { return nil }
+        return settings.apiKeyRejectedAt(for: settings.provider)
+    }
+
+    /// The badge for the key as stored: none, saved, or refused by the provider.
+    private var storedKeyState: APIKeyValidationState {
+        if currentAPIKey.isEmpty { return .idle }
+        if let rejectedAt = storedKeyRejectedAt {
+            return .rejected(Self.rejectionSentence(provider: settings.provider, at: rejectedAt))
         }
+        return .accepted("API key saved")
+    }
+
+    static func rejectionSentence(provider: TranscriptionProviderID, at date: Date) -> String {
+        let when = date.formatted(date: .abbreviated, time: .shortened)
+        return "\(provider.shortDisplayName) rejected this key on \(when). Enter a new key to replace it."
     }
 
     private var apiKeyPlaceholder: String {
@@ -1388,7 +1427,7 @@ private struct TranscriptionSettingsPane: View {
         apiKeyValidationTask = nil
         apiKeyDraft = ""
         if resetState {
-            apiKeyValidationState = currentAPIKey.isEmpty ? .idle : .accepted("API key saved")
+            apiKeyValidationState = storedKeyState
         }
     }
 }
