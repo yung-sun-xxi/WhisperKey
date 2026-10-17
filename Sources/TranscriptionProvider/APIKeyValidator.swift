@@ -61,6 +61,12 @@ enum APIKeyValidator {
             return .rejected(message: serverMessage ?? "Invalid API key.")
         case 403:
             return .rejected(message: serverMessage ?? "API key is valid, but it does not have access to \(providerDisplayName).")
+        case 408:
+            // A timeout says nothing about the key; it must not fall into the 4xx
+            // rejection below.
+            return .unavailable(
+                message: serverMessage ?? "\(providerDisplayName) did not answer in time. The API key was not changed."
+            )
         case 429:
             return .unavailable(
                 message: serverMessage ?? "\(providerDisplayName) is rate limiting validation. The API key was not changed."
