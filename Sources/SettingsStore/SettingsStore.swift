@@ -94,7 +94,26 @@ public final class SettingsStore: ObservableObject {
         static let quickPasteTriggerKey = "WhisperKey.settings.quickPasteTriggerKey"
         static let quickPasteHoldDuration = "WhisperKey.settings.quickPasteHoldDuration"
         static let quickPasteEntryCount = "WhisperKey.settings.quickPasteEntryCount"
+
+        /// When the provider last refused the stored key, as a plist `Date`. Absent when
+        /// the key has not been refused since it was saved.
+        static func apiKeyRejectedAt(_ id: TranscriptionProviderID) -> String {
+            "WhisperKey.settings.apiKeyRejectedAt.\(id.rawValue)"
+        }
     }
+
+    /// What the one launch-time check of the stored key found.
+    public enum LaunchAPIKeyCheckOutcome: Sendable, Equatable {
+        /// No key stored for the selected provider, or it changed while the check ran.
+        case skipped
+        case accepted
+        /// The provider refused the key: it is now marked rejected.
+        case rejected
+        /// No answer about the key (no network, timeout, rate limit, server error).
+        case unavailable
+    }
+
+    public typealias APIKeyValidator = @Sendable (TranscriptionProviderID, String) async -> APIKeyValidationResult
 
     public static let defaultHistoryMaxEntries = 30
     public static let historyMaxEntriesRange: ClosedRange<Int> = 0...1000
@@ -267,12 +286,28 @@ public final class SettingsStore: ObservableObject {
     /// Empty until the background Keychain read finishes; a key still loading is a
     /// missing key.
     @Published public var openAIAPIKey: String {
-        didSet { if !loading { editedAPIKeys.insert(.openai); persistAPIKey(openAIAPIKey, for: .openai) } }
+        didSet {
+            if !loading {
+                editedAPIKeys.insert(.openai)
+                persistAPIKey(openAIAPIKey, for: .openai)
+                setAPIKeyRejectedAt(nil, for: .openai)
+            }
+        }
     }
 
     @Published public var groqAPIKey: String {
-        didSet { if !loading { editedAPIKeys.insert(.groq); persistAPIKey(groqAPIKey, for: .groq) } }
+        didSet {
+            if !loading {
+                editedAPIKeys.insert(.groq)
+                persistAPIKey(groqAPIKey, for: .groq)
+                setAPIKeyRejectedAt(nil, for: .groq)
+            }
+        }
     }
+
+    /// When each provider refused its stored key. A key in here is stored but known not
+    /// to work, so Settings must not present it as configured.
+    @Published public private(set) var apiKeyRejections: [TranscriptionProviderID: Date] = [:]
 
     public init(keychain: KeychainStorage = KeychainStore(), defaults: UserDefaults = .standard) {
         self.keychain = keychain
@@ -320,6 +355,11 @@ public final class SettingsStore: ObservableObject {
         self.quickPasteEntryCount = Self.clampQuickPasteEntryCount(storedEntryCount)
         self.openAIAPIKey = ""
         self.groqAPIKey = ""
+        var rejections: [TranscriptionProviderID: Date] = [:]
+        for id in TranscriptionProviderID.allCases {
+            rejections[id] = defaults.object(forKey: DefaultsKey.apiKeyRejectedAt(id)) as? Date
+        }
+        self.apiKeyRejections = rejections
 
         self.loading = false
 
@@ -465,6 +505,71 @@ public final class SettingsStore: ObservableObject {
             groqAPIKey = ""
         }
         try? keychain.delete(service: id.keychainService, account: id.keychainAccount)
+    }
+
+    public func apiKey(for id: TranscriptionProviderID) -> String {
+        switch id {
+        case .openai: openAIAPIKey
+        case .groq: groqAPIKey
+        }
+    }
+
+    /// When the provider refused the stored key, or nil when it has not since the key
+    /// was saved.
+    public func apiKeyRejectedAt(for id: TranscriptionProviderID) -> Date? {
+        apiKeyRejections[id]
+    }
+
+    /// A transcription with `apiKey` on `id` failed with `category`. Only a refusal of
+    /// the key marks it; a network, timeout, rate-limit, quota or server failure says
+    /// nothing about the key.
+    public func recordTranscriptionFailure(
+        _ category: TranscriptionError.Category,
+        provider id: TranscriptionProviderID,
+        apiKey: String,
+        at date: Date = Date()
+    ) {
+        guard category == .unauthorized, !apiKey.isEmpty, apiKey == self.apiKey(for: id) else { return }
+        setAPIKeyRejectedAt(date, for: id)
+    }
+
+    /// The one check at launch: once the stored keys have loaded, asks the selected
+    /// provider whether its key still works. Only a clear refusal marks the key; an
+    /// unavailable answer changes nothing, so a launch before the network is up raises
+    /// no false alarm. An accepted key loses a stale mark.
+    public func checkStoredAPIKeyAtLaunch(
+        validator: APIKeyValidator,
+        now: @Sendable () -> Date = { Date() }
+    ) async -> LaunchAPIKeyCheckOutcome {
+        await waitForAPIKeys()
+        let id = provider
+        let key = apiKey(for: id)
+        guard !key.isEmpty else { return .skipped }
+
+        let result = await validator(id, key)
+        // A key saved or deleted while the request was out is not the one it judged.
+        guard key == apiKey(for: id) else { return .skipped }
+
+        switch result {
+        case .accepted:
+            setAPIKeyRejectedAt(nil, for: id)
+            return .accepted
+        case .rejected:
+            setAPIKeyRejectedAt(now(), for: id)
+            return .rejected
+        case .unavailable:
+            return .unavailable
+        }
+    }
+
+    private func setAPIKeyRejectedAt(_ date: Date?, for id: TranscriptionProviderID) {
+        guard apiKeyRejections[id] != date else { return }
+        apiKeyRejections[id] = date
+        if let date {
+            defaults.set(date, forKey: DefaultsKey.apiKeyRejectedAt(id))
+        } else {
+            defaults.removeObject(forKey: DefaultsKey.apiKeyRejectedAt(id))
+        }
     }
 
     public func makeTranscriptionProvider() -> TranscriptionProvider? {

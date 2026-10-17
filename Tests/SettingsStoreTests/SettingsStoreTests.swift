@@ -480,6 +480,195 @@ final class SettingsStoreTests: XCTestCase {
             )
         )
     }
+
+    // MARK: - Rejected API key (#104)
+
+    private static let rejectedAt = Date(timeIntervalSince1970: 1_792_222_860)
+
+    private func store(openAIKey: String = "sk-stored", groqKey: String = "gsk-stored") async throws -> SettingsStore {
+        let keychain = InMemoryKeychain()
+        let openai = TranscriptionProviderID.openai
+        let groq = TranscriptionProviderID.groq
+        if !openAIKey.isEmpty { try keychain.write(openAIKey, service: openai.keychainService, account: openai.keychainAccount) }
+        if !groqKey.isEmpty { try keychain.write(groqKey, service: groq.keychainService, account: groq.keychainAccount) }
+        let store = SettingsStore(keychain: keychain, defaults: defaults)
+        await store.waitForAPIKeys()
+        return store
+    }
+
+    func testUnauthorizedTranscriptionMarksThatProvidersKeyRejectedAndPersists() async throws {
+        let keychain = InMemoryKeychain()
+        let store = SettingsStore(keychain: keychain, defaults: defaults)
+        store.openAIAPIKey = "sk-dead"
+        store.groqAPIKey = "gsk-live"
+
+        store.recordTranscriptionFailure(.unauthorized, provider: .openai, apiKey: "sk-dead", at: Self.rejectedAt)
+
+        XCTAssertEqual(store.apiKeyRejectedAt(for: .openai), Self.rejectedAt)
+        XCTAssertNil(store.apiKeyRejectedAt(for: .groq), "the other provider's key is not touched")
+        XCTAssertEqual(store.openAIAPIKey, "sk-dead", "the app never clears the key itself")
+        XCTAssertEqual(
+            defaults.object(forKey: "WhisperKey.settings.apiKeyRejectedAt.openai") as? Date,
+            Self.rejectedAt,
+            "the mark is a plist Date under a per-provider key"
+        )
+
+        let relaunched = SettingsStore(keychain: keychain, defaults: defaults)
+        await relaunched.waitForAPIKeys()
+        XCTAssertEqual(relaunched.apiKeyRejectedAt(for: .openai), Self.rejectedAt)
+        XCTAssertEqual(relaunched.openAIAPIKey, "sk-dead")
+    }
+
+    func testUnauthorizedTranscriptionOnGroqMarksOnlyGroq() async throws {
+        let store = try await store()
+        store.recordTranscriptionFailure(.unauthorized, provider: .groq, apiKey: "gsk-stored", at: Self.rejectedAt)
+        XCTAssertEqual(store.apiKeyRejectedAt(for: .groq), Self.rejectedAt)
+        XCTAssertNil(store.apiKeyRejectedAt(for: .openai))
+    }
+
+    func testFailuresThatSayNothingAboutTheKeyNeverMarkIt() async throws {
+        let store = try await store()
+        let categories: [TranscriptionError.Category] = [
+            .network, .timedOut, .rateLimit, .quotaExceeded, .serverError, .clientError, .unknown,
+        ]
+        for category in categories {
+            store.recordTranscriptionFailure(category, provider: .openai, apiKey: "sk-stored", at: Self.rejectedAt)
+            XCTAssertNil(store.apiKeyRejectedAt(for: .openai), "\(category) marked the key rejected")
+        }
+        XCTAssertNil(defaults.object(forKey: "WhisperKey.settings.apiKeyRejectedAt.openai"))
+    }
+
+    /// The request went out with the old key; a new key saved meanwhile is not the one
+    /// the provider refused.
+    func testUnauthorizedForAKeyReplacedMeanwhileDoesNotMarkTheNewKey() async throws {
+        let store = try await store()
+        store.openAIAPIKey = "sk-new"
+        store.recordTranscriptionFailure(.unauthorized, provider: .openai, apiKey: "sk-stored", at: Self.rejectedAt)
+        XCTAssertNil(store.apiKeyRejectedAt(for: .openai))
+    }
+
+    func testSavingANewKeyClearsThatProvidersMark() async throws {
+        let store = try await store()
+        store.recordTranscriptionFailure(.unauthorized, provider: .openai, apiKey: "sk-stored", at: Self.rejectedAt)
+        store.recordTranscriptionFailure(.unauthorized, provider: .groq, apiKey: "gsk-stored", at: Self.rejectedAt)
+
+        store.openAIAPIKey = "sk-new"
+
+        XCTAssertNil(store.apiKeyRejectedAt(for: .openai))
+        XCTAssertNil(defaults.object(forKey: "WhisperKey.settings.apiKeyRejectedAt.openai"))
+        XCTAssertEqual(store.apiKeyRejectedAt(for: .groq), Self.rejectedAt, "only the edited provider's mark goes")
+    }
+
+    func testDeletingTheKeyClearsThatProvidersMark() async throws {
+        let store = try await store()
+        store.recordTranscriptionFailure(.unauthorized, provider: .groq, apiKey: "gsk-stored", at: Self.rejectedAt)
+
+        store.deleteAPIKey(for: .groq)
+
+        XCTAssertNil(store.apiKeyRejectedAt(for: .groq))
+        XCTAssertNil(defaults.object(forKey: "WhisperKey.settings.apiKeyRejectedAt.groq"))
+    }
+
+    func testLoadingTheKeysFromTheKeychainKeepsTheMark() async throws {
+        defaults.set(Self.rejectedAt, forKey: "WhisperKey.settings.apiKeyRejectedAt.openai")
+
+        let store = try await store()
+
+        XCTAssertEqual(store.openAIAPIKey, "sk-stored")
+        XCTAssertEqual(store.apiKeyRejectedAt(for: .openai), Self.rejectedAt)
+        XCTAssertEqual(defaults.object(forKey: "WhisperKey.settings.apiKeyRejectedAt.openai") as? Date, Self.rejectedAt)
+    }
+
+    // MARK: Launch check
+
+    private final class ValidatorSpy: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _calls: [(TranscriptionProviderID, String)] = []
+        let result: APIKeyValidationResult
+        init(_ result: APIKeyValidationResult) { self.result = result }
+        var calls: [(TranscriptionProviderID, String)] { lock.withLock { _calls } }
+        var validator: SettingsStore.APIKeyValidator {
+            { [self] id, key in
+                lock.withLock { _calls.append((id, key)) }
+                return result
+            }
+        }
+    }
+
+    func testLaunchCheckMarksARejectedKeyOfTheSelectedProvider() async throws {
+        let store = try await store()
+        store.provider = .groq
+        let spy = ValidatorSpy(.rejected(message: "Invalid API key."))
+
+        let outcome = await store.checkStoredAPIKeyAtLaunch(validator: spy.validator, now: { Self.rejectedAt })
+
+        XCTAssertEqual(outcome, .rejected)
+        XCTAssertEqual(spy.calls.map(\.0), [.groq], "only the selected provider is checked, once")
+        XCTAssertEqual(spy.calls.map(\.1), ["gsk-stored"])
+        XCTAssertEqual(store.apiKeyRejectedAt(for: .groq), Self.rejectedAt)
+        XCTAssertNil(store.apiKeyRejectedAt(for: .openai))
+        XCTAssertEqual(store.groqAPIKey, "gsk-stored", "the app never clears the key itself")
+    }
+
+    func testLaunchCheckWithNoAnswerChangesNothing() async throws {
+        let store = try await store()
+        let spy = ValidatorSpy(.unavailable(message: "Could not verify the API key."))
+
+        let outcome = await store.checkStoredAPIKeyAtLaunch(validator: spy.validator, now: { Self.rejectedAt })
+
+        XCTAssertEqual(outcome, .unavailable)
+        XCTAssertEqual(spy.calls.count, 1)
+        XCTAssertNil(store.apiKeyRejectedAt(for: .openai), "no network is not a rejection")
+        XCTAssertNil(defaults.object(forKey: "WhisperKey.settings.apiKeyRejectedAt.openai"))
+    }
+
+    func testLaunchCheckWithNoAnswerKeepsAnExistingMark() async throws {
+        defaults.set(Self.rejectedAt, forKey: "WhisperKey.settings.apiKeyRejectedAt.openai")
+        let store = try await store()
+        let spy = ValidatorSpy(.unavailable(message: "Could not verify the API key."))
+
+        let outcome = await store.checkStoredAPIKeyAtLaunch(validator: spy.validator, now: { Date() })
+
+        XCTAssertEqual(outcome, .unavailable)
+        XCTAssertEqual(store.apiKeyRejectedAt(for: .openai), Self.rejectedAt)
+    }
+
+    func testLaunchCheckAcceptedClearsAStaleMark() async throws {
+        defaults.set(Self.rejectedAt, forKey: "WhisperKey.settings.apiKeyRejectedAt.openai")
+        let store = try await store()
+        let spy = ValidatorSpy(.accepted)
+
+        let outcome = await store.checkStoredAPIKeyAtLaunch(validator: spy.validator, now: { Date() })
+
+        XCTAssertEqual(outcome, .accepted)
+        XCTAssertNil(store.apiKeyRejectedAt(for: .openai))
+        XCTAssertNil(defaults.object(forKey: "WhisperKey.settings.apiKeyRejectedAt.openai"))
+    }
+
+    func testLaunchCheckWithNoStoredKeyAsksNobody() async throws {
+        let store = try await store(openAIKey: "")
+        let spy = ValidatorSpy(.rejected(message: "Enter an API key."))
+
+        let outcome = await store.checkStoredAPIKeyAtLaunch(validator: spy.validator, now: { Self.rejectedAt })
+
+        XCTAssertEqual(outcome, .skipped)
+        XCTAssertTrue(spy.calls.isEmpty)
+        XCTAssertNil(store.apiKeyRejectedAt(for: .openai))
+    }
+
+    /// The check waits for the Keychain read itself, so a call made the moment the app
+    /// launches still sees the stored key.
+    func testLaunchCheckWaitsForTheKeychainRead() async {
+        let keychain = BlockingKeychain(values: [.openai: "sk-stored"])
+        let store = SettingsStore(keychain: keychain, defaults: defaults)
+        let spy = ValidatorSpy(.rejected(message: "Invalid API key."))
+
+        keychain.release()
+        let outcome = await store.checkStoredAPIKeyAtLaunch(validator: spy.validator, now: { Self.rejectedAt })
+
+        XCTAssertEqual(outcome, .rejected)
+        XCTAssertEqual(spy.calls.map(\.1), ["sk-stored"])
+    }
 }
 
 /// A keychain whose reads hold until `release()`, standing in for a Keychain access

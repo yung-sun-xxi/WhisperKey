@@ -708,6 +708,9 @@ final class AppCoordinator: ObservableObject {
         operationID: UUID
     ) async {
         guard isCurrentProcessing(operationID) else { return }
+        // Which key this request carries, so a refusal marks that key and no other.
+        let providerID = settings.provider
+        let apiKey = settings.apiKey(for: providerID)
         guard let provider = settings.makeTranscriptionProvider() else {
             log.error("no provider configured; cannot transcribe")
             handleTranscriptionFailure(
@@ -814,6 +817,7 @@ final class AppCoordinator: ObservableObject {
             }
             log.error("provider error operationID=\(operationID.uuidString, privacy: .public) provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public) audioDuration=\(audioDuration, privacy: .public) bytes=\(encoded.data.count, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public) error=\(String(describing: error), privacy: .public)")
             let message = error.errorDescription ?? "Transcription failed."
+            settings.recordTranscriptionFailure(error.category, provider: providerID, apiKey: apiKey)
             handleTranscriptionFailure(operationID: operationID, reason: .transcription(error.category), message: message)
         } catch {
             guard isCurrentProcessing(operationID) else {
@@ -823,6 +827,30 @@ final class AppCoordinator: ObservableObject {
             log.error("provider error operationID=\(operationID.uuidString, privacy: .public) provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public) audioDuration=\(audioDuration, privacy: .public) bytes=\(encoded.data.count, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public) error=\(String(describing: error), privacy: .public)")
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             handleTranscriptionFailure(operationID: operationID, reason: .transcription(.unknown), message: message)
+        }
+    }
+
+    /// The one check of the stored key at launch (#104). A refusal marks the key in
+    /// Settings and shows the same toast a refused dictation does; no answer at all
+    /// (offline, timeout, rate limit, server error) stays silent.
+    func checkStoredAPIKeyAtLaunch() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let outcome = await self.settings.checkStoredAPIKeyAtLaunch { provider, key in
+                switch provider {
+                case .openai: await OpenAIProvider.validateAPIKey(key)
+                case .groq: await GroqProvider.validateAPIKey(key)
+                }
+            }
+            self.log.info("launch API key check provider=\(self.settings.provider.rawValue, privacy: .public) outcome=\(String(describing: outcome), privacy: .public)")
+            guard outcome == .rejected else { return }
+            // Never over a recording, a transcription or a permission prompt: the mark in
+            // Settings is already set, and the next refused dictation shows the toast.
+            guard Self.canStartRecording(from: self.state), self.activeProcessingID == nil else { return }
+            self.handleTranscriptionFailure(
+                reason: .transcription(.unauthorized),
+                message: TranscriptionError.unauthorized(message: nil).errorDescription ?? "Invalid API key."
+            )
         }
     }
 

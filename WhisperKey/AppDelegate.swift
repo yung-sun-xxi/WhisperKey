@@ -49,5 +49,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.log.info("didFinishLaunching pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public)")
         menuBarController = MenuBarController(coordinator: coordinator)
+        coordinator.checkStoredAPIKeyAtLaunch()
     }
 }
