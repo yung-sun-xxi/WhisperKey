@@ -91,6 +91,16 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.openAIAPIKey, "sk-persisted")
     }
 
+    // The toggle now covers any media (#196), but the stored key keeps its Apple Music
+    // name, so whoever turned it off keeps it off.
+    func testPauseMediaReadsTheAppleMusicKey() {
+        defaults.set(false, forKey: "WhisperKey.settings.pauseAppleMusicWhileRecording")
+
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+
+        XCTAssertFalse(store.pauseMediaWhileRecording)
+    }
+
     func testPendingInstallWelcomeIsDetected() {
         defaults.set("install-1", forKey: "WhisperKey.settings.pendingInstallWelcomeID")
 

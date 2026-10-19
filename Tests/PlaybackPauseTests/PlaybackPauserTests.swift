@@ -138,6 +138,15 @@ final class PlaybackPauserTests: XCTestCase {
         XCTAssertEqual(keys.posts, 1)
     }
 
+    func testAnotherPlayerSittingSilentDoesNotBlockTheResume() async {
+        make(processes: [.chrome(), .vlc(running: false)])
+
+        await start()
+        await end()
+
+        XCTAssertEqual(keys.posts, 2)
+    }
+
     func testRecordingThatPausedNothingResumesNothing() async {
         make(processes: [])
 
