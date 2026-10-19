@@ -1470,9 +1470,9 @@ private struct RecordingSettingsPane: View {
             SettingsRow("Sound effects") {
                 ThemedToggle("Sound effects", isOn: $settings.soundEffectsEnabled)
             }
-            SettingsRow("Pause Apple Music while recording") {
-                ThemedToggle("Pause Apple Music while recording", isOn: $settings.pauseAppleMusicWhileRecording)
-                    .help("Pauses Apple Music at the start of a recording and resumes it when the microphone stops.")
+            SettingsRow("Pause media while recording") {
+                ThemedToggle("Pause media while recording", isOn: $settings.pauseMediaWhileRecording)
+                    .help("Pauses whatever is playing (music, a video in the browser, a player app) when a recording starts, and resumes it when the microphone stops.")
             }
         }
     }

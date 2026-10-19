@@ -83,7 +83,7 @@ public final class SettingsStore: ObservableObject {
         static let saveTranscriptionToClipboard = "WhisperKey.settings.saveTranscriptionToClipboard"
         static let autoPasteTranscription = "WhisperKey.settings.autoPasteTranscription"
         static let escapeToCancelRecording = "WhisperKey.settings.escapeToCancelRecording"
-        static let pauseAppleMusicWhileRecording = "WhisperKey.settings.pauseAppleMusicWhileRecording"
+        static let pauseMediaWhileRecording = "WhisperKey.settings.pauseAppleMusicWhileRecording"
         static let pendingInstallWelcomeID = "WhisperKey.settings.pendingInstallWelcomeID"
         static let presentedInstallWelcomeID = "WhisperKey.settings.presentedInstallWelcomeID"
         static let usageStatsRange = "WhisperKey.settings.usageStatsRange"
@@ -203,10 +203,10 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
-    @Published public var pauseAppleMusicWhileRecording: Bool {
+    @Published public var pauseMediaWhileRecording: Bool {
         didSet {
             if !loading {
-                defaults.set(pauseAppleMusicWhileRecording, forKey: DefaultsKey.pauseAppleMusicWhileRecording)
+                defaults.set(pauseMediaWhileRecording, forKey: DefaultsKey.pauseMediaWhileRecording)
             }
         }
     }
@@ -340,7 +340,7 @@ public final class SettingsStore: ObservableObject {
         self.saveTranscriptionToClipboard = (defaults.object(forKey: DefaultsKey.saveTranscriptionToClipboard) as? Bool) ?? true
         self.autoPasteTranscription = (defaults.object(forKey: DefaultsKey.autoPasteTranscription) as? Bool) ?? true
         self.escapeToCancelRecording = (defaults.object(forKey: DefaultsKey.escapeToCancelRecording) as? Bool) ?? true
-        self.pauseAppleMusicWhileRecording = (defaults.object(forKey: DefaultsKey.pauseAppleMusicWhileRecording) as? Bool) ?? true
+        self.pauseMediaWhileRecording = (defaults.object(forKey: DefaultsKey.pauseMediaWhileRecording) as? Bool) ?? true
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.usageStatsRange = (defaults.string(forKey: DefaultsKey.usageStatsRange).flatMap(UsageStatsRange.init(rawValue:))) ?? .today

@@ -23,6 +23,7 @@ let package = Package(
         .library(name: "LoginItem", targets: ["LoginItem"]),
         .library(name: "SingleInstance", targets: ["SingleInstance"]),
         .library(name: "ThemeKit", targets: ["ThemeKit"]),
+        .library(name: "PlaybackPause", targets: ["PlaybackPause"]),
     ],
     targets: [
         .target(name: "HotkeyEngine"),
@@ -40,6 +41,9 @@ let package = Package(
         .target(name: "ErrorToast", dependencies: ["TranscriptionProvider"]),
         .target(name: "LoginItem"),
         .target(name: "SingleInstance"),
+        // Pauses whatever is playing while a recording runs: Apple Music through
+        // AppleScript, anything else through the Play/Pause media key (#196).
+        .target(name: "PlaybackPause"),
         // The look of each theme as values, and their delivery to every hosting root (#160).
         // QuickPaste directly: ThemeKit builds the quick paste geometry from the tokens (#166).
         .target(name: "ThemeKit", dependencies: ["SettingsStore", "QuickPaste"]),
@@ -71,6 +75,7 @@ let package = Package(
                 "SingleInstance",
                 "DevBuildMarker",
                 "ThemeKit",
+                "PlaybackPause",
             ]
         ),
 
@@ -90,6 +95,7 @@ let package = Package(
         .testTarget(name: "LoginItemTests", dependencies: ["LoginItem"]),
         .testTarget(name: "SingleInstanceTests", dependencies: ["SingleInstance"]),
         .testTarget(name: "DevBuildMarkerTests", dependencies: ["DevBuildMarker"]),
+        .testTarget(name: "PlaybackPauseTests", dependencies: ["PlaybackPause"]),
         .testTarget(name: "ThemeKitTests", dependencies: ["ThemeKit", "SettingsStore", "KeychainStore", "QuickPaste"]),
     ]
 )

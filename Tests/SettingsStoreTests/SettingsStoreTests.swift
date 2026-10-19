@@ -37,7 +37,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.saveTranscriptionToClipboard)
         XCTAssertTrue(store.autoPasteTranscription)
         XCTAssertTrue(store.escapeToCancelRecording)
-        XCTAssertTrue(store.pauseAppleMusicWhileRecording)
+        XCTAssertTrue(store.pauseMediaWhileRecording)
         XCTAssertFalse(store.hasPendingInstallWelcome)
         XCTAssertEqual(store.openAIAPIKey, "")
     }
@@ -70,7 +70,7 @@ final class SettingsStoreTests: XCTestCase {
         first.saveTranscriptionToClipboard = false
         first.autoPasteTranscription = false
         first.escapeToCancelRecording = false
-        first.pauseAppleMusicWhileRecording = true
+        first.pauseMediaWhileRecording = true
         first.openAIAPIKey = "sk-persisted"
 
         let second = SettingsStore(keychain: keychain, defaults: defaults)
@@ -87,7 +87,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(second.saveTranscriptionToClipboard)
         XCTAssertFalse(second.autoPasteTranscription)
         XCTAssertFalse(second.escapeToCancelRecording)
-        XCTAssertTrue(second.pauseAppleMusicWhileRecording)
+        XCTAssertTrue(second.pauseMediaWhileRecording)
         XCTAssertEqual(second.openAIAPIKey, "sk-persisted")
     }
 

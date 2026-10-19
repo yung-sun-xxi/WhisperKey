@@ -14,6 +14,7 @@ import ClipboardHistoryStore
 import QuickPaste
 import LoginItem
 import UsageStatsStore
+import PlaybackPause
 
 enum PermissionWindowZOrderState: Equatable {
     case aboveOrdinaryApps
@@ -185,7 +186,7 @@ final class AppCoordinator: ObservableObject {
     private let recorder = AudioRecorder()
     private let encoder = AudioEncoder()
     private let sounds = SoundPlayer()
-    private let appleMusic = AppleMusicRecordingController()
+    private let playbackPauser = PlaybackPauser()
     private let outputRouter = TranscriptionOutputRouter()
     private let toastPresenter = ToastPresenter()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
@@ -364,7 +365,7 @@ final class AppCoordinator: ObservableObject {
                 }
 
                 state = .recording
-                appleMusic.recordingDidStart(enabled: settings.pauseAppleMusicWhileRecording)
+                playbackPauser.recordingDidStart(enabled: settings.pauseMediaWhileRecording)
                 startRecordingTimer()
                 playSound(.start)
                 let startSoundAtNanos = DispatchTime.now().uptimeNanoseconds
@@ -389,7 +390,7 @@ final class AppCoordinator: ObservableObject {
                 }
                 log.error("microphone permission denied")
                 await MainActor.run {
-                    self.appleMusic.recordingDidEnd()
+                    self.playbackPauser.recordingDidEnd()
                     stopRecordingTimer()
                     activeRecordingID = nil
                     recordingCancellationRequested = false
@@ -405,7 +406,7 @@ final class AppCoordinator: ObservableObject {
                 }
                 log.error("recorder.start failed: \(String(describing: error), privacy: .public)")
                 await MainActor.run {
-                    self.appleMusic.recordingDidEnd()
+                    self.playbackPauser.recordingDidEnd()
                     stopRecordingTimer()
                     activeRecordingID = nil
                     recordingCancellationRequested = false
@@ -450,7 +451,7 @@ final class AppCoordinator: ObservableObject {
         processingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let buffer = await recorder.stop()
-            self.appleMusic.recordingDidEnd()
+            self.playbackPauser.recordingDidEnd()
 
             guard self.activeRecordingID == recordingID, self.isCurrentProcessing(operationID) else {
                 if let recordingID,
@@ -533,7 +534,7 @@ final class AppCoordinator: ObservableObject {
 
         Task {
             let buffer = await recorder.stop()
-            appleMusic.recordingDidEnd()
+            playbackPauser.recordingDidEnd()
             appendRecordingDiagnostic(
                 "recording_stop_finished_cancel",
                 recordingID: recordingID
@@ -607,7 +608,7 @@ final class AppCoordinator: ObservableObject {
         )
         Task {
             let buffer = await recorder.stop()
-            appleMusic.recordingDidEnd()
+            playbackPauser.recordingDidEnd()
             appendRecordingDiagnostic(
                 "recording_stop_finished_processing_cancel",
                 operationID: operationID,
@@ -1187,7 +1188,7 @@ final class AppCoordinator: ObservableObject {
             model: currentTranscriptionModelID,
             message: "Microphone did not start; the audio system stopped responding"
         )
-        appleMusic.recordingDidEnd()
+        playbackPauser.recordingDidEnd()
         stopRecordingTimer()
         activeRecordingID = nil
         recordingCancellationRequested = false
@@ -1246,7 +1247,7 @@ final class AppCoordinator: ObservableObject {
             Task {
                 recorder.recordStopRequestedForDiagnostics()
                 _ = await recorder.stop()
-                appleMusic.recordingDidEnd()
+                playbackPauser.recordingDidEnd()
             }
         }
     }

@@ -96,7 +96,7 @@ final class SettingsSourceScanTests: XCTestCase {
             "HStack(spacing: 0) {",
             "layer: .secondary,",
             "Spacer(minLength: 0)",
-            "Text(\"Pause Apple Music while recording\")",
+            "Text(\"Pause media while recording\")",
             ".help(\"Stop recording to change.\") // .red in a comment",
         ]
         for line in passed {
