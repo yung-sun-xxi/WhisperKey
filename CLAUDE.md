@@ -15,6 +15,8 @@ incrementally and **a minute** from clean, 387 tests. `-t` runs the package
 tests alone, `-b` skips them, `-c` cleans the app's derived data first. CI runs this same script, so a green run here is the
 same check the pull request gets.
 
+Fast loop: `swift test` (the package tests alone, no app build); `scripts/verify.sh` runs once at the end.
+
 ## Traps
 
 1. **The `WhisperKey` scheme installs into `/Applications` as a build phase**,
