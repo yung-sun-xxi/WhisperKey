@@ -404,14 +404,16 @@ final class AudioRecorderTests: XCTestCase {
     private func makeRecorder(
         factory: CountingHostFactory,
         startTimeout: TimeInterval = 2,
-        observer: AudioRouteChangeObserving = NoAudioRouteChangeObserver()
+        observer: AudioRouteChangeObserving = NoAudioRouteChangeObserver(),
+        deadEngineTimeout: TimeInterval? = nil
     ) -> AudioRecorder {
         AudioRecorder(
             maxDuration: 60,
             startTimeout: startTimeout,
             engineHostFactory: { factory.next(hostID: $0) },
             permissionCheck: {},
-            routeChangeObserver: observer
+            routeChangeObserver: observer,
+            deadEngineTimeout: deadEngineTimeout
         )
     }
 
@@ -663,6 +665,144 @@ final class AudioRecorderTests: XCTestCase {
         try await starting.value
 
         try await waitUntil { host.checkRouteCount == 1 }
+    }
+
+    // MARK: - A host that delivers no audio (#200)
+
+    func testAHostThatNeverDeliversAfterStartIsReplacedAndTheCaptureContinues() async throws {
+        let dead = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+        let fresh = RoutingEngineHost(hostID: 2, device: Self.builtInMic, sampleRate: 48_000, stream: .tone)
+        let factory = CountingHostFactory(hosts: [dead, fresh])
+        let recorder = makeRecorder(factory: factory, deadEngineTimeout: 0.3)
+
+        try await recorder.start()
+        try await waitUntil { recorder.diagnosticsSnapshot().deviceSwitchCount == 1 }
+        try await waitUntil { dead.wasRetired }
+        try await Task.sleep(nanoseconds: 400_000_000)
+
+        let outcome = await recorder.stopCapture()
+        let buffer = try XCTUnwrap(outcome.buffer, "the capture continues on the fresh host, got \(outcome)")
+        XCTAssertGreaterThan(buffer.duration, 0.25)
+        XCTAssertFalse(buffer.isDigitalSilence)
+        XCTAssertEqual(factory.created, 2, "one replacement, no more")
+        XCTAssertEqual(fresh.endCaptureCount, 1, "the capture ends on the host it moved to")
+        XCTAssertFalse(fresh.wasRetired)
+        XCTAssertEqual(recorder.diagnosticsSnapshot().engineHostID, 2)
+    }
+
+    func testAHostThatStopsDeliveringMidCaptureIsReplaced() async throws {
+        let first = RoutingEngineHost(hostID: 1, device: Self.headsetMic, sampleRate: 48_000, stream: .tone)
+        let second = RoutingEngineHost(hostID: 2, device: Self.builtInMic, sampleRate: 48_000, stream: .tone)
+        let factory = CountingHostFactory(hosts: [first, second])
+        let recorder = makeRecorder(factory: factory, deadEngineTimeout: 0.3)
+
+        try await recorder.start()
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(factory.created, 1, "a host that delivers is left alone")
+
+        first.stopDelivering()
+        try await waitUntil { recorder.diagnosticsSnapshot().deviceSwitchCount == 1 }
+        try await waitUntil { first.wasRetired }
+        try await Task.sleep(nanoseconds: 400_000_000)
+
+        let outcome = await recorder.stopCapture()
+        let buffer = try XCTUnwrap(outcome.buffer, "got \(outcome)")
+        XCTAssertGreaterThan(buffer.duration, 0.6, "audio before the drop and after the replacement are both kept")
+        XCTAssertGreaterThan(peakAmplitude(buffer.samples.prefix(3_000 * 2)), 8_000, "the part before the drop is kept")
+        XCTAssertGreaterThan(peakAmplitude(buffer.samples.suffix(3_000 * 2)), 8_000, "the part after the replacement is recorded")
+        XCTAssertEqual(second.endCaptureCount, 1)
+        XCTAssertEqual(factory.created, 2)
+    }
+
+    func testASwitchToASilentHostKeepsTheOldHostsAudio() async throws {
+        let old = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000, stream: .tone)
+        let silent = RoutingEngineHost(hostID: 2, device: Self.headsetMic, sampleRate: 24_000)
+        let factory = CountingHostFactory(hosts: [old, silent])
+        let observer = FakeRouteChangeObserver()
+        let recorder = makeRecorder(factory: factory, observer: observer, deadEngineTimeout: 0.3)
+
+        try await recorder.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        old.routeChangeReason = "the derived input changed"
+        observer.fire()
+        try await waitUntil { silent.continueCount == 1 }
+        try await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertFalse(old.wasRetired, "the old host keeps recording until the new one delivers")
+
+        try await waitUntil { silent.wasRetired }
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let outcome = await recorder.stopCapture()
+        let buffer = try XCTUnwrap(outcome.buffer, "got \(outcome)")
+        let elapsed = try XCTUnwrap(recorder.diagnosticsSnapshot().stopElapsedSeconds)
+        XCTAssertGreaterThan(buffer.duration / elapsed, 0.7, "the old host's audio covers the whole capture: \(buffer.duration)s of \(elapsed)s")
+        XCTAssertFalse(old.wasRetired, "a live old host is kept when the new one stays silent")
+        XCTAssertEqual(old.endCaptureCount, 1, "the capture ends on the old host")
+        XCTAssertEqual(factory.created, 2, "a live old host is not replaced")
+    }
+
+    func testAnEmptyCaptureOfNormalLengthRetiresTheHostAndReportsNoAudio() async throws {
+        let silent = SucceedingEngineHost(hostID: 1)
+        let fresh = SucceedingEngineHost(hostID: 2)
+        let factory = CountingHostFactory(hosts: [silent, fresh])
+        let recorder = makeRecorder(factory: factory)
+
+        try await recorder.start()
+        try await Task.sleep(nanoseconds: 400_000_000)
+        let outcome = await recorder.stopCapture()
+
+        XCTAssertEqual(outcome, .noAudio, "a capture of normal length with no audio is not a too-short one")
+        XCTAssertTrue(silent.wasRetired, "a host that delivered nothing is not reused")
+        try await recorder.start()
+        XCTAssertEqual(factory.created, 2, "the next start builds a fresh host")
+        XCTAssertEqual(recorder.diagnosticsSnapshot().engineHostID, 2)
+    }
+
+    func testATooShortCaptureIsReportedAsTooShortAndKeepsTheHost() async throws {
+        let host = SucceedingEngineHost(hostID: 1)
+        let factory = CountingHostFactory(hosts: [host])
+        let recorder = makeRecorder(factory: factory)
+
+        try await recorder.start()
+        let outcome = await recorder.stopCapture()
+
+        XCTAssertEqual(outcome, .tooShort)
+        XCTAssertFalse(host.wasRetired)
+        XCTAssertEqual(host.endCaptureCount, 1)
+    }
+
+    func testAHostDeliveringZeroValuedBuffersIsNeverReplaced() async throws {
+        let host = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000, stream: .zeros)
+        let factory = CountingHostFactory(hosts: [host])
+        let recorder = makeRecorder(factory: factory, deadEngineTimeout: 0.3)
+
+        try await recorder.start()
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+
+        let outcome = await recorder.stopCapture()
+        let buffer = try XCTUnwrap(outcome.buffer, "got \(outcome)")
+        XCTAssertTrue(buffer.isDigitalSilence, "a silent room still delivers buffers")
+        XCTAssertEqual(factory.created, 1, "the watchdog judges buffer arrival, not loudness")
+        XCTAssertEqual(recorder.diagnosticsSnapshot().deviceSwitchCount, 0)
+        XCTAssertFalse(host.wasRetired)
+        XCTAssertEqual(host.endCaptureCount, 1)
+    }
+
+    func testTheWatchdogDoesNotStackASwitchOnOneInFlight() async throws {
+        let dead = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+        let slow = RoutingEngineHost(hostID: 2, device: Self.builtInMic, sampleRate: 48_000, stream: .tone)
+        slow.continueDelay = 0.8
+        let factory = CountingHostFactory(hosts: [dead, slow])
+        let recorder = makeRecorder(factory: factory, deadEngineTimeout: 0.3)
+
+        try await recorder.start()
+        try await waitUntil { slow.continueCount == 1 }
+        try await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertEqual(factory.created, 2, "no second switch while the first is in flight")
+
+        try await waitUntil { recorder.diagnosticsSnapshot().deviceSwitchCount == 1 }
+        _ = await recorder.stopCapture()
+        XCTAssertEqual(factory.created, 2)
     }
 
     // MARK: - Capture pipeline across a format change
@@ -1186,12 +1326,83 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
     private var continued: CapturePipeline?
     private var attachedDiagnostics: AudioRecorderDiagnosticsState?
     private var tapSequence: UInt64 = 0
+    private let stream: StreamMode
+    private var streamGeneration: UInt64 = 0
+    private var streamStopped = false
+    private let streamQueue: DispatchQueue
 
-    init(hostID: UInt64, device: AudioInputDeviceSnapshot, sampleRate: Double, alwaysChanged: Bool = false) {
+    /// What the host's tap does on its own once a capture is attached.
+    enum StreamMode {
+        /// Nothing: the test feeds buffers by hand with `deliverTone`.
+        case none
+        /// A buffer every 20 ms, as a running engine's tap does.
+        case tone
+        /// Buffers of zeros every 20 ms: a running input in a silent room.
+        case zeros
+    }
+
+    init(
+        hostID: UInt64,
+        device: AudioInputDeviceSnapshot,
+        sampleRate: Double,
+        alwaysChanged: Bool = false,
+        stream: StreamMode = .none
+    ) {
         self.hostID = hostID
         self.device = device
         self.alwaysChanged = alwaysChanged
+        self.stream = stream
+        streamQueue = DispatchQueue(label: "RoutingEngineHost.stream.\(hostID)")
         inputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
+    }
+
+    /// The input drops out: the tap stops calling while the engine stays up.
+    func stopDelivering() {
+        locked { streamStopped = true }
+    }
+
+    private func startStreamIfConfigured() {
+        guard stream != .none else { return }
+        let generation = locked { () -> UInt64 in
+            streamGeneration += 1
+            return streamGeneration
+        }
+        scheduleStreamTick(generation: generation)
+    }
+
+    private func scheduleStreamTick(generation: UInt64) {
+        streamQueue.asyncAfter(deadline: .now() + 0.02) { [self] in
+            let target = locked { () -> (CapturePipeline, UInt64)? in
+                guard
+                    generation == streamGeneration,
+                    !retired,
+                    !streamStopped,
+                    let pipeline = continued ?? started
+                else { return nil }
+                tapSequence += 1
+                return (pipeline, tapSequence)
+            }
+            guard let (pipeline, tapBufferID) = target else { return }
+            let frames = AVAudioFrameCount(inputFormat.sampleRate * 0.02)
+            if let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frames) {
+                buffer.frameLength = frames
+                if let channel = buffer.floatChannelData?[0] {
+                    for frame in 0..<Int(frames) {
+                        channel[frame] = stream == .zeros
+                            ? 0
+                            : Float(0.5 * sin(2 * Double.pi * 440 * Double(frame) / inputFormat.sampleRate))
+                    }
+                }
+                pipeline.enqueue(
+                    buffer: buffer,
+                    tapBufferID: tapBufferID,
+                    inputFrameLength: frames,
+                    enqueuedAtNanos: audioRecorderNowNanos(),
+                    sourceID: hostID
+                )
+            }
+            scheduleStreamTick(generation: generation)
+        }
     }
 
     var wasRetired: Bool { locked { retired } }
@@ -1236,6 +1447,11 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
     }
 
     private func deliverBuffer(frames: Int, expectAppend: Bool, file: StaticString, line: UInt) throws {
+        // A retired host's engine is torn down: its tap no longer calls.
+        if wasRetired {
+            XCTAssertFalse(expectAppend, "host \(hostID) is retired and delivers nothing", file: file, line: line)
+            return
+        }
         let (pipeline, diagnostics, tapBufferID) = locked { () -> (CapturePipeline?, AudioRecorderDiagnosticsState?, UInt64) in
             tapSequence += 1
             return (continued ?? started, attachedDiagnostics, tapSequence)
@@ -1289,6 +1505,7 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
                 continued = nil
                 attachedDiagnostics = diagnostics
             }
+            startStreamIfConfigured()
             completion(.success(CaptureStartResult(pipeline: pipeline, inputDevice: device, inputFormat: inputFormat)))
         }
     }
@@ -1312,6 +1529,7 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
                 continued = pipeline
                 attachedDiagnostics = diagnostics
             }
+            startStreamIfConfigured()
             completion(.success(CaptureSwitchResult(inputDevice: device, inputFormat: inputFormat)))
         }
     }
@@ -1329,7 +1547,11 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
     }
 
     func endCapture() {
-        locked { endCaptures += 1 }
+        locked {
+            endCaptures += 1
+            // The real host detaches the capture: the stream stops with it.
+            streamGeneration += 1
+        }
     }
 
     func retire() {
