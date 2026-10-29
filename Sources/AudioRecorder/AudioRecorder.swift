@@ -2361,6 +2361,12 @@ public actor AudioRecorder {
             fallbackHost = nil
             fallbackInputDevice = nil
             diagnostics.recordDeviceSwitchFailure()
+            // The route still derives the input the dead host was built for:
+            // try it again on a fresh host while the fallback keeps recording
+            // (#202). `runSwitches` asks the route, counts the attempt against
+            // the cap and folds route events that arrive meanwhile; the guard
+            // above saw no switch in flight, and nothing has awaited since.
+            await runSwitches(deadHostReason: nil)
             return
         }
 
