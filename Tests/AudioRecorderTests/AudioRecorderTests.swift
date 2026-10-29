@@ -788,19 +788,27 @@ final class AudioRecorderTests: XCTestCase {
         XCTAssertEqual(host.endCaptureCount, 1)
     }
 
-    func testTheWatchdogDoesNotStackASwitchOnOneInFlight() async throws {
-        let dead = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+    func testTheWatchdogDoesNotStackASwitchOnARouteSwitchInFlight() async throws {
+        let first = RoutingEngineHost(hostID: 1, device: Self.headsetMic, sampleRate: 48_000, stream: .tone)
         let slow = RoutingEngineHost(hostID: 2, device: Self.builtInMic, sampleRate: 48_000, stream: .tone)
         slow.continueDelay = 0.8
-        let factory = CountingHostFactory(hosts: [dead, slow])
-        let recorder = makeRecorder(factory: factory, deadEngineTimeout: 0.3)
+        let factory = CountingHostFactory(hosts: [first, slow])
+        let observer = FakeRouteChangeObserver()
+        let recorder = makeRecorder(factory: factory, observer: observer, deadEngineTimeout: 0.3)
 
         try await recorder.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        // The headset drops out: the route moves and its tap goes quiet together.
+        first.stopDelivering()
+        first.routeChangeReason = "the derived input changed"
+        observer.fire()
         try await waitUntil { slow.continueCount == 1 }
+        // Longer than the timeout while the switch is still starting its host.
         try await Task.sleep(nanoseconds: 600_000_000)
         XCTAssertEqual(factory.created, 2, "no second switch while the first is in flight")
 
         try await waitUntil { recorder.diagnosticsSnapshot().deviceSwitchCount == 1 }
+        try await waitUntil { first.wasRetired }
         _ = await recorder.stopCapture()
         XCTAssertEqual(factory.created, 2)
     }

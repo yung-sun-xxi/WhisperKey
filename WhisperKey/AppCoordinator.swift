@@ -449,7 +449,8 @@ final class AppCoordinator: ObservableObject {
 
         processingTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let buffer = await recorder.stop()
+            let stopOutcome = await recorder.stopCapture()
+            let buffer = stopOutcome.buffer
             self.appleMusic.recordingDidEnd()
 
             guard self.activeRecordingID == recordingID, self.isCurrentProcessing(operationID) else {
@@ -488,7 +489,26 @@ final class AppCoordinator: ObservableObject {
 
             guard let buffer else {
                 self.log.info("recording stop finished operationID=\(operationID.uuidString, privacy: .public) audioDuration=0 pcmBytes=0 elapsed=\(self.processingElapsed(), privacy: .public)")
-                self.log.info("recording discarded (under min duration) operationID=\(operationID.uuidString, privacy: .public)")
+                if stopOutcome == .noAudio {
+                    // Long enough to keep, but the microphone delivered nothing (#200).
+                    self.log.error("recording had no audio: the microphone delivered nothing operationID=\(operationID.uuidString, privacy: .public)")
+                    self.appendRecordingDiagnostic(
+                        "recording_stop_finished_no_audio",
+                        operationID: operationID,
+                        recordingID: recordingID,
+                        phase: .recordingStop
+                    )
+                    // `.recordingCaptureTimedOut` is the no-audio family: its toast has no
+                    // action, since there is nothing to retry.
+                    self.handleTranscriptionFailure(
+                        operationID: operationID,
+                        reason: .recordingCaptureTimedOut,
+                        message: Self.noAudioFromMicrophoneMessage
+                    )
+                    return
+                }
+                let discardReason = stopOutcome == .notRecording ? "nothing was recording" : "under min duration"
+                self.log.info("recording discarded (\(discardReason, privacy: .public)) operationID=\(operationID.uuidString, privacy: .public)")
                 self.appendRecordingDiagnostic(
                     "recording_stop_finished_no_buffer",
                     operationID: operationID,
@@ -1250,6 +1270,10 @@ final class AppCoordinator: ObservableObject {
             }
         }
     }
+
+    /// The toast for a recording of normal length into which the microphone delivered
+    /// nothing (#200).
+    static let noAudioFromMicrophoneMessage = "No audio came from the microphone, so nothing was recorded. Try again."
 
     private static func processingTimeoutMessage(phase: ProcessingPhase?, providerID: String) -> String {
         switch phase {
