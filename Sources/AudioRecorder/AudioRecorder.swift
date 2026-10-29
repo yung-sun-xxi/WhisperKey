@@ -164,6 +164,7 @@ final class CapturePipeline: @unchecked Sendable {
     private var currentSourceID: UInt64?
     private var pendingSourceID: UInt64?
     private var lastCurrentSourceBufferNanos: UInt64?
+    private var sourceSwitchHandler: (@Sendable (UInt64) -> Void)?
 
     init(
         captureID: UInt64,
@@ -191,7 +192,23 @@ final class CapturePipeline: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Forgets a switch whose host never started.
+    /// Called, off the actor, when the first buffer of a pending switch is
+    /// admitted: from then on only that source records.
+    func setSourceSwitchHandler(_ handler: @escaping @Sendable (UInt64) -> Void) {
+        lock.lock()
+        sourceSwitchHandler = handler
+        lock.unlock()
+    }
+
+    /// The source the recording takes buffers from, and when its last buffer
+    /// arrived. Both nil until the first buffer is admitted.
+    func sourceStatus() -> (currentSourceID: UInt64?, lastBufferNanos: UInt64?) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (currentSourceID, lastCurrentSourceBufferNanos)
+    }
+
+    /// Forgets a switch whose host never started or never delivered.
     func cancelSwitch(toSourceID sourceID: UInt64) {
         lock.lock()
         if pendingSourceID == sourceID {
@@ -213,12 +230,22 @@ final class CapturePipeline: @unchecked Sendable {
         }
         let admission = admit(sourceID: sourceID, atNanos: enqueuedAtNanos)
         guard admission.isAccepted else { return }
-        if let gapNanos = admission.switchGapNanos {
-            let gapMillis = Double(gapNanos) / 1_000_000
-            diagnostics.recordDeviceSwitchGap(toHostID: sourceID, millis: gapMillis)
-            recorderLog.notice(
-                "deviceSwitch: captureID=\(self.captureID, privacy: .public) first buffer from hostID=\(sourceID, privacy: .public) gapMs=\(gapMillis, privacy: .public)"
-            )
+        if admission.isSwitch {
+            if let gapNanos = admission.switchGapNanos {
+                let gapMillis = Double(gapNanos) / 1_000_000
+                diagnostics.recordDeviceSwitchGap(toHostID: sourceID, millis: gapMillis)
+                recorderLog.notice(
+                    "deviceSwitch: captureID=\(self.captureID, privacy: .public) first buffer from hostID=\(sourceID, privacy: .public) gapMs=\(gapMillis, privacy: .public)"
+                )
+            } else {
+                recorderLog.notice(
+                    "deviceSwitch: captureID=\(self.captureID, privacy: .public) first buffer from hostID=\(sourceID, privacy: .public); no earlier input delivered"
+                )
+            }
+            lock.lock()
+            let handler = sourceSwitchHandler
+            lock.unlock()
+            handler?(sourceID)
         }
         guard appendGate.tryAcquire() else {
             diagnostics.recordAppendDropped()
@@ -252,28 +279,34 @@ final class CapturePipeline: @unchecked Sendable {
         return acceptsInput
     }
 
-    /// Whether a buffer from `sourceID` belongs to the recording, and the gap
-    /// when it is the first buffer of a pending switch.
-    private func admit(sourceID: UInt64, atNanos: UInt64) -> (isAccepted: Bool, switchGapNanos: UInt64?) {
+    /// Whether a buffer from `sourceID` belongs to the recording, whether it
+    /// is the first buffer of a pending switch, and the gap since the source
+    /// it replaces last delivered (nil when that one never did).
+    private func admit(
+        sourceID: UInt64,
+        atNanos: UInt64
+    ) -> (isAccepted: Bool, isSwitch: Bool, switchGapNanos: UInt64?) {
         lock.lock()
         defer { lock.unlock() }
-        guard let current = currentSourceID else {
+        if sourceID == currentSourceID {
+            lastCurrentSourceBufferNanos = atNanos
+            return (true, false, nil)
+        }
+        if sourceID == pendingSourceID {
+            let gap = lastCurrentSourceBufferNanos.map { atNanos > $0 ? atNanos - $0 : 0 }
             currentSourceID = sourceID
+            pendingSourceID = nil
             lastCurrentSourceBufferNanos = atNanos
-            return (true, nil)
+            return (true, true, gap)
         }
-        if sourceID == current {
-            lastCurrentSourceBufferNanos = atNanos
-            return (true, nil)
+        guard currentSourceID == nil else {
+            return (false, false, nil)
         }
-        guard sourceID == pendingSourceID else {
-            return (false, nil)
-        }
-        let gap = lastCurrentSourceBufferNanos.map { atNanos > $0 ? atNanos - $0 : 0 }
+        // Nothing delivered yet: the first source to deliver records, the
+        // host being switched away from included.
         currentSourceID = sourceID
-        pendingSourceID = nil
         lastCurrentSourceBufferNanos = atNanos
-        return (true, gap)
+        return (true, false, nil)
     }
 
     /// The conversion for `format`, rebuilt when the input format changed.
@@ -973,6 +1006,23 @@ public struct AudioBuffer: Sendable, Equatable {
 
     public var isDigitalSilence: Bool {
         !samples.isEmpty && samples.allSatisfy { $0 == 0 }
+    }
+}
+
+/// How a `stop()` ended, so a caller can tell a press too short to keep from
+/// a capture of normal length into which the microphone delivered nothing.
+public enum AudioRecorderStopOutcome: Sendable, Equatable {
+    case recorded(AudioBuffer)
+    /// Shorter than `AudioRecorder.minDuration`.
+    case tooShort
+    /// Long enough, but no audio reached the recording.
+    case noAudio
+    /// No capture was running.
+    case notRecording
+
+    public var buffer: AudioBuffer? {
+        if case .recorded(let buffer) = self { return buffer }
+        return nil
     }
 }
 
@@ -1829,7 +1879,11 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
 
 /// Captures microphone audio into an in-memory PCM buffer at 16 kHz mono 16-bit.
 ///
-/// - Discards recordings shorter than 300 ms (returns `nil` from `stop`).
+/// - Discards recordings shorter than 300 ms (returns `nil` from `stop`,
+///   `.tooShort` from `stopCapture`).
+/// - Moves a capture whose host delivers no buffer for `deadEngineTimeout`
+///   to a fresh host, and reports a capture that recorded nothing as
+///   `.noAudio`.
 /// - When `maxDuration` is reached, fires the handler registered via
 ///   `setOnMaxDurationReached`. The handler is expected to drive the same
 ///   stop/transcribe path as a manual stop.
@@ -1841,8 +1895,15 @@ public actor AudioRecorder {
     /// never return; the user gets an error instead of a dead recorder.
     public static let defaultStartTimeout: TimeInterval = 3
 
+    /// How long the recording host may deliver no tap buffer before the
+    /// capture is moved to a fresh host (#200).
+    public static let defaultDeadEngineTimeout: TimeInterval = 1
+
     public let maxDuration: TimeInterval
     let startTimeout: TimeInterval
+    /// Nil turns the delivery watchdog off: test hosts that never deliver
+    /// must not start switching in tests that are not about it.
+    let deadEngineTimeout: TimeInterval?
     private nonisolated let diagnostics = AudioRecorderDiagnosticsState()
     private let engineHostFactory: @Sendable (UInt64) -> CaptureEngineHosting
     private let permissionCheckOverride: (@Sendable () async throws -> Void)?
@@ -1882,10 +1943,20 @@ public actor AudioRecorder {
     private var routeChangedWhileStarting = false
     private var deviceSwitchAttempts = 0
     private var didLogSwitchCap = false
+    /// When `host` took over the running capture.
+    private var hostStartedNanos: UInt64 = 0
+    /// The host `host` replaced, kept recording until `host` delivers its
+    /// first buffer: retired then, or made `host` again if `host` stays
+    /// silent past `deadEngineTimeout` (#200).
+    private var fallbackHost: CaptureEngineHosting?
+    private var fallbackStartedNanos: UInt64 = 0
+    private var fallbackInputDevice: AudioInputDeviceSnapshot?
+    private var watchdogTask: Task<Void, Never>?
 
     public init(maxDuration: TimeInterval = AudioRecorder.defaultMaxDuration) {
         self.maxDuration = maxDuration
         self.startTimeout = AudioRecorder.defaultStartTimeout
+        self.deadEngineTimeout = AudioRecorder.defaultDeadEngineTimeout
         self.engineHostFactory = { CaptureEngineHost(hostID: $0) }
         self.permissionCheckOverride = nil
         self.isMicrophoneAuthorized = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
@@ -1901,10 +1972,12 @@ public actor AudioRecorder {
         engineHostFactory: @escaping @Sendable (UInt64) -> CaptureEngineHosting,
         permissionCheck: @escaping @Sendable () async throws -> Void,
         isMicrophoneAuthorized: @escaping @Sendable () -> Bool = { true },
-        routeChangeObserver: AudioRouteChangeObserving = NoAudioRouteChangeObserver()
+        routeChangeObserver: AudioRouteChangeObserving = NoAudioRouteChangeObserver(),
+        deadEngineTimeout: TimeInterval? = nil
     ) {
         self.maxDuration = maxDuration
         self.startTimeout = startTimeout
+        self.deadEngineTimeout = deadEngineTimeout
         self.engineHostFactory = engineHostFactory
         self.permissionCheckOverride = permissionCheck
         self.isMicrophoneAuthorized = isMicrophoneAuthorized
@@ -1985,8 +2058,15 @@ public actor AudioRecorder {
                 lastInputDevice = started.inputDevice
                 deviceSwitchAttempts = 0
                 didLogSwitchCap = false
+                hostStartedNanos = audioRecorderNowNanos()
+                fallbackHost = nil
+                fallbackInputDevice = nil
+                started.pipeline.setSourceSwitchHandler { [weak self] _ in
+                    Task { await self?.retireFallbackIfHostDelivered() }
+                }
                 diagnostics.recordEngineStarted()
                 scheduleMaxDurationTask()
+                startDeliveryWatchdog(captureID: captureID)
                 if routeChangedWhileStarting {
                     routeChangedWhileStarting = false
                     Task { await self.handleRouteChange(.defaultOutputChanged) }
@@ -2099,12 +2179,20 @@ public actor AudioRecorder {
             routeChangedWhileSwitching = true
             return
         }
+        await runSwitches(deadHostReason: nil)
+    }
+
+    /// Moves the capture while there is a reason to: `deadHostReason` for
+    /// the first round when the watchdog found the host silent, otherwise the
+    /// host's route check. Route events that arrive meanwhile add a round.
+    private func runSwitches(deadHostReason: String?) async {
         isSwitchingInput = true
         defer {
             isSwitchingInput = false
             switchingToHostID = nil
         }
 
+        var pendingDeadHostReason = deadHostReason
         repeat {
             routeChangedWhileSwitching = false
             guard
@@ -2114,7 +2202,13 @@ public actor AudioRecorder {
                 let pipeline = activePipeline
             else { return }
 
-            let reason = await checkRoute(on: current)
+            let reason: String?
+            if let deadHostReason = pendingDeadHostReason {
+                pendingDeadHostReason = nil
+                reason = deadHostReason
+            } else {
+                reason = await checkRoute(on: current)
+            }
             guard isRecording, activeCaptureID == captureID, host === current else { return }
             guard let reason else {
                 recorderLog.info(
@@ -2142,6 +2236,7 @@ public actor AudioRecorder {
         pipeline: CapturePipeline,
         reason: String
     ) async {
+        retireFallbackIfHostDelivered()
         let newHost = makeHost(assign: false)
         switchingToHostID = newHost.hostID
         let fromDevice = activeInputDevice
@@ -2166,14 +2261,27 @@ public actor AudioRecorder {
 
         switch outcome {
         case .success(let switched):
-            retire(oldHost)
-            host = newHost
             guard isSameCapture else {
                 // The capture stopped while the switch ran: keep the host
                 // built for the current route warm for the next start.
+                retire(oldHost)
+                host = newHost
                 newHost.endCapture()
                 return
             }
+            retireFallbackIfHostDelivered()
+            if fallbackHost != nil {
+                // `oldHost` never delivered and is replaced before it did;
+                // the host still recording stays the fallback.
+                retire(oldHost)
+            } else {
+                // `oldHost` keeps recording until `newHost` delivers.
+                fallbackHost = oldHost
+                fallbackStartedNanos = hostStartedNanos
+                fallbackInputDevice = fromDevice
+            }
+            host = newHost
+            hostStartedNanos = audioRecorderNowNanos()
             activeInputDevice = switched.inputDevice
             lastInputDevice = switched.inputDevice
             diagnostics.recordDeviceSwitch(
@@ -2188,6 +2296,11 @@ public actor AudioRecorder {
         case .failure(let failure):
             retire(newHost)
             pipeline.cancelSwitch(toSourceID: newHost.hostID)
+            if isSameCapture, fallbackHost != nil, host === oldHost {
+                // `oldHost` is itself a switch still waiting for its first
+                // buffer: it stays the pending source.
+                pipeline.prepareSwitch(toSourceID: oldHost.hostID)
+            }
             if isSameCapture {
                 diagnostics.recordDeviceSwitchFailure()
             }
@@ -2195,6 +2308,102 @@ public actor AudioRecorder {
                 "deviceSwitch: captureID=\(captureID, privacy: .public) switch to hostID=\(newHost.hostID, privacy: .public) failed: \(String(describing: failure), privacy: .public); the audio captured so far is kept"
             )
         }
+    }
+
+    // MARK: - A host that delivers no audio (#200)
+
+    /// `engine.start()` returning says nothing about the tap: a host built
+    /// while its device dropped out started and never delivered a buffer,
+    /// and every later capture reused it. While recording, this checks that
+    /// the host delivers, by buffer arrival, never by loudness: a silent room
+    /// still delivers buffers of zeros.
+    private func startDeliveryWatchdog(captureID: UInt64) {
+        watchdogTask?.cancel()
+        watchdogTask = nil
+        guard let timeout = deadEngineTimeout, timeout > 0 else { return }
+        let pollNanos = UInt64(min(timeout / 4, 0.25) * 1_000_000_000)
+        watchdogTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: pollNanos)
+                guard !Task.isCancelled, let self else { return }
+                await self.checkDelivery(captureID: captureID)
+            }
+        }
+    }
+
+    private func checkDelivery(captureID: UInt64) async {
+        guard
+            let timeout = deadEngineTimeout,
+            isRecording,
+            activeCaptureID == captureID,
+            !isSwitchingInput,
+            let current = host,
+            let pipeline = activePipeline
+        else { return }
+        retireFallbackIfHostDelivered()
+
+        let timeoutNanos = UInt64(timeout * 1_000_000_000)
+        let now = audioRecorderNowNanos()
+        let status = pipeline.sourceStatus()
+
+        if let fallback = fallbackHost {
+            // `current` is a switch that has not delivered yet.
+            guard now &- hostStartedNanos > timeoutNanos else { return }
+            recorderLog.error(
+                "deadEngine: captureID=\(captureID, privacy: .public) hostID=\(current.hostID, privacy: .public) delivered no buffer \(Self.millis(now &- self.hostStartedNanos), privacy: .public)ms after the switch; back to hostID=\(fallback.hostID, privacy: .public)"
+            )
+            pipeline.cancelSwitch(toSourceID: current.hostID)
+            retire(current)
+            host = fallback
+            hostStartedNanos = fallbackStartedNanos
+            activeInputDevice = fallbackInputDevice
+            lastInputDevice = fallbackInputDevice
+            fallbackHost = nil
+            fallbackInputDevice = nil
+            diagnostics.recordDeviceSwitchFailure()
+            return
+        }
+
+        let lastDelivery = status.currentSourceID == current.hostID ? status.lastBufferNanos : nil
+        let since = max(lastDelivery ?? 0, hostStartedNanos)
+        let silentNanos = now &- since
+        guard now > since, silentNanos > timeoutNanos else { return }
+        guard deviceSwitchAttempts < Self.maxDeviceSwitchesPerCapture else {
+            if !didLogSwitchCap {
+                didLogSwitchCap = true
+                recorderLog.error(
+                    "deadEngine: captureID=\(captureID, privacy: .public) hostID=\(current.hostID, privacy: .public) delivered no buffer for \(Self.millis(silentNanos), privacy: .public)ms; cap of \(Self.maxDeviceSwitchesPerCapture, privacy: .public) switches reached, staying"
+                )
+            }
+            return
+        }
+        let reason = lastDelivery == nil
+            ? "the engine delivered no buffer \(Self.millis(silentNanos))ms after it started"
+            : "the engine delivered no buffer for \(Self.millis(silentNanos))ms"
+        recorderLog.error(
+            "deadEngine: captureID=\(captureID, privacy: .public) hostID=\(current.hostID, privacy: .public): \(reason, privacy: .public); moving to a fresh host"
+        )
+        await runSwitches(deadHostReason: reason)
+    }
+
+    /// Retires the fallback once the pipeline records from `host`.
+    private func retireFallbackIfHostDelivered() {
+        guard
+            let fallback = fallbackHost,
+            let current = host,
+            let pipeline = activePipeline,
+            pipeline.sourceStatus().currentSourceID == current.hostID
+        else { return }
+        recorderLog.notice(
+            "deviceSwitch: captureID=\(self.activeCaptureID ?? 0, privacy: .public) hostID=\(current.hostID, privacy: .public) delivered; retiring hostID=\(fallback.hostID, privacy: .public)"
+        )
+        fallbackHost = nil
+        fallbackInputDevice = nil
+        retire(fallback)
+    }
+
+    private static func millis(_ nanos: UInt64) -> Int {
+        Int(nanos / 1_000_000)
     }
 
     /// The host's route check, bounded by the start deadline. A host that does
@@ -2226,23 +2435,46 @@ public actor AudioRecorder {
     }
 
     public func stop() -> AudioBuffer? {
+        stopCapture().buffer
+    }
+
+    public func stopCapture() -> AudioRecorderStopOutcome {
         diagnostics.recordStopEntered()
         guard isRecording else {
             diagnostics.recordStopFinished(returnedBuffer: false, pcmBytes: 0, elapsed: 0, capturedDuration: 0)
-            return nil
+            return .notRecording
         }
         isRecording = false
 
         maxDurationTask?.cancel()
         maxDurationTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
 
         // Retire the capture before the engine: the PCM snapshot is taken
         // under a short lock, while stopping the engine is CoreAudio work
-        // that the host performs on its own queue. The host is kept, warm,
-        // for the next start.
+        // that the host performs on its own queue.
         let captured = activePipeline?.retireAndSnapshot() ?? Data()
-        host?.endCapture()
+        // A switch still waiting for its first buffer: its host is built for
+        // the current route and kept; the one it replaced goes.
+        if let fallback = fallbackHost {
+            fallbackHost = nil
+            fallbackInputDevice = nil
+            retire(fallback)
+        }
         let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
+        let deliveredNothing = elapsed >= Self.minDuration && captured.isEmpty
+        if deliveredNothing, let host {
+            // A capture of normal length with no audio: the host is not to
+            // be trusted with the next one (#200).
+            recorderLog.error(
+                "stop: captureID=\(self.activeCaptureID ?? 0, privacy: .public) hostID=\(host.hostID, privacy: .public) delivered no audio in \(elapsed, privacy: .public)s; retiring it so the next start builds a fresh host"
+            )
+            retire(host)
+        } else {
+            // Kept, warm, for the next start.
+            host?.endCapture()
+        }
         let capturedDuration = capturedDuration(byteCount: captured.count)
         let expectedBytes = expectedByteCount(duration: elapsed)
         let capturedByteDelta = captured.count - expectedBytes
@@ -2262,17 +2494,20 @@ public actor AudioRecorder {
         activeCaptureID = nil
         activeInputDevice = nil
 
-        guard elapsed >= Self.minDuration, !captured.isEmpty else {
+        if deliveredNothing {
+            return .noAudio
+        }
+        guard elapsed >= Self.minDuration else {
             recorderLog.info(
                 "stop: discarding capture elapsed=\(elapsed, privacy: .public) minDuration=\(Self.minDuration, privacy: .public) capturedBytes=\(captured.count, privacy: .public)"
             )
-            return nil
+            return .tooShort
         }
-        return AudioBuffer(
+        return .recorded(AudioBuffer(
             samples: captured,
             sampleRate: outputFormat.sampleRate,
             channelCount: outputFormat.channelCount
-        )
+        ))
     }
 
     // MARK: - Internals
