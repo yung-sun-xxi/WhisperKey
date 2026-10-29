@@ -726,10 +726,14 @@ final class AudioRecorderTests: XCTestCase {
         old.routeChangeReason = "the derived input changed"
         observer.fire()
         try await waitUntil { silent.continueCount == 1 }
+        // By the time the watchdog falls back, the route check on the old host
+        // reports the input unchanged: the revert re-checks and stays (#202).
+        old.routeChangeReason = nil
         try await Task.sleep(nanoseconds: 150_000_000)
         XCTAssertFalse(old.wasRetired, "the old host keeps recording until the new one delivers")
 
         try await waitUntil { silent.wasRetired }
+        try await waitUntil { old.checkRouteCount == 2 }
         try await Task.sleep(nanoseconds: 300_000_000)
 
         let outcome = await recorder.stopCapture()
@@ -738,7 +742,71 @@ final class AudioRecorderTests: XCTestCase {
         XCTAssertGreaterThan(buffer.duration / elapsed, 0.7, "the old host's audio covers the whole capture: \(buffer.duration)s of \(elapsed)s")
         XCTAssertFalse(old.wasRetired, "a live old host is kept when the new one stays silent")
         XCTAssertEqual(old.endCaptureCount, 1, "the capture ends on the old host")
-        XCTAssertEqual(factory.created, 2, "a live old host is not replaced")
+        XCTAssertEqual(old.checkRouteCount, 2, "one route check for the switch, one after the fallback")
+        XCTAssertEqual(factory.created, 2, "an input the route check calls unchanged is not switched again")
+    }
+
+    func testAfterFallingBackFromASilentHostTheDerivedInputIsRetriedOnAFreshHost() async throws {
+        let old = RoutingEngineHost(hostID: 1, device: Self.headsetMic, sampleRate: 48_000, stream: .tone)
+        let dead = RoutingEngineHost(hostID: 2, device: Self.builtInMic, sampleRate: 48_000)
+        let live = RoutingEngineHost(hostID: 3, device: Self.builtInMic, sampleRate: 48_000, stream: .tone)
+        let factory = CountingHostFactory(hosts: [old, dead, live])
+        let observer = FakeRouteChangeObserver()
+        let recorder = makeRecorder(factory: factory, observer: observer, deadEngineTimeout: 0.3)
+
+        try await recorder.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        // The route now derives the built-in mic, and keeps saying so.
+        old.routeChangeReason = "the derived input changed"
+        observer.fire()
+        try await waitUntil { dead.continueCount == 1 }
+        try await waitUntil { dead.wasRetired }
+        try await waitUntil { live.continueCount == 1 }
+        try await waitUntil { old.wasRetired }
+        try await Task.sleep(nanoseconds: 400_000_000)
+
+        let outcome = await recorder.stopCapture()
+        let buffer = try XCTUnwrap(outcome.buffer, "got \(outcome)")
+        let elapsed = try XCTUnwrap(recorder.diagnosticsSnapshot().stopElapsedSeconds)
+        XCTAssertGreaterThan(buffer.duration / elapsed, 0.7, "no gap across the fallback and the retry: \(buffer.duration)s of \(elapsed)s")
+        XCTAssertGreaterThan(peakAmplitude(buffer.samples.prefix(3_000 * 2)), 8_000, "the part from the old host is kept")
+        XCTAssertGreaterThan(peakAmplitude(buffer.samples.suffix(3_000 * 2)), 8_000, "the part from the retried host is recorded")
+        XCTAssertEqual(live.endCaptureCount, 1, "the capture ends on the retried host")
+        XCTAssertFalse(live.wasRetired)
+        XCTAssertEqual(old.endCaptureCount, 0, "the fallback is retired, not kept warm")
+        XCTAssertEqual(recorder.diagnosticsSnapshot().engineHostID, 3)
+        XCTAssertEqual(recorder.diagnosticsSnapshot().deviceSwitchCount, 2, "the first switch and its retry")
+        XCTAssertEqual(factory.created, 3, "one retry once a host delivers")
+    }
+
+    func testWhenEveryDerivedInputHostIsSilentRetriesStopAtTheCapAndKeepTheFallback() async throws {
+        let cap = AudioRecorder.maxDeviceSwitchesPerCapture
+        let old = RoutingEngineHost(hostID: 1, device: Self.headsetMic, sampleRate: 48_000, stream: .tone)
+        let dead = (2...(cap + 4)).map { id in
+            RoutingEngineHost(hostID: UInt64(id), device: Self.builtInMic, sampleRate: 48_000)
+        }
+        let factory = CountingHostFactory(hosts: [old] + dead)
+        let observer = FakeRouteChangeObserver()
+        let recorder = makeRecorder(factory: factory, observer: observer, deadEngineTimeout: 0.3)
+
+        try await recorder.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        old.routeChangeReason = "the derived input changed"
+        observer.fire()
+        try await waitUntil(timeout: 6) { dead[cap - 1].wasRetired }
+        // Long enough for several more rounds, were the cap not holding.
+        try await Task.sleep(nanoseconds: 1_200_000_000)
+
+        XCTAssertEqual(factory.created, 1 + cap, "one starting host plus at most \(cap) switches")
+        XCTAssertEqual(recorder.diagnosticsSnapshot().deviceSwitchCount, UInt64(cap))
+        let outcome = await recorder.stopCapture()
+        let buffer = try XCTUnwrap(outcome.buffer, "got \(outcome)")
+        let elapsed = try XCTUnwrap(recorder.diagnosticsSnapshot().stopElapsedSeconds)
+        XCTAssertGreaterThan(buffer.duration / elapsed, 0.7, "the fallback's audio covers the whole capture: \(buffer.duration)s of \(elapsed)s")
+        XCTAssertFalse(buffer.isDigitalSilence)
+        XCTAssertFalse(old.wasRetired, "the fallback is kept when no retry delivers")
+        XCTAssertEqual(old.endCaptureCount, 1, "the capture ends on the fallback")
+        XCTAssertTrue(dead.prefix(cap).allSatisfy(\.wasRetired), "every silent host is retired")
     }
 
     func testAnEmptyCaptureOfNormalLengthRetiresTheHostAndReportsNoAudio() async throws {
