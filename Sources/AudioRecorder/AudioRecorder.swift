@@ -1230,21 +1230,27 @@ protocol CaptureEngineHosting: AnyObject, Sendable {
     /// once; the work runs on the host's queue. Idempotent.
     func warm()
 
+    /// `onBluetoothInput` is called, off the actor, when the host is about to
+    /// build its engine on an input it has read to be Bluetooth: that build
+    /// is slow, and the recorder gives it a longer deadline.
     func begin(
         captureID: UInt64,
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     )
 
     /// Moves a running capture onto this host: builds the engine for the
     /// current route, attaches `pipeline` (the same one, with everything it
     /// recorded so far), and starts. Never resets the capture's diagnostics.
+    /// `onBluetoothInput` as for `begin`.
     func continueCapture(
         captureID: UInt64,
         pipeline: CapturePipeline,
         diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureSwitchResult, CaptureBeginError>) -> Void
     )
 
@@ -1435,6 +1441,7 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {
         queue.async { [self] in
@@ -1469,6 +1476,7 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         captureID: UInt64,
         pipeline: CapturePipeline,
         diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureSwitchResult, CaptureBeginError>) -> Void
     ) {
         queue.async { [self] in
@@ -1894,6 +1902,14 @@ public actor AudioRecorder {
     /// wedged `coreaudiod` can make the first CoreAudio call of a capture
     /// never return; the user gets an error instead of a dead recorder.
     public static let defaultStartTimeout: TimeInterval = 3
+    /// The start deadline once the host has read that the input it builds on
+    /// is Bluetooth, counted from the same moment as `defaultStartTimeout`.
+    /// Prewarm skips a Bluetooth mic (it would hold the headset in HFP), so
+    /// the engine is built inside the start, and AirPods switching from A2DP
+    /// to HFP takes about 6 s there: 3 s timed out every press. The longer
+    /// deadline only follows a route read that answered, so a wedged
+    /// `coreaudiod` still fails at `defaultStartTimeout`.
+    public static let defaultBluetoothStartTimeout: TimeInterval = 10
 
     /// How long the recording host may deliver no tap buffer before the
     /// capture is moved to a fresh host (#200).
@@ -1901,6 +1917,7 @@ public actor AudioRecorder {
 
     public let maxDuration: TimeInterval
     let startTimeout: TimeInterval
+    let bluetoothStartTimeout: TimeInterval
     /// Nil turns the delivery watchdog off: test hosts that never deliver
     /// must not start switching in tests that are not about it.
     let deadEngineTimeout: TimeInterval?
@@ -1956,6 +1973,7 @@ public actor AudioRecorder {
     public init(maxDuration: TimeInterval = AudioRecorder.defaultMaxDuration) {
         self.maxDuration = maxDuration
         self.startTimeout = AudioRecorder.defaultStartTimeout
+        self.bluetoothStartTimeout = AudioRecorder.defaultBluetoothStartTimeout
         self.deadEngineTimeout = AudioRecorder.defaultDeadEngineTimeout
         self.engineHostFactory = { CaptureEngineHost(hostID: $0) }
         self.permissionCheckOverride = nil
@@ -1969,6 +1987,7 @@ public actor AudioRecorder {
     init(
         maxDuration: TimeInterval,
         startTimeout: TimeInterval,
+        bluetoothStartTimeout: TimeInterval = AudioRecorder.defaultBluetoothStartTimeout,
         engineHostFactory: @escaping @Sendable (UInt64) -> CaptureEngineHosting,
         permissionCheck: @escaping @Sendable () async throws -> Void,
         isMicrophoneAuthorized: @escaping @Sendable () -> Bool = { true },
@@ -1977,6 +1996,7 @@ public actor AudioRecorder {
     ) {
         self.maxDuration = maxDuration
         self.startTimeout = startTimeout
+        self.bluetoothStartTimeout = bluetoothStartTimeout
         self.deadEngineTimeout = deadEngineTimeout
         self.engineHostFactory = engineHostFactory
         self.permissionCheckOverride = permissionCheck
@@ -2137,7 +2157,8 @@ public actor AudioRecorder {
             captureID: captureID,
             outputFormat: outputFormat,
             diagnostics: diagnostics,
-            previousInputDevice: lastInputDevice
+            previousInputDevice: lastInputDevice,
+            onBluetoothInput: { _ in }
         ) { result in
             box.settle(result)
         }
@@ -2254,6 +2275,7 @@ public actor AudioRecorder {
                 captureID: captureID,
                 pipeline: pipeline,
                 diagnostics: diagnostics,
+                onBluetoothInput: { _ in },
                 completion: completion
             )
         }

@@ -240,6 +240,143 @@ final class AudioRecorderTests: XCTestCase {
         XCTAssertEqual(recorder.diagnosticsSnapshot().captureStartTimeouts, 0)
     }
 
+    // MARK: - Bluetooth start deadline
+
+    func testABluetoothStartSlowerThanTheNormalDeadlineStillStarts() async throws {
+        let headset = RoutingEngineHost(hostID: 1, device: Self.headsetMic, sampleRate: 24_000, bluetooth: true)
+        headset.beginDelay = 0.4
+        let factory = CountingHostFactory(hosts: [headset])
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.2, bluetoothStartTimeout: 0.6)
+
+        try await recorder.start()
+
+        XCTAssertTrue(recorder.diagnosticsSnapshot().isRecording)
+        XCTAssertEqual(recorder.diagnosticsSnapshot().captureStartTimeouts, 0)
+        XCTAssertFalse(headset.wasRetired)
+        XCTAssertEqual(factory.created, 1)
+    }
+
+    func testABluetoothStartSlowerThanTheBluetoothDeadlineTimesOut() async {
+        let headset = RoutingEngineHost(hostID: 1, device: Self.headsetMic, sampleRate: 24_000, bluetooth: true)
+        headset.beginDelay = 1.2
+        let factory = CountingHostFactory(hosts: [headset])
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.2, bluetoothStartTimeout: 0.6)
+
+        let startedAt = Date()
+        do {
+            try await recorder.start()
+            XCTFail("start() should time out at the Bluetooth deadline")
+        } catch AudioRecorderError.engineStartTimedOut(let seconds) {
+            XCTAssertEqual(seconds, 0.6, accuracy: 0.001)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        let elapsed = Date().timeIntervalSince(startedAt)
+        XCTAssertGreaterThan(elapsed, 0.55, "the Bluetooth deadline replaces the normal one")
+        XCTAssertLessThan(elapsed, 1.0, "the host that never finished is not waited for")
+        XCTAssertTrue(headset.wasRetired)
+        XCTAssertEqual(recorder.diagnosticsSnapshot().captureStartTimeouts, 1)
+    }
+
+    func testAHostThatNeverReportsBluetoothStillTimesOutAtTheNormalDeadline() async {
+        // A route read stuck in a wedged coreaudiod never learns the input.
+        let stuck = StallingEngineHost(hostID: 1)
+        let factory = CountingHostFactory(hosts: [stuck])
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.2, bluetoothStartTimeout: 0.6)
+
+        let startedAt = Date()
+        do {
+            try await recorder.start()
+            XCTFail("start() should time out")
+        } catch AudioRecorderError.engineStartTimedOut(let seconds) {
+            XCTAssertEqual(seconds, 0.2, accuracy: 0.001)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.45)
+        XCTAssertTrue(stuck.wasRetired)
+    }
+
+    func testASlowNonBluetoothStartTimesOutAtTheNormalDeadline() async {
+        let builtIn = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+        builtIn.beginDelay = 0.4
+        let factory = CountingHostFactory(hosts: [builtIn])
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.2, bluetoothStartTimeout: 0.6)
+
+        let startedAt = Date()
+        do {
+            try await recorder.start()
+            XCTFail("start() should time out")
+        } catch AudioRecorderError.engineStartTimedOut(let seconds) {
+            XCTAssertEqual(seconds, 0.2, accuracy: 0.001)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.45)
+        XCTAssertTrue(builtIn.wasRetired)
+    }
+
+    func testTheBluetoothDeadlineCountsFromTheStartOfTheWholeStart() async {
+        let stale = SucceedingEngineHost(hostID: 1)
+        stale.nextBeginIsStale = true
+        stale.beginDelay = 0.15
+        let headset = RoutingEngineHost(hostID: 2, device: Self.headsetMic, sampleRate: 24_000, bluetooth: true)
+        headset.beginDelay = 0.7
+        let factory = CountingHostFactory(hosts: [stale, headset])
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.2, bluetoothStartTimeout: 0.6)
+
+        let startedAt = Date()
+        do {
+            try await recorder.start()
+            XCTFail("0.15 s on the stale host plus 0.7 s on the fresh one overrun the 0.6 s Bluetooth deadline")
+        } catch AudioRecorderError.engineStartTimedOut(let seconds) {
+            XCTAssertEqual(seconds, 0.6, accuracy: 0.001)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.7, "the extension is not added on top of the time already spent")
+        XCTAssertTrue(headset.wasRetired)
+    }
+
+    func testASwitchOntoABluetoothInputSlowerThanTheNormalDeadlineCompletes() async throws {
+        let builtIn = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+        let headset = RoutingEngineHost(hostID: 2, device: Self.headsetMic, sampleRate: 24_000, bluetooth: true)
+        headset.continueDelay = 0.4
+        let factory = CountingHostFactory(hosts: [builtIn, headset])
+        let observer = FakeRouteChangeObserver()
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.2, bluetoothStartTimeout: 0.6, observer: observer)
+
+        try await recorder.start()
+        builtIn.routeChangeReason = "the derived input changed"
+        observer.fire()
+        try await waitUntil { recorder.diagnosticsSnapshot().deviceSwitchCount == 1 }
+
+        XCTAssertEqual(recorder.diagnosticsSnapshot().deviceSwitchFailures, 0)
+        XCTAssertEqual(recorder.diagnosticsSnapshot().engineHostID, 2)
+        XCTAssertFalse(headset.wasRetired)
+    }
+
+    func testASlowSwitchOntoANonBluetoothInputFailsAtTheNormalDeadline() async throws {
+        let headset = RoutingEngineHost(hostID: 1, device: Self.headsetMic, sampleRate: 24_000)
+        let builtIn = RoutingEngineHost(hostID: 2, device: Self.builtInMic, sampleRate: 48_000)
+        builtIn.continueDelay = 0.4
+        let factory = CountingHostFactory(hosts: [headset, builtIn])
+        let observer = FakeRouteChangeObserver()
+        let recorder = makeRecorder(factory: factory, startTimeout: 0.2, bluetoothStartTimeout: 0.6, observer: observer)
+
+        try await recorder.start()
+        headset.routeChangeReason = "the derived input changed"
+        observer.fire()
+        try await waitUntil { recorder.diagnosticsSnapshot().deviceSwitchFailures == 1 }
+
+        XCTAssertEqual(recorder.diagnosticsSnapshot().deviceSwitchCount, 0)
+        XCTAssertTrue(builtIn.wasRetired)
+    }
+
     // MARK: - Engine reuse
 
     func testSecondStartReusesTheHostAfterANormalStop() async throws {
@@ -404,12 +541,14 @@ final class AudioRecorderTests: XCTestCase {
     private func makeRecorder(
         factory: CountingHostFactory,
         startTimeout: TimeInterval = 2,
+        bluetoothStartTimeout: TimeInterval = AudioRecorder.defaultBluetoothStartTimeout,
         observer: AudioRouteChangeObserving = NoAudioRouteChangeObserver(),
         deadEngineTimeout: TimeInterval? = nil
     ) -> AudioRecorder {
         AudioRecorder(
             maxDuration: 60,
             startTimeout: startTimeout,
+            bluetoothStartTimeout: bluetoothStartTimeout,
             engineHostFactory: { factory.next(hostID: $0) },
             permissionCheck: {},
             routeChangeObserver: observer,
@@ -1202,6 +1341,7 @@ private final class StallingEngineHost: CaptureEngineHosting, @unchecked Sendabl
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {}
 
@@ -1209,6 +1349,7 @@ private final class StallingEngineHost: CaptureEngineHosting, @unchecked Sendabl
         captureID: UInt64,
         pipeline: CapturePipeline,
         diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureSwitchResult, CaptureBeginError>) -> Void
     ) {}
 
@@ -1239,6 +1380,7 @@ private final class FailingEngineHost: CaptureEngineHosting, @unchecked Sendable
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {
         completion(.failure(.recorder(.engineFailedToStart("converter init failed"))))
@@ -1248,6 +1390,7 @@ private final class FailingEngineHost: CaptureEngineHosting, @unchecked Sendable
         captureID: UInt64,
         pipeline: CapturePipeline,
         diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureSwitchResult, CaptureBeginError>) -> Void
     ) {}
 
@@ -1303,6 +1446,7 @@ private final class SucceedingEngineHost: CaptureEngineHosting, @unchecked Senda
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {
         let (isStale, isStalling, delay) = locked { () -> (Bool, Bool, TimeInterval) in
@@ -1359,6 +1503,7 @@ private final class SucceedingEngineHost: CaptureEngineHosting, @unchecked Senda
         captureID: UInt64,
         pipeline: CapturePipeline,
         diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureSwitchResult, CaptureBeginError>) -> Void
     ) {}
 
@@ -1386,6 +1531,9 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
     let hostID: UInt64
     let device: AudioInputDeviceSnapshot
     let inputFormat: AVAudioFormat
+    /// Reports its input as Bluetooth before its (delayed) begin or switch,
+    /// as the real host does once its route read answers.
+    private let isBluetooth: Bool
     private let alwaysChanged: Bool
     private let lock = NSLock()
     private var retired = false
@@ -1422,10 +1570,12 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
         device: AudioInputDeviceSnapshot,
         sampleRate: Double,
         alwaysChanged: Bool = false,
-        stream: StreamMode = .none
+        stream: StreamMode = .none,
+        bluetooth: Bool = false
     ) {
         self.hostID = hostID
         self.device = device
+        self.isBluetooth = bluetooth
         self.alwaysChanged = alwaysChanged
         self.stream = stream
         streamQueue = DispatchQueue(label: "RoutingEngineHost.stream.\(hostID)")
@@ -1559,12 +1709,14 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {
         let delay = locked { () -> TimeInterval in
             begins += 1
             return beginWait
         }
+        reportBluetoothIfNeeded(onBluetoothInput)
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
             guard let pipeline = try? CapturePipeline(
                 captureID: captureID,
@@ -1590,12 +1742,14 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
         captureID: UInt64,
         pipeline: CapturePipeline,
         diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureSwitchResult, CaptureBeginError>) -> Void
     ) {
         let (fails, delay) = locked { () -> (Bool, TimeInterval) in
             continues += 1
             return (failsContinue, continueWait)
         }
+        reportBluetoothIfNeeded(onBluetoothInput)
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
             if fails {
                 completion(.failure(.recorder(.engineFailedToStart("test host failed to continue"))))
@@ -1608,6 +1762,12 @@ private final class RoutingEngineHost: CaptureEngineHosting, @unchecked Sendable
             startStreamIfConfigured()
             completion(.success(CaptureSwitchResult(inputDevice: device, inputFormat: inputFormat)))
         }
+    }
+
+    private func reportBluetoothIfNeeded(_ onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void) {
+        guard isBluetooth else { return }
+        let device = device
+        DispatchQueue.global().async { onBluetoothInput(device) }
     }
 
     func checkRoute(completion: @escaping @Sendable (String?) -> Void) {
