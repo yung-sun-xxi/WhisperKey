@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      clean_cache:
+        description: Start from an empty build cache (when the cache is suspected to be broken)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,9 +25,32 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      # The runner's work folder is fixed, so the build cache that
+      # scripts/verify.sh writes (the app's DerivedData under build/verify,
+      # the package's .build) is reusable between runs: Xcode keys it by
+      # absolute path (issue #204). Checkout's own clean would delete it, so
+      # the next step cleans instead.
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          clean: false
+
+      - name: Clean all but the build cache
+        env:
+          CLEAN_CACHE: ${{ inputs.clean_cache }}
+        run: |
+          if [ "$CLEAN_CACHE" = true ]; then
+            echo "Empty build cache requested"
+            rm -rf build/verify .build
+          fi
+          git clean -ffdx -e /build/verify/ -e /.build/
 
       - name: Build and test
         shell: bash
         run: scripts/verify.sh
+
+      # How much of the app was recompiled: the whole app from an empty cache.
+      - name: Compiled app files
+        if: always()
+        run: |
+          echo "WhisperKey SwiftCompile lines: $(grep -c '^SwiftCompile ' build/verify/app.log || true)"
