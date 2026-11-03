@@ -26,6 +26,19 @@ final class MenuBarController: NSObject {
         attachment.bounds = NSRect(x: 0, y: 0, width: side, height: 1)
         return NSAttributedString(attachment: attachment)
     }()
+    /// How often the next starting dot lights. A Bluetooth mic can take seconds to
+    /// start (AirPods switch to HFP), and the dots show the press was taken.
+    private static let startingDotsInterval: TimeInterval = 0.4
+    /// Three dots in the timer's place while the microphone starts, `lit` of them
+    /// bright: index 0...3, the first frame already showing one.
+    private static let startingDotsTitles: [NSAttributedString] = (0...3).map { lit in
+        let title = NSMutableAttributedString()
+        for index in 0..<3 {
+            let color: NSColor = index < lit ? .labelColor : .labelColor.withAlphaComponent(0.25)
+            title.append(NSAttributedString(string: "•", attributes: [.font: timerFont, .foregroundColor: color]))
+        }
+        return title
+    }
 
     let coordinator: AppCoordinator
 
@@ -40,6 +53,8 @@ final class MenuBarController: NSObject {
     private var cancellables = Set<AnyCancellable>()
     private var blinkTimer: Timer?
     private var blinkOn = true
+    private var startingDotsTimer: Timer?
+    private var startingDotsLit = 1
 
     init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
@@ -86,6 +101,7 @@ final class MenuBarController: NSObject {
             TransientWindowStack.shared.unregister(id: "menuBarPopover")
         }
         blinkTimer?.invalidate()
+        startingDotsTimer?.invalidate()
         processingIndicator.stopAnimation(nil)
     }
 
@@ -292,7 +308,8 @@ final class MenuBarController: NSObject {
 
         switch coordinator.state {
         case .starting:
-            title = Self.emptyTitle
+            startStartingDotsTimer()
+            title = Self.startingDotsTitles[startingDotsLit]
             toolTip = "Starting microphone..."
             showsProcessingIndicator = false
             stopBlinkTimer(resetBlink: true)
@@ -314,6 +331,9 @@ final class MenuBarController: NSObject {
             toolTip = "WhisperKey"
             showsProcessingIndicator = false
             stopBlinkTimer(resetBlink: true)
+        }
+        if coordinator.state != .starting {
+            stopStartingDotsTimer()
         }
 
         // Icon only: a square item, as before, when the icon fits the square. An icon
@@ -422,6 +442,23 @@ final class MenuBarController: NSObject {
         }
     }
 
+    private func startStartingDotsTimer() {
+        guard startingDotsTimer == nil else { return }
+        startingDotsLit = 1
+        startingDotsTimer = Timer.scheduledTimer(
+            timeInterval: Self.startingDotsInterval,
+            target: self,
+            selector: #selector(handleStartingDotsTimer),
+            userInfo: nil,
+            repeats: true
+        )
+    }
+
+    private func stopStartingDotsTimer() {
+        startingDotsTimer?.invalidate()
+        startingDotsTimer = nil
+    }
+
     @objc private func handleStatusItemClick() {
         togglePopover()
         Self.log.info("statusItemClick complete visible=\(self.panel.isVisible, privacy: .public) isKey=\(self.panel.isKeyWindow, privacy: .public)")
@@ -437,6 +474,11 @@ final class MenuBarController: NSObject {
 
     @objc private func handleBlinkTimer() {
         blinkOn.toggle()
+        updateStatusItem()
+    }
+
+    @objc private func handleStartingDotsTimer() {
+        startingDotsLit = (startingDotsLit + 1) % Self.startingDotsTitles.count
         updateStatusItem()
     }
 }
