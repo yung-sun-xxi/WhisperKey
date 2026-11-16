@@ -195,6 +195,7 @@ public struct TranscriptionOutputRouter {
                 return TranscriptionOutputResult(wroteClipboard: wroteClipboard, pasteDecision: nil, restoredClipboard: false)
             }
             let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard, secureFieldPolicy: secureFieldPolicy)
+            await recordTranscript(text, ifWritten: wroteClipboard)
             return TranscriptionOutputResult(
                 wroteClipboard: wroteClipboard,
                 pasteDecision: decision,
@@ -203,6 +204,7 @@ public struct TranscriptionOutputRouter {
 
         case (true, false):
             let wroteClipboard = pasteboard.replaceWithString(text)
+            await recordTranscript(text, ifWritten: wroteClipboard)
             return TranscriptionOutputResult(
                 wroteClipboard: wroteClipboard,
                 pasteDecision: nil,
@@ -210,28 +212,16 @@ public struct TranscriptionOutputRouter {
             )
 
         case (false, true):
-            let snapshot = pasteboard.snapshot()
-            guard !Task.isCancelled else {
-                return TranscriptionOutputResult(wroteClipboard: false, pasteDecision: nil, restoredClipboard: false)
+            // The swap below moves the change counter twice, and the second move puts the
+            // user's own text back. A monitor left listening records that restore as a
+            // fresh copy on every dictation (#211). The swap is one function so that
+            // every way out of it, cancellation included, comes back through the resume.
+            let suspendedMonitor = await clipboardHistory?.suspendMonitor() ?? false
+            let result = await swapPasteAndRestore(text: text, secureFieldPolicy: secureFieldPolicy)
+            if suspendedMonitor {
+                await clipboardHistory?.resumeMonitor()
             }
-            let wroteClipboard = pasteboard.replaceWithString(text)
-            guard !Task.isCancelled else {
-                let restored = pasteboard.restore(snapshot)
-                return TranscriptionOutputResult(wroteClipboard: wroteClipboard, pasteDecision: nil, restoredClipboard: restored)
-            }
-            let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard, secureFieldPolicy: secureFieldPolicy)
-            if wroteClipboard && restoreDelayNanoseconds > 0 {
-                try? await Task.sleep(nanoseconds: restoreDelayNanoseconds)
-            }
-            let restored = pasteboard.restore(snapshot)
-            if !restored {
-                outputLog.error("failed to restore pasteboard after auto-paste")
-            }
-            return TranscriptionOutputResult(
-                wroteClipboard: wroteClipboard,
-                pasteDecision: decision,
-                restoredClipboard: restored
-            )
+            return result
 
         case (false, false):
             return TranscriptionOutputResult(
@@ -240,6 +230,49 @@ public struct TranscriptionOutputRouter {
                 restoredClipboard: false
             )
         }
+    }
+
+    /// The `(saveToClipboard: false, autoPaste: true)` path: put the transcript on the
+    /// clipboard, paste it, put back what was there.
+    private func swapPasteAndRestore(
+        text: String,
+        secureFieldPolicy: SecureFieldPolicy
+    ) async -> TranscriptionOutputResult {
+        let snapshot = pasteboard.snapshot()
+        guard !Task.isCancelled else {
+            return TranscriptionOutputResult(wroteClipboard: false, pasteDecision: nil, restoredClipboard: false)
+        }
+        let wroteClipboard = pasteboard.replaceWithString(text)
+        guard !Task.isCancelled else {
+            let restored = pasteboard.restore(snapshot)
+            return TranscriptionOutputResult(wroteClipboard: wroteClipboard, pasteDecision: nil, restoredClipboard: restored)
+        }
+        let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard, secureFieldPolicy: secureFieldPolicy)
+        // The monitor is silent here, so nothing else will put the transcript in the list.
+        await recordTranscript(text, ifWritten: wroteClipboard)
+        if wroteClipboard && restoreDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: restoreDelayNanoseconds)
+        }
+        let restored = pasteboard.restore(snapshot)
+        if !restored {
+            outputLog.error("failed to restore pasteboard after auto-paste")
+        }
+        return TranscriptionOutputResult(
+            wroteClipboard: wroteClipboard,
+            pasteDecision: decision,
+            restoredClipboard: restored
+        )
+    }
+
+    /// Puts the transcript into clipboard history as a dictated entry, after the paste
+    /// keystroke so the paste never waits for the store's file.
+    ///
+    /// Where the transcript stays on the clipboard the monitor sees the same marked write
+    /// a moment later; the store keeps one entry per text, so it still lands once. A
+    /// delivery cancelled before the paste records nothing here.
+    private func recordTranscript(_ text: String, ifWritten wroteClipboard: Bool) async {
+        guard wroteClipboard else { return }
+        await clipboardHistory?.recordTranscript(text)
     }
 
     private func attemptPasteIfClipboardWriteSucceeded(
