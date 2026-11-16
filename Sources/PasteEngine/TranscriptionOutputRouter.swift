@@ -37,17 +37,147 @@ struct PasteboardSnapshot: Equatable {
 
 protocol TranscriptionPasteboard {
     func snapshot() -> PasteboardSnapshot
+    /// Writes the string at once. For the paths that leave the transcript on the clipboard.
     @discardableResult func replaceWithString(_ string: String) -> Bool
+    /// Writes the string as a promise kept on the first read, and hands back the signal
+    /// that read fires; nil when the write failed. For the swap that restores afterwards:
+    /// the signal is how it knows the paste target has taken the transcript.
     func replaceWithPromisedString(_ string: String) -> PasteboardReadSignal?
     @discardableResult func restore(_ snapshot: PasteboardSnapshot) -> Bool
 }
 
-// STUB: replaced by the real signal in the next commit.
+/// Says that something read a promised clipboard write, and lets the swap wait for it.
+///
+/// Fired from the pasteboard's data provider, which AppKit calls on the main thread,
+/// while the swap waits off it: every piece of state sits behind one lock. A waiter is
+/// resumed exactly once, by whichever comes first of the read, its timeout and the
+/// cancellation of its task; the other two find it gone.
+///
+/// The signal also keeps whatever it was given to retain alive — the data provider —
+/// for as long as the swap holds the signal, so the promise never outlives its keeper.
 final class PasteboardReadSignal: @unchecked Sendable {
-    init() {}
-    var hasFired: Bool { false }
-    func fire() {}
-    func wait(timeoutNanoseconds: UInt64) async -> Bool { false }
+    private struct Waiter {
+        let continuation: CheckedContinuation<Bool, Never>
+        let timeout: Task<Void, Never>
+    }
+
+    private let lock = NSLock()
+    private var firedAt: UInt64?
+    private var waiters: [UUID: Waiter] = [:]
+    private let retained: AnyObject?
+
+    init(retaining owner: AnyObject? = nil) {
+        retained = owner
+    }
+
+    var hasFired: Bool { firedAtUptimeNanoseconds != nil }
+
+    /// `DispatchTime` uptime of the first read, nil until it happens.
+    var firedAtUptimeNanoseconds: UInt64? {
+        lock.lock()
+        defer { lock.unlock() }
+        return firedAt
+    }
+
+    /// Records the read and wakes every waiter. Only the first call does anything.
+    func fire() {
+        lock.lock()
+        guard firedAt == nil else {
+            lock.unlock()
+            return
+        }
+        firedAt = DispatchTime.now().uptimeNanoseconds
+        let woken = Array(waiters.values)
+        waiters.removeAll()
+        lock.unlock()
+
+        for waiter in woken {
+            waiter.timeout.cancel()
+            waiter.continuation.resume(returning: true)
+        }
+    }
+
+    /// True once the read has happened — at once if it already has — and false at the
+    /// timeout or when the calling task is cancelled.
+    func wait(timeoutNanoseconds: UInt64) async -> Bool {
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                lock.lock()
+                if firedAt != nil {
+                    lock.unlock()
+                    continuation.resume(returning: true)
+                    return
+                }
+                // Checked under the lock: a cancellation that lands after this check runs
+                // its handler after the waiter is in the table, and finds it there.
+                if Task.isCancelled {
+                    lock.unlock()
+                    continuation.resume(returning: false)
+                    return
+                }
+                let timeout = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+                    self?.resolve(id, with: false)
+                }
+                waiters[id] = Waiter(continuation: continuation, timeout: timeout)
+                lock.unlock()
+            }
+        } onCancel: {
+            resolve(id, with: false)
+        }
+    }
+
+    private func resolve(_ id: UUID, with value: Bool) {
+        lock.lock()
+        let waiter = waiters.removeValue(forKey: id)
+        lock.unlock()
+        guard let waiter else { return }
+        waiter.timeout.cancel()
+        waiter.continuation.resume(returning: value)
+    }
+}
+
+/// Keeps the promise of a transcript: hands the text over on the first read and fires
+/// the signal. AppKit asks once; after that it calls `pasteboardFinishedWithDataProvider`
+/// and serves later reads from what was handed over.
+///
+/// The signal retains the provider and the provider the signal until AppKit is done
+/// with it, so neither depends on who else holds them; the finish breaks the cycle.
+private final class PromisedStringProvider: NSObject, NSPasteboardItemDataProvider {
+    private let text: String
+    private let lock = NSLock()
+    private var signal: PasteboardReadSignal?
+
+    init(text: String) {
+        self.text = text
+    }
+
+    func attach(_ signal: PasteboardReadSignal) {
+        lock.lock()
+        self.signal = signal
+        lock.unlock()
+    }
+
+    func pasteboard(
+        _ pasteboard: NSPasteboard?,
+        item: NSPasteboardItem,
+        provideDataForType type: NSPasteboard.PasteboardType
+    ) {
+        // Taken first: handing the text over can make AppKit call
+        // `pasteboardFinishedWithDataProvider` from inside `setString`, which drops it.
+        lock.lock()
+        let signal = self.signal
+        lock.unlock()
+        item.setString(text, forType: type)
+        signal?.fire()
+    }
+
+    func pasteboardFinishedWithDataProvider(_ pasteboard: NSPasteboard) {
+        lock.lock()
+        signal = nil
+        lock.unlock()
+    }
 }
 
 struct SystemTranscriptionPasteboard: TranscriptionPasteboard {
@@ -88,9 +218,23 @@ struct SystemTranscriptionPasteboard: TranscriptionPasteboard {
         return pasteboard.writeObjects([item])
     }
 
-    // STUB: writes eagerly; the promise arrives in the next commit.
+    /// Writes the string as a promise, with the origin marker set at once beside it.
+    ///
+    /// Only the string waits for a reader; the marker is plain data, so the monitor can
+    /// still tell the write apart without reading — and thereby keeping — the promise.
     func replaceWithPromisedString(_ string: String) -> PasteboardReadSignal? {
-        replaceWithString(string) ? PasteboardReadSignal() : nil
+        pasteboard.clearContents()
+        let provider = PromisedStringProvider(text: string)
+        let signal = PasteboardReadSignal(retaining: provider)
+        provider.attach(signal)
+        let item = NSPasteboardItem()
+        guard item.setDataProvider(provider, forTypes: [.string]) else { return nil }
+        item.setString(
+            ClipboardOriginMarker.markerValue,
+            forType: NSPasteboard.PasteboardType(ClipboardOriginMarker.pasteboardType)
+        )
+        guard pasteboard.writeObjects([item]) else { return nil }
+        return signal
     }
 
     @discardableResult
@@ -156,20 +300,27 @@ public struct TranscriptionOutputRouter {
     private let pasteEngine: PasteEngine
     private let pasteboard: TranscriptionPasteboard
     private let restoreDelayNanoseconds: UInt64
+    private let readTimeoutNanoseconds: UInt64
     private let clipboardHistory: TranscriptionClipboardHistory?
 
     /// `clipboardHistory` is for the transcription path alone. The quick-paste popup
     /// builds its router without it: it suspends the monitor itself, and what it pastes
     /// is an entry already in the list, not a dictation.
+    ///
+    /// When the swap restores the user's clipboard after an auto-paste, it waits for the
+    /// paste target to read the transcript, at most `readTimeoutNanoseconds`, and then
+    /// `restoreDelayNanoseconds` more, since an application may read more than once.
     public init(
         pasteEngine: PasteEngine = PasteEngine(),
         restoreDelayNanoseconds: UInt64 = 150_000_000,
+        readTimeoutNanoseconds: UInt64 = 2_000_000_000,
         clipboardHistory: TranscriptionClipboardHistory? = nil
     ) {
         self.init(
             pasteEngine: pasteEngine,
             pasteboard: SystemTranscriptionPasteboard(),
             restoreDelayNanoseconds: restoreDelayNanoseconds,
+            readTimeoutNanoseconds: readTimeoutNanoseconds,
             clipboardHistory: clipboardHistory
         )
     }
@@ -184,6 +335,7 @@ public struct TranscriptionOutputRouter {
         self.pasteEngine = pasteEngine
         self.pasteboard = pasteboard
         self.restoreDelayNanoseconds = restoreDelayNanoseconds
+        self.readTimeoutNanoseconds = readTimeoutNanoseconds
         self.clipboardHistory = clipboardHistory
     }
 
@@ -249,6 +401,11 @@ public struct TranscriptionOutputRouter {
 
     /// The `(saveToClipboard: false, autoPaste: true)` path: put the transcript on the
     /// clipboard, paste it, put back what was there.
+    ///
+    /// The transcript goes on as a promise, and the restore waits until the paste target
+    /// has read it. A fixed delay used to stand there: on a loaded Mac the target handled
+    /// ⌘V after the restore and pasted the user's own clipboard instead. No keystroke
+    /// sent means no reader coming, and the restore goes ahead at once.
     private func swapPasteAndRestore(
         text: String,
         secureFieldPolicy: SecureFieldPolicy
@@ -257,18 +414,21 @@ public struct TranscriptionOutputRouter {
         guard !Task.isCancelled else {
             return TranscriptionOutputResult(wroteClipboard: false, pasteDecision: nil, restoredClipboard: false)
         }
-        let wroteClipboard = pasteboard.replaceWithString(text)
+        // Held to the restore: it keeps the promise's provider alive until then.
+        let readSignal = pasteboard.replaceWithPromisedString(text)
+        let wroteClipboard = readSignal != nil
         guard !Task.isCancelled else {
-            let restored = pasteboard.restore(snapshot)
+            let restored = withExtendedLifetime(readSignal) { pasteboard.restore(snapshot) }
             return TranscriptionOutputResult(wroteClipboard: wroteClipboard, pasteDecision: nil, restoredClipboard: restored)
         }
         let decision = attemptPasteIfClipboardWriteSucceeded(wroteClipboard, secureFieldPolicy: secureFieldPolicy)
+        let pastedAt = DispatchTime.now().uptimeNanoseconds
         // The monitor is silent here, so nothing else will put the transcript in the list.
         await recordTranscript(text, ifWritten: wroteClipboard)
-        if wroteClipboard && restoreDelayNanoseconds > 0 {
-            try? await Task.sleep(nanoseconds: restoreDelayNanoseconds)
+        if let readSignal, decision == .paste {
+            await waitForTheTargetToRead(readSignal, pastedAt: pastedAt)
         }
-        let restored = pasteboard.restore(snapshot)
+        let restored = withExtendedLifetime(readSignal) { pasteboard.restore(snapshot) }
         if !restored {
             outputLog.error("failed to restore pasteboard after auto-paste")
         }
@@ -277,6 +437,27 @@ public struct TranscriptionOutputRouter {
             pasteDecision: decision,
             restoredClipboard: restored
         )
+    }
+
+    /// Waits for the paste target's read of the transcript, then a short grace in case it
+    /// reads again. Returns at the read timeout or on cancellation without the grace.
+    private func waitForTheTargetToRead(_ readSignal: PasteboardReadSignal, pastedAt: UInt64) async {
+        let read = await readSignal.wait(timeoutNanoseconds: readTimeoutNanoseconds)
+        guard read else {
+            if Task.isCancelled {
+                outputLog.notice("auto-paste cancelled before the target read the clipboard; restoring")
+            } else {
+                let timeoutMilliseconds = readTimeoutNanoseconds / 1_000_000
+                outputLog.notice("paste target did not read the clipboard within \(timeoutMilliseconds, privacy: .public) ms; restoring")
+            }
+            return
+        }
+        let firedAt = readSignal.firedAtUptimeNanoseconds ?? pastedAt
+        let readAfterMilliseconds = (firedAt > pastedAt ? firedAt - pastedAt : 0) / 1_000_000
+        outputLog.notice("paste target read the clipboard \(readAfterMilliseconds, privacy: .public) ms after the keystroke")
+        if restoreDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: restoreDelayNanoseconds)
+        }
     }
 
     /// Puts the transcript into clipboard history as a dictated entry, after the paste
