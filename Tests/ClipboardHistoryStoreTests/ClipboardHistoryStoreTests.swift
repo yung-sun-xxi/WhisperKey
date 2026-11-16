@@ -40,30 +40,39 @@ final class ClipboardHistoryStoreTests: XCTestCase {
 
     // MARK: - De-duplication
 
+    // Since #211 a repeat is no longer rejected: the text stays one entry, and that entry
+    // is the new copy. `ClipboardHistoryDeduplicationTests` holds the rest.
+
+    /// Until #211 the second call returned `nil` and the first entry stayed as it was.
     func testSameTextTwiceInARowProducesOneEntry() {
         let store = ClipboardHistoryStore(url: makeURL())
         XCTAssertNotNil(store.record(text: "same", origin: .otherApplication, now: date(1)))
-        XCTAssertNil(store.record(text: "same", origin: .otherApplication, now: date(2)))
+        XCTAssertNotNil(store.record(text: "same", origin: .otherApplication, now: date(2)))
 
         XCTAssertEqual(store.entries.map(\.text), ["same"])
+        XCTAssertEqual(store.entries.map(\.capturedAt), [date(2)])
     }
 
-    func testTextRepeatedAfterAnotherEntryIsStoredAgain() {
+    /// Until #211 this asserted `["a", "b", "a"]`: a text copied again after something
+    /// else got a second entry.
+    func testTextRepeatedAfterAnotherEntryIsNotStoredAgain() {
         let store = ClipboardHistoryStore(url: makeURL())
         store.record(text: "a", origin: .otherApplication, now: date(1))
         store.record(text: "b", origin: .otherApplication, now: date(2))
         store.record(text: "a", origin: .otherApplication, now: date(3))
 
-        XCTAssertEqual(store.entries.map(\.text), ["a", "b", "a"])
+        XCTAssertEqual(store.entries.map(\.text), ["a", "b"])
     }
 
+    /// Until #211 the repeat was rejected and the entry kept its first origin. Now the
+    /// one entry carries the origin of the latest copy.
     func testDeduplicationComparesTextNotOrigin() {
         let store = ClipboardHistoryStore(url: makeURL())
         store.record(text: "same", origin: .whisperKey, now: date(1))
-        XCTAssertNil(store.record(text: "same", origin: .otherApplication, now: date(2)))
+        XCTAssertNotNil(store.record(text: "same", origin: .otherApplication, now: date(2)))
 
         XCTAssertEqual(store.entries.count, 1)
-        XCTAssertEqual(store.entries.first?.origin, .whisperKey)
+        XCTAssertEqual(store.entries.first?.origin, .otherApplication)
     }
 
     // MARK: - Whitespace
@@ -218,15 +227,25 @@ final class ClipboardHistoryStoreTests: XCTestCase {
 
     /// De-duplication compares text and nothing else. A concealed entry is not a
     /// separate lane: copying the same password twice in a row still makes one entry,
-    /// and an ordinary copy of the same text right after it is still a repeat.
-    func testDeduplicationTreatsConcealedEntriesLikeAnyOther() {
-        let store = ClipboardHistoryStore(url: makeURL())
+    /// and an ordinary copy of the same text right after it is still the same entry.
+    ///
+    /// Until #211 both repeats were rejected and the entry stayed concealed. Now each
+    /// repeat replaces it, so the entry is whatever the latest copy was: still concealed
+    /// and off the disk after the second, ordinary and written after the third.
+    func testDeduplicationTreatsConcealedEntriesLikeAnyOther() throws {
+        let url = makeURL()
+        let store = ClipboardHistoryStore(url: url)
         XCTAssertNotNil(store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(1)))
-        XCTAssertNil(store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(2)))
-        XCTAssertNil(store.record(text: "hunter2", origin: .otherApplication, now: date(3)))
+        XCTAssertNotNil(store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(2)))
 
         XCTAssertEqual(store.entries.map(\.text), ["hunter2"])
         XCTAssertEqual(store.entries.first?.isConcealed, true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "two concealed copies must write nothing")
+
+        XCTAssertNotNil(store.record(text: "hunter2", origin: .otherApplication, now: date(3)))
+
+        XCTAssertEqual(store.entries.map(\.text), ["hunter2"])
+        XCTAssertEqual(store.entries.first?.isConcealed, false)
     }
 
     /// Nor does a concealed entry get a free slot: it counts against the cap and pushes
