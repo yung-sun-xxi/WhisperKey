@@ -38,7 +38,16 @@ struct PasteboardSnapshot: Equatable {
 protocol TranscriptionPasteboard {
     func snapshot() -> PasteboardSnapshot
     @discardableResult func replaceWithString(_ string: String) -> Bool
+    func replaceWithPromisedString(_ string: String) -> PasteboardReadSignal?
     @discardableResult func restore(_ snapshot: PasteboardSnapshot) -> Bool
+}
+
+// STUB: replaced by the real signal in the next commit.
+final class PasteboardReadSignal: @unchecked Sendable {
+    init() {}
+    var hasFired: Bool { false }
+    func fire() {}
+    func wait(timeoutNanoseconds: UInt64) async -> Bool { false }
 }
 
 struct SystemTranscriptionPasteboard: TranscriptionPasteboard {
@@ -77,6 +86,11 @@ struct SystemTranscriptionPasteboard: TranscriptionPasteboard {
             forType: NSPasteboard.PasteboardType(ClipboardOriginMarker.pasteboardType)
         )
         return pasteboard.writeObjects([item])
+    }
+
+    // STUB: writes eagerly; the promise arrives in the next commit.
+    func replaceWithPromisedString(_ string: String) -> PasteboardReadSignal? {
+        replaceWithString(string) ? PasteboardReadSignal() : nil
     }
 
     @discardableResult
@@ -164,6 +178,7 @@ public struct TranscriptionOutputRouter {
         pasteEngine: PasteEngine = PasteEngine(),
         pasteboard: TranscriptionPasteboard,
         restoreDelayNanoseconds: UInt64 = 150_000_000,
+        readTimeoutNanoseconds: UInt64 = 2_000_000_000,
         clipboardHistory: TranscriptionClipboardHistory? = nil
     ) {
         self.pasteEngine = pasteEngine

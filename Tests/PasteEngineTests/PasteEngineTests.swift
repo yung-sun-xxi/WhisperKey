@@ -515,10 +515,13 @@ final class TranscriptionOutputRouterTests: XCTestCase {
             keyboard: keyboard,
             secureProbe: StubProbe(active: false)
         )
+        // Nothing reads the spy's promise, so every auto-paste here ends on the read
+        // timeout; a millisecond keeps these tests as quick as they were.
         return TranscriptionOutputRouter(
             pasteEngine: engine,
             pasteboard: pasteboard,
-            restoreDelayNanoseconds: 0
+            restoreDelayNanoseconds: 0,
+            readTimeoutNanoseconds: 1_000_000
         )
     }
 }
@@ -563,6 +566,12 @@ private final class SpyPasteboard: TranscriptionPasteboard {
         }
         currentString = string
         return true
+    }
+
+    /// Counted as a replace too: to these tests a promised write is still the one write
+    /// the router makes.
+    func replaceWithPromisedString(_ string: String) -> PasteboardReadSignal? {
+        replaceWithString(string) ? PasteboardReadSignal() : nil
     }
 
     func restore(_ snapshot: PasteboardSnapshot) -> Bool {

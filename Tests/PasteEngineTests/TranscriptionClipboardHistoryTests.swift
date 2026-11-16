@@ -241,7 +241,8 @@ final class TranscriptionClipboardHistoryTests: XCTestCase {
         let router = TranscriptionOutputRouter(
             pasteEngine: makeEngine(),
             pasteboard: SystemTranscriptionPasteboard(pasteboard: board),
-            restoreDelayNanoseconds: 0
+            restoreDelayNanoseconds: 0,
+            readTimeoutNanoseconds: 1_000_000
         )
 
         monitor.suspend()
@@ -275,6 +276,9 @@ final class TranscriptionClipboardHistoryTests: XCTestCase {
             pasteEngine: makeEngine(),
             pasteboard: pasteboard ?? SystemTranscriptionPasteboard(pasteboard: board),
             restoreDelayNanoseconds: 0,
+            // A poll inside the paste reads the promise at once; a test without one ends
+            // on this timeout instead of the real two seconds.
+            readTimeoutNanoseconds: 1_000_000,
             clipboardHistory: TranscriptionClipboardHistory(monitor: monitor, store: store)
         )
     }
@@ -335,6 +339,13 @@ private struct CancellingPasteboard: TranscriptionPasteboard {
         let wrote = base.replaceWithString(string)
         if cancelAt == .write { withUnsafeCurrentTask { $0?.cancel() } }
         return wrote
+    }
+
+    func replaceWithPromisedString(_ string: String) -> PasteboardReadSignal? {
+        guard writeSucceeds else { return nil }
+        let signal = base.replaceWithPromisedString(string)
+        if cancelAt == .write { withUnsafeCurrentTask { $0?.cancel() } }
+        return signal
     }
 
     func restore(_ snapshot: PasteboardSnapshot) -> Bool {
