@@ -13,7 +13,8 @@ import ThemeKit
 ///     open -a "WhisperKey Dev" --args -WKQuickPasteSnapshotDir /some/dir
 ///
 /// The panel shows fixed, invented entries, never the clipboard history: these pictures
-/// go into pull requests. It is built the way the controller builds it — the metrics read
+/// go into pull requests. Their ages are measured against one fixed moment, not the clock,
+/// so the rows read `now`, `2m`, `1h`, `3d` on every run. It is built the way the controller builds it — the metrics read
 /// once from the tokens, the second row highlighted — and placed off every screen, so
 /// nothing appears on the desktop. For each theme the hook switches to it with the panel
 /// open, logs the panel's frame before and after, and writes `quick-paste-<theme>.png`:
@@ -39,17 +40,27 @@ enum QuickPasteSnapshotHook {
     /// The second row, so the selection is not on the edge of the list.
     private static let highlightedIndex = 1
 
+    /// The moment the pictures are taken at, as far as the ages are concerned. Fixed, so
+    /// two runs draw the same labels.
+    private static let now = Date(timeIntervalSinceReferenceDate: 0)
+
     /// Invented entries, newest first: dictated and copied mixed, the first one long
-    /// enough to be cut at the tail.
+    /// enough to be cut at the tail. Captured so that the ages show every unit: `now`,
+    /// `2m`, `1h`, `3d`, and one more in days.
     private static let sampleEntries: [ClipboardEntry] = {
-        let now = Date(timeIntervalSinceReferenceDate: 0)
-        return [
-            ("Evening readiness check for the release: notes from the call, the open questions about the rollout plan and who owns each of them", ClipboardEntryOrigin.whisperKey),
-            ("https://example.com/jobs/search?keywords=product+analyst", .otherApplication),
-            ("Remind me to send the draft before Friday", .whisperKey),
-            ("SELECT name, started_at FROM sessions WHERE ended_at IS NULL", .otherApplication),
-            ("Thanks, that works for me. Talk tomorrow.", .otherApplication),
-        ].map { ClipboardEntry(text: $0.0, capturedAt: now, origin: $0.1) }
+        let minute: TimeInterval = 60
+        let hour = 60 * minute
+        let day = 24 * hour
+        let samples: [(text: String, origin: ClipboardEntryOrigin, age: TimeInterval)] = [
+            ("Evening readiness check for the release: notes from the call, the open questions about the rollout plan and who owns each of them", .whisperKey, 5),
+            ("https://example.com/jobs/search?keywords=product+analyst", .otherApplication, 2 * minute + 30),
+            ("Remind me to send the draft before Friday", .whisperKey, hour + 20 * minute),
+            ("SELECT name, started_at FROM sessions WHERE ended_at IS NULL", .otherApplication, 3 * day + 4 * hour),
+            ("Thanks, that works for me. Talk tomorrow.", .otherApplication, 12 * day),
+        ]
+        return samples.map {
+            ClipboardEntry(text: $0.text, capturedAt: now.addingTimeInterval(-$0.age), origin: $0.origin)
+        }
     }()
 
     private static var started = false
@@ -106,7 +117,7 @@ enum QuickPasteSnapshotHook {
     /// The panel as the controller builds it, off screen.
     private static func open(entries: [ClipboardEntry]) -> QuickPastePanel {
         let metrics = ThemeTokensSource.shared.tokens.quickPasteMetrics
-        let panel = QuickPastePanel(content: QuickPasteContent(entries: entries), metrics: metrics)
+        let panel = QuickPastePanel(content: QuickPasteContent(entries: entries, now: now), metrics: metrics)
         if !entries.isEmpty {
             panel.setHighlightedIndex(highlightedIndex)
         }
