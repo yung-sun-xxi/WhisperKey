@@ -287,6 +287,112 @@ final class QuickPasteSelectionTests: XCTestCase {
         XCTAssertEqual(selection.index, 0)
     }
 
+    // MARK: - A panel that opens over a pointer that has not moved (#211)
+
+    func testOpeningOverAStillPointerSelectsNothing() {
+        // Near the bottom of the screen the panel is shifted up and covers the pointer.
+        // The row that happens to be under it was not pointed at.
+        var selection = self.selection()
+
+        selection.pointerSampled(at: CGPoint(x: 700, y: 30), hitting: 3)
+
+        XCTAssertNil(selection.index)
+        XCTAssertEqual(selection.owner, .pointer)
+    }
+
+    func testAStillPointerOverARowStaysUnselectedHoweverOftenItIsRead() {
+        // The reveal's reading, a second of the highlight timer, and the release's.
+        var selection = self.selection()
+
+        for _ in 0..<62 {
+            selection.pointerSampled(at: CGPoint(x: 700, y: 30), hitting: 3)
+        }
+
+        XCTAssertNil(selection.index, "releasing now must cancel, not paste entry 3")
+    }
+
+    func testTheFirstRealMoveSelectsTheRowUnderThePointer() {
+        var selection = self.selection()
+        selection.pointerSampled(at: CGPoint(x: 700, y: 30), hitting: 3)
+
+        selection.pointerSampled(at: CGPoint(x: 700, y: 31), hitting: 3)
+
+        XCTAssertEqual(selection.index, 3)
+        XCTAssertEqual(selection.owner, .pointer)
+    }
+
+    func testAPointerThatMovedAndStoppedKeepsItsRow() {
+        // Still only counts as "not pointed at" before the first move.
+        var selection = self.selection()
+        selection.pointerSampled(at: CGPoint(x: 700, y: 30), hitting: 3)
+        selection.pointerSampled(at: CGPoint(x: 700, y: 80), hitting: 2)
+
+        for _ in 0..<60 {
+            selection.pointerSampled(at: CGPoint(x: 700, y: 80), hitting: 2)
+        }
+
+        XCTAssertEqual(selection.index, 2)
+    }
+
+    func testAnArrowOverAStillPointerStartsFromTheNewestEntry() {
+        // Nothing was selected, so down starts at the top row, not below the row the
+        // pointer happens to rest on.
+        var selection = self.selection()
+        selection.pointerSampled(at: CGPoint(x: 700, y: 30), hitting: 3)
+
+        selection.arrowPressed(.down)
+
+        XCTAssertEqual(selection.index, 0)
+        XCTAssertEqual(selection.owner, .keyboard)
+    }
+
+    /// The whole reveal near the bottom edge, as the controller runs it: place the panel,
+    /// hit-test the pointer where it already was, read it at reveal and again at release.
+    func testReleasingWithoutMovingOverAShiftedPanelCancels() {
+        let metrics = QuickPasteMetrics(
+            width: 328, edgeWidth: 1, headerHeight: 36, separatorHeight: 1, rowHeight: 34, rowInset: 8
+        )
+        let size = QuickPasteLayout.panelSize(entryCount: 5, metrics: metrics)
+        let cursor = CGPoint(x: 700, y: 30)
+        let placement = QuickPasteLayout.placement(
+            cursor: cursor, size: size, visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900)
+        )
+        let frame = CGRect(origin: placement.origin, size: size)
+        let hit = QuickPasteLayout.highlightedIndex(
+            mouse: cursor, panelFrame: frame, entryCount: 5, metrics: metrics
+        )
+        XCTAssertNotNil(hit, "the panel should have opened over the pointer")
+
+        var selection = self.selection(entryCount: 5)
+        selection.pointerSampled(at: cursor, hitting: hit)
+        let committed = selection.pointerSampled(at: cursor, hitting: hit)
+
+        XCTAssertNil(committed, "a release without a move pasted entry \(String(describing: committed))")
+    }
+
+    /// The ordinary case, unchanged: the panel hangs below the cursor, the pointer is not
+    /// on it, and a release without a move cancels.
+    func testReleasingWithoutMovingUnderAPanelBelowTheCursorCancels() {
+        let metrics = QuickPasteMetrics(
+            width: 328, edgeWidth: 1, headerHeight: 36, separatorHeight: 1, rowHeight: 34, rowInset: 8
+        )
+        let size = QuickPasteLayout.panelSize(entryCount: 5, metrics: metrics)
+        let cursor = CGPoint(x: 700, y: 600)
+        let placement = QuickPasteLayout.placement(
+            cursor: cursor, size: size, visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900)
+        )
+        let frame = CGRect(origin: placement.origin, size: size)
+        let hit = QuickPasteLayout.highlightedIndex(
+            mouse: cursor, panelFrame: frame, entryCount: 5, metrics: metrics
+        )
+        XCTAssertNil(hit, "the pointer starts above the panel, on nothing")
+
+        var selection = self.selection(entryCount: 5)
+        selection.pointerSampled(at: cursor, hitting: hit)
+
+        XCTAssertNil(selection.pointerSampled(at: cursor, hitting: hit))
+    }
+
     func testAnEmptyPanelSelectsNothingWhicheverInputMoves() {
         var selection = self.selection(entryCount: 0)
 

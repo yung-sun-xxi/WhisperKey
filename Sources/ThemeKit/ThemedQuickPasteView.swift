@@ -31,11 +31,16 @@ public struct ThemedQuickPasteView: View {
         /// One line, already cut to the preview length.
         public let text: String
         public let marker: Marker
+        /// How old the entry is, as the label to draw: `now`, `2m`, `1h`, `3d`
+        /// (`QuickPasteAge`). Ready-made, because the view has no clock: the caller
+        /// computes it once when the panel is revealed.
+        public let age: String
 
-        public init(id: UUID, text: String, marker: Marker) {
+        public init(id: UUID, text: String, marker: Marker, age: String) {
             self.id = id
             self.text = text
             self.marker = marker
+            self.age = age
         }
     }
 

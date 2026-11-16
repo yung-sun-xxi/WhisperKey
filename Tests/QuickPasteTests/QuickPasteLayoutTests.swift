@@ -484,6 +484,97 @@ final class QuickPasteLayoutTests: XCTestCase {
         )
     }
 
+    // MARK: - Placement: shifted up near the bottom edge, never turned over (#211)
+
+    func testNearTheBottomEdgeThePanelIsShiftedUpToStayOnScreen() {
+        let size = QuickPasteLayout.panelSize(entryCount: 5)
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let cursor = CGPoint(x: 700, y: 30)
+
+        let placement = QuickPasteLayout.placement(
+            cursor: cursor, size: size, visibleFrame: screen
+        )
+
+        // Not above the cursor: resting on the bottom of the usable area.
+        XCTAssertEqual(placement.origin.y, screen.minY, accuracy: 0.001)
+        XCTAssertEqual(placement.origin.x, cursor.x - Geometry.cursorInsetX, accuracy: 0.001)
+    }
+
+    func testTheShiftStopsAtTheBottomOfTheVisibleFrameNotOfTheScreen() {
+        // A Dock 70 tall: the usable area starts at 70, and so does the shifted panel.
+        let size = QuickPasteLayout.panelSize(entryCount: 5)
+        let screen = CGRect(x: 0, y: 70, width: 1440, height: 800)
+
+        let placement = QuickPasteLayout.placement(
+            cursor: CGPoint(x: 700, y: 100), size: size, visibleFrame: screen
+        )
+
+        XCTAssertEqual(placement.origin.y, 70, accuracy: 0.001)
+    }
+
+    func testThePanelIsShiftedOnlyAsFarAsItHasTo() {
+        // 225 tall with a gap of 10: at y 235 the panel fits below the cursor exactly.
+        let size = QuickPasteLayout.panelSize(entryCount: 5)
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        func originY(cursorY: CGFloat) -> CGFloat {
+            QuickPasteLayout.placement(
+                cursor: CGPoint(x: 700, y: cursorY), size: size, visibleFrame: screen
+            ).origin.y
+        }
+
+        XCTAssertEqual(originY(cursorY: 236), 1, accuracy: 0.001, "one point of room to spare")
+        XCTAssertEqual(originY(cursorY: 235), 0, accuracy: 0.001, "fits exactly")
+        XCTAssertEqual(originY(cursorY: 234), 0, accuracy: 0.001, "one point short: shifted up by one")
+        XCTAssertEqual(originY(cursorY: 0), 0, accuracy: 0.001, "the cursor on the bottom edge")
+    }
+
+    func testAShiftedPanelStillHasTheNewestEntryInTheTopRow() {
+        let size = QuickPasteLayout.panelSize(entryCount: 5)
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let cursor = CGPoint(x: 700, y: 30)
+
+        let placement = QuickPasteLayout.placement(
+            cursor: cursor, size: size, visibleFrame: screen
+        )
+        let frame = CGRect(origin: placement.origin, size: size)
+
+        // Top down, entry 0 first, exactly as when the panel hangs below the cursor.
+        for slot in 0..<5 {
+            XCTAssertEqual(
+                QuickPasteLayout.highlightedIndex(
+                    mouse: Geometry.centreOfSlot(slot, in: frame),
+                    panelFrame: frame,
+                    entryCount: 5,
+                    isFlipped: placement.isFlipped
+                ),
+                slot,
+                "slot \(slot)"
+            )
+        }
+    }
+
+    func testAShiftedPanelOpensOverTheCursor() {
+        // The consequence of shifting instead of turning over: the pointer starts inside
+        // the panel, on a row. `QuickPasteSelection` is what keeps that from being a choice.
+        let size = QuickPasteLayout.panelSize(entryCount: 5)
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let cursor = CGPoint(x: 700, y: 30)
+
+        let placement = QuickPasteLayout.placement(
+            cursor: cursor, size: size, visibleFrame: screen
+        )
+        let frame = CGRect(origin: placement.origin, size: size)
+
+        XCTAssertTrue(frame.contains(cursor), "\(frame) should cover \(cursor)")
+        // Rows of 34 above a bottom band of 9: y 30 is in the last row, the oldest entry.
+        XCTAssertEqual(
+            QuickPasteLayout.highlightedIndex(
+                mouse: cursor, panelFrame: frame, entryCount: 5, isFlipped: placement.isFlipped
+            ),
+            4
+        )
+    }
+
     func testNearTheRightEdgeThePanelIsPushedLeftToStayWhole() {
         let size = QuickPasteLayout.panelSize(entryCount: 5)
         let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
