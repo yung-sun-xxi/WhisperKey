@@ -19,8 +19,8 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
     public static let defaultMaxEntries = 20
     public static let allowedMaxRange: ClosedRange<Int> = 0...200
 
-    /// Newest first: the file merged with this instance's concealed entries, cut to
-    /// `maxEntries`.
+    /// Newest first: the file merged with this instance's concealed entries, each text
+    /// once, cut to `maxEntries`.
     @Published public private(set) var entries: [ClipboardEntry] = []
     public private(set) var maxEntries: Int
 
@@ -42,8 +42,12 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
     /// The file is shared with the other build of the app (release and dev), which may run
     /// at the same time with a different cap (#140). Every change reads the file as it is now
     /// and writes it back under a lock, the directory is watched for the other app's
-    /// writes, and an ordinary write never shrinks the file below the size it had. Loading
-    /// does not trim the file; only lowering the cap with `setMaxEntries` does.
+    /// writes, and an ordinary write never shrinks the file below the size it had, except
+    /// by the duplicates it removes. Loading does not trim the file; only lowering the cap
+    /// with `setMaxEntries` does.
+    ///
+    /// Loading does collapse duplicates once: builds before #211 stored a text again every
+    /// time it came back, and a file they filled keeps the newest entry of each text.
     public init(url: URL? = nil, maxEntries: Int = ClipboardHistoryStore.defaultMaxEntries) {
         let resolvedURL = url ?? Self.defaultURL()
         self.url = resolvedURL
@@ -55,7 +59,8 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
         self.watcher = DirectoryWatcher(directory: file.directory) { [weak self] in
             self?.reloadFromDisk()
         }
-        _ = try? file.load()
+        // One locked step; a file without duplicates is read and not written.
+        _ = try? updateFile { contents in contents = Self.deduplicated(contents) }
         refreshDisplay()
     }
 
@@ -67,15 +72,23 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
     }
 
     /// Offers a candidate entry. Returns the entry that was stored, or `nil` when it was
-    /// rejected as whitespace-only, as a repeat of the newest entry, or because the cap
-    /// is zero.
+    /// rejected as whitespace-only or because the cap is zero.
+    ///
+    /// One text, one entry (#211). A text that is already anywhere in the list — the file
+    /// as it is now, or this instance's concealed entries — is not stored a second time:
+    /// every older entry with it is removed and the new one goes on top, with the new
+    /// time, origin and concealment. That holds for a repeat of the newest entry too, so
+    /// one copy caught by both apps lands in the file once.
+    ///
+    /// The entry on top is always a new entry with a new id, never the old one moved. A
+    /// concealed entry finds its place by the ids of the file entries that were there
+    /// before it (`ConcealedEntry.olderIDs`); a moved entry that kept its id would still
+    /// count as older than a password copied before the move.
     ///
     /// `isConcealed` changes nothing about whether the entry is kept, where it sits, how
     /// it de-duplicates or whether it counts against the cap. It changes only whether it
-    /// is written to the file.
-    ///
-    /// "The newest entry" is the newest in the file as it is now, so one copy caught by
-    /// both apps lands in the file once.
+    /// is written to the file — and so a concealed copy of a text that sits in the file
+    /// takes it out of the file, and an ordinary copy of a text held concealed is written.
     @discardableResult
     public func record(
         text: String,
@@ -91,26 +104,27 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
         defer { refreshDisplay() }
 
         if isConcealed {
-            // Nothing is written, but the repeat check still needs the file as it is now.
-            _ = try? file.load()
-            // Against the most recent entry only. The same text copied again after something
-            // else in between is a deliberate second copy and gets its own entry.
-            guard Self.merge(persisted: file.contents, concealed: concealed).first?.text != text else { return nil }
+            // The entry itself is never written, but the same text in the file has to go,
+            // and what is older than this entry is the file as that leaves it.
+            _ = try? updateFile { contents in contents.removeAll { $0.text == text } }
+            concealed.removeAll { $0.entry.text == text }
             concealed.insert(ConcealedEntry(entry: entry, olderIDs: Set(file.contents.map(\.id))), at: 0)
             return entry
         }
 
-        let stored = try? updateFile { contents -> Bool in
-            guard Self.merge(persisted: contents, concealed: self.concealed).first?.text != text else { return false }
+        let stored: Void? = try? updateFile { contents in
             let previousCount = contents.count
+            contents.removeAll { $0.text == text }
             contents.insert(entry, at: 0)
+            // Counted before the duplicates went, so replacing one never trims another.
             let keep = max(self.maxEntries, previousCount)
             if contents.count > keep {
                 contents = Array(contents.prefix(keep))
             }
-            return true
         }
-        return stored == true ? entry : nil
+        guard stored != nil else { return nil }
+        concealed.removeAll { $0.entry.text == text }
+        return entry
     }
 
     /// Empties the list: every entry this instance has seen in the file, beyond its own cap
@@ -155,9 +169,14 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
     /// Shows the newest `maxEntries` of the file and this instance's concealed entries
     /// together. A concealed entry pushed out of that window is forgotten, exactly as it
     /// was when the list was only ever in memory.
+    ///
+    /// Each text is shown once, the newest of it. `record` keeps the file that way, but
+    /// the other build of the app shares the file and may not: showing is where that is
+    /// absorbed, without writing. A concealed entry hidden behind a newer entry with its
+    /// text is forgotten like one pushed out of the window.
     private func refreshDisplay() {
         let shown = maxEntries > 0
-            ? Array(Self.merge(persisted: file.contents, concealed: concealed).prefix(maxEntries))
+            ? Array(Self.deduplicated(Self.merge(persisted: file.contents, concealed: concealed)).prefix(maxEntries))
             : []
         let shownIDs = Set(shown.map(\.id))
         concealed.removeAll { !shownIDs.contains($0.entry.id) }
@@ -186,6 +205,13 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
         }
         merged.append(contentsOf: above[persisted.count] ?? [])
         return merged
+    }
+
+    /// The newest entry of each text, in the order given (newest first). Text is compared
+    /// verbatim.
+    static func deduplicated(_ entries: [ClipboardEntry]) -> [ClipboardEntry] {
+        var seen = Set<String>()
+        return entries.filter { seen.insert($0.text).inserted }
     }
 
     static func clamp(_ value: Int) -> Int {

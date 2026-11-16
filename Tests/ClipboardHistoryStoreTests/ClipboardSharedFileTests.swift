@@ -73,15 +73,18 @@ final class ClipboardSharedFileTests: XCTestCase {
     }
 
     /// Both apps watch the same pasteboard, so one copy reaches both. It must land in the
-    /// file once: the repeat check compares against the file's newest entry, not against
+    /// file once: the repeat check compares against the file as it is now, not against
     /// a copy taken before the other app recorded it.
+    ///
+    /// Until #211 the second app's record was rejected. Now it replaces the first app's
+    /// entry with its own, and the file still holds the copy once.
     func testOneCopySeenByBothInstancesLandsOnce() {
         let url = makeURL()
         let release = ClipboardHistoryStore(url: url, maxEntries: 10)
         let dev = ClipboardHistoryStore(url: url, maxEntries: 10)
 
         XCTAssertNotNil(record(release, "copied once"))
-        XCTAssertNil(record(dev, "copied once"))
+        XCTAssertNotNil(record(dev, "copied once"))
 
         XCTAssertEqual(textsOnDisk(url), ["copied once"])
     }
