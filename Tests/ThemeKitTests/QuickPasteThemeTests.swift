@@ -97,7 +97,8 @@ final class QuickPasteThemeTests: XCTestCase {
         let long = ThemedQuickPasteView.Row(
             id: UUID(),
             text: String(repeating: "a long dictated sentence ", count: 12),
-            marker: .dictated
+            marker: .dictated,
+            age: "59m"
         )
         let host = NSHostingView(rootView: panel(rows: [long], selected: nil))
         XCTAssertEqual(host.fittingSize, QuickPasteLayout.panelSize(entryCount: 1, metrics: midnight.quickPasteMetrics))
@@ -242,7 +243,7 @@ final class QuickPasteThemeTests: XCTestCase {
 
     private func rows(_ count: Int) -> [ThemedQuickPasteView.Row] {
         (0..<count).map { index in
-            ThemedQuickPasteView.Row(id: UUID(), text: "e\(index)", marker: index.isMultiple(of: 2) ? .dictated : .copied)
+            ThemedQuickPasteView.Row(id: UUID(), text: "e\(index)", marker: index.isMultiple(of: 2) ? .dictated : .copied, age: "\(index + 1)m")
         }
     }
 

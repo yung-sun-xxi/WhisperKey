@@ -42,7 +42,8 @@ extension QuickPasteContent {
             ThemedQuickPasteView.Row(
                 id: row.entry.id,
                 text: row.entry.preview(maxLength: QuickPasteLayout.previewLength),
-                marker: row.entry.origin == .whisperKey ? .dictated : .copied
+                marker: row.entry.origin == .whisperKey ? .dictated : .copied,
+                age: ""
             )
         }
     }
