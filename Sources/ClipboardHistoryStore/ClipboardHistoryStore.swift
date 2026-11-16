@@ -101,13 +101,14 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
 
         let entry = ClipboardEntry(id: id, text: text, capturedAt: now, origin: origin, isConcealed: isConcealed)
+        // Also what drops an older concealed entry with this text: it ends up hidden
+        // behind the new one, and `refreshDisplay` forgets what it does not show.
         defer { refreshDisplay() }
 
         if isConcealed {
             // The entry itself is never written, but the same text in the file has to go,
             // and what is older than this entry is the file as that leaves it.
             _ = try? updateFile { contents in contents.removeAll { $0.text == text } }
-            concealed.removeAll { $0.entry.text == text }
             concealed.insert(ConcealedEntry(entry: entry, olderIDs: Set(file.contents.map(\.id))), at: 0)
             return entry
         }
@@ -122,9 +123,7 @@ public final class ClipboardHistoryStore: ObservableObject, @unchecked Sendable 
                 contents = Array(contents.prefix(keep))
             }
         }
-        guard stored != nil else { return nil }
-        concealed.removeAll { $0.entry.text == text }
-        return entry
+        return stored != nil ? entry : nil
     }
 
     /// Empties the list: every entry this instance has seen in the file, beyond its own cap
