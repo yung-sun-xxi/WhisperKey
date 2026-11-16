@@ -148,7 +148,44 @@ final class ClipboardHistoryDeduplicationTests: XCTestCase {
         )
     }
 
+    /// The other build of the app shares the file and may not have #211, so it can leave
+    /// one text in the file several times while this store is already open — after the
+    /// cleanup on init, which runs once. Recording that text removes every older entry
+    /// with it from the file, not only the newest of them. Asserted on the file: the
+    /// list would hide a leftover duplicate.
+    func testRecordingATextTheOtherAppLeftSeveralTimesRemovesEveryOlderOne() throws {
+        let url = makeURL()
+        let store = ClipboardHistoryStore(url: url)
+        let written = [entry("A", at: 5), entry("x", at: 4), entry("A", at: 3), entry("y", at: 2), entry("A", at: 1)]
+        try writeRaw(written, to: url)
+
+        let recorded = store.record(text: "A", origin: .otherApplication, now: date(9))
+
+        let onDisk = try entriesOnDisk(url)
+        XCTAssertEqual(onDisk.map(\.text), ["A", "x", "y"])
+        XCTAssertEqual(onDisk.first?.id, recorded?.id)
+        XCTAssertEqual(onDisk.dropFirst().map(\.id), [written[1].id, written[3].id])
+        XCTAssertEqual(store.entries.map(\.text), ["A", "x", "y"])
+    }
+
     // MARK: - 3. Concealed entries
+
+    /// The same for a concealed copy: every entry with that text leaves the file, however
+    /// many the other app wrote. One left behind is a password on disk.
+    func testAConcealedCopyOfATextTheOtherAppLeftSeveralTimesRemovesAllOfThemFromTheFile() throws {
+        let url = makeURL()
+        let store = ClipboardHistoryStore(url: url)
+        let written = [entry("hunter2", at: 5), entry("x", at: 4), entry("hunter2", at: 3), entry("y", at: 2), entry("hunter2", at: 1)]
+        try writeRaw(written, to: url)
+
+        store.record(text: "hunter2", origin: .otherApplication, isConcealed: true, now: date(9))
+
+        XCTAssertEqual(try entriesOnDisk(url), [written[1], written[3]])
+        let onDisk = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+        XCTAssertFalse(onDisk.contains("hunter2"), "the concealed text must not be on disk:\n\(onDisk)")
+        XCTAssertEqual(store.entries.map(\.text), ["hunter2", "x", "y"])
+        XCTAssertEqual(store.entries.map(\.isConcealed), [true, false, false])
+    }
 
     /// Why the moved entry needs a new id. A concealed entry remembers the file entries
     /// that were there before it, by id, and sits above the first of them. If "a" kept
