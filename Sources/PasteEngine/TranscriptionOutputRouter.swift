@@ -95,30 +95,81 @@ struct SystemTranscriptionPasteboard: TranscriptionPasteboard {
     }
 }
 
+/// The clipboard history as the transcription path sees it: the monitor it silences
+/// around its own swap, and the store its transcript goes into (#211).
+///
+/// The monitor and the store live on the main thread — the monitor's timer runs on the
+/// main run loop and the store publishes to SwiftUI — while `deliver` runs off it. Every
+/// method here is therefore main-actor, and the router awaits each one.
+public struct TranscriptionClipboardHistory: @unchecked Sendable {
+    private let monitor: ClipboardMonitor
+    private let store: ClipboardHistoryStore
+
+    public init(monitor: ClipboardMonitor, store: ClipboardHistoryStore) {
+        self.monitor = monitor
+        self.store = store
+    }
+
+    /// Silences the monitor and says whether this call did it. A monitor someone else
+    /// already suspended is theirs to resume.
+    ///
+    /// A copy the monitor has not polled yet is taken first: `resume()` re-baselines, so
+    /// anything still pending when the swap starts would otherwise be lost with it.
+    @MainActor
+    func suspendMonitor() -> Bool {
+        guard !monitor.isSuspended else { return false }
+        if monitor.isRunning { monitor.poll() }
+        monitor.suspend()
+        return true
+    }
+
+    @MainActor
+    func resumeMonitor() {
+        monitor.resume()
+    }
+
+    /// Records the transcript as a dictated entry. Only while the monitor is running:
+    /// that is what "quick paste is on" means (`QuickPasteActivation`), and with the
+    /// feature off nothing may fill the history.
+    @MainActor
+    func recordTranscript(_ text: String) {
+        guard monitor.isRunning else { return }
+        store.record(text: text, origin: .whisperKey)
+    }
+}
+
 public struct TranscriptionOutputRouter {
     private let pasteEngine: PasteEngine
     private let pasteboard: TranscriptionPasteboard
     private let restoreDelayNanoseconds: UInt64
+    private let clipboardHistory: TranscriptionClipboardHistory?
 
+    /// `clipboardHistory` is for the transcription path alone. The quick-paste popup
+    /// builds its router without it: it suspends the monitor itself, and what it pastes
+    /// is an entry already in the list, not a dictation.
     public init(
         pasteEngine: PasteEngine = PasteEngine(),
-        restoreDelayNanoseconds: UInt64 = 150_000_000
+        restoreDelayNanoseconds: UInt64 = 150_000_000,
+        clipboardHistory: TranscriptionClipboardHistory? = nil
     ) {
         self.init(
             pasteEngine: pasteEngine,
             pasteboard: SystemTranscriptionPasteboard(),
-            restoreDelayNanoseconds: restoreDelayNanoseconds
+            restoreDelayNanoseconds: restoreDelayNanoseconds,
+            clipboardHistory: clipboardHistory
         )
     }
 
     init(
         pasteEngine: PasteEngine = PasteEngine(),
         pasteboard: TranscriptionPasteboard,
-        restoreDelayNanoseconds: UInt64 = 150_000_000
+        restoreDelayNanoseconds: UInt64 = 150_000_000,
+        clipboardHistory: TranscriptionClipboardHistory? = nil
     ) {
         self.pasteEngine = pasteEngine
         self.pasteboard = pasteboard
         self.restoreDelayNanoseconds = restoreDelayNanoseconds
+        self.clipboardHistory = clipboardHistory
     }
 
     /// Puts `text` where `settings` says, and reports what happened.
