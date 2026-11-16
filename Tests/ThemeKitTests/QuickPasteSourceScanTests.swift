@@ -133,6 +133,12 @@ final class QuickPasteSourceScanTests: XCTestCase {
             "the snapshot hook's moment is not fixed"
         )
         XCTAssertFalse(hook.contains("Date()"), "the snapshot hook reads the clock, so its pictures change between runs")
+        // And its invented entries are dated back from that moment, each by its own age,
+        // so the pictures show more than one label.
+        XCTAssertTrue(
+            hook.contains("capturedAt: now.addingTimeInterval(-$0.age)"),
+            "the snapshot hook's entries are not dated against its fixed moment"
+        )
     }
 
     /// The copied entry's symbol is a one-line swap: its name is written once.
