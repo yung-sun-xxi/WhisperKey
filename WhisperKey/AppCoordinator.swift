@@ -186,7 +186,9 @@ final class AppCoordinator: ObservableObject {
     private let encoder = AudioEncoder()
     private let sounds = SoundPlayer()
     private let appleMusic = AppleMusicRecordingController()
-    private let outputRouter = TranscriptionOutputRouter()
+    /// Built with the clipboard history, unlike quick paste's own router: a dictation
+    /// goes into the list as a dictated entry, and its swap-and-restore stays out (#211).
+    private let outputRouter: TranscriptionOutputRouter
     private let toastPresenter = ToastPresenter()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
     private var cancellables = Set<AnyCancellable>()
@@ -239,6 +241,11 @@ final class AppCoordinator: ObservableObject {
         self.clipboardHistory = clipboardHistory
         self.clipboardMonitor = clipboardMonitor
         self.quickPaste = quickPaste
+        // The one line that connects the transcription output to the clipboard history.
+        // With quick paste off the monitor is not running, and the router records nothing.
+        self.outputRouter = TranscriptionOutputRouter(
+            clipboardHistory: TranscriptionClipboardHistory(monitor: clipboardMonitor, store: clipboardHistory)
+        )
         // Constructing these is not turning the feature on. The activation starts the
         // watcher only when the setting says so, and the event tap only when Accessibility
         // is also granted — which `synchronizeHotkey` reports as the permission changes.
