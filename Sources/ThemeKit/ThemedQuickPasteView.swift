@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The quick paste popup as drawn (#166): the shared floating-panel shell, a header bar
 /// with the caps "Clipboard" label and a separator under it, and the entries as list
-/// rows, the one under the pointer selected.
+/// rows, newest at the top, each with its age at the trailing edge (#211), the chosen one
+/// selected.
 ///
 /// Every size here is the `QuickPasteMetrics` the controller also hands the hit test, or
 /// a token; every colour and font is a token. Lives in ThemeKit rather than in the app so
@@ -108,7 +109,7 @@ public struct ThemedQuickPasteView: View {
     }
 }
 
-/// One entry: its marker, then its text in one line cut at the tail.
+/// One entry: its marker, its text in one line cut at the tail, and its age last.
 private struct QuickPasteRowView: View {
     let row: ThemedQuickPasteView.Row
     let isSelected: Bool
@@ -137,7 +138,17 @@ private struct QuickPasteRowView: View {
                     // would be clipped rather than granted it.
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Spacer(minLength: 0)
+                    // All the room the age leaves: the text is what gives way.
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                // The age, against the row's trailing edge: the sheet's 11/400 `caption`
+                // ("timestamps") in `secondaryText`, as Full history's timestamp. Never
+                // cut: it takes its own width first, the same gap from the text as the
+                // marker's.
+                Text(row.age)
+                    .font(tokens.type.caption.font)
+                    .foregroundStyle(tokens.colors.secondaryText.color)
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
     }

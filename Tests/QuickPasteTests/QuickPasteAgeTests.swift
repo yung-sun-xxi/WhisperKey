@@ -52,6 +52,22 @@ final class QuickPasteAgeTests: XCTestCase {
         XCTAssertEqual(label(secondsAgo: -90 * 24 * 3600), "now")
     }
 
+    func testADateNoRealEntryHasStillGetsALabel() {
+        // The date is decoded from a file; a broken one must not take the popup down.
+        XCTAssertEqual(QuickPasteAge.label(capturedAt: .distantPast, now: now).last, "d")
+        XCTAssertEqual(
+            QuickPasteAge.label(
+                capturedAt: Date(timeIntervalSinceReferenceDate: -.greatestFiniteMagnitude), now: now
+            ).last,
+            "d"
+        )
+        XCTAssertEqual(
+            QuickPasteAge.label(capturedAt: Date(timeIntervalSinceReferenceDate: .nan), now: now),
+            "now"
+        )
+        XCTAssertEqual(QuickPasteAge.label(capturedAt: .distantFuture, now: now), "now")
+    }
+
     func testTheLabelDependsOnlyOnTheTwoDates() {
         // The same distance anywhere on the timeline is the same label.
         for origin in [0, 1_000_000, 800_000_000.5] as [TimeInterval] {

@@ -8,8 +8,9 @@ import ThemeKit
 import os
 
 /// The quick-paste popup: hold the trigger, a non-activating panel appears under the
-/// cursor listing the most recent clipboard entries, point at one, release, and it is
-/// pasted where the caret still is. Releasing over none of them cancels.
+/// cursor listing the most recent clipboard entries, newest on top, point at one, release,
+/// and it is pasted where the caret still is. Releasing over none of them, or without
+/// having moved the pointer at all, cancels.
 ///
 /// Whether any of it runs is not decided here. `QuickPasteActivation` owns that, from the
 /// settings and the Accessibility permission, and calls `start()` and `stop()` — which is
@@ -35,7 +36,6 @@ final class QuickPasteController: QuickPasteGestureControlling {
     private struct Reveal {
         let entryCount: Int
         let frame: CGRect
-        let isFlipped: Bool
         /// The geometry the panel was drawn with, so the hit test chooses on the same rows.
         let metrics: QuickPasteMetrics
         /// Which row is chosen and which input chose it. The pointer and the arrow keys
@@ -210,7 +210,9 @@ final class QuickPasteController: QuickPasteGestureControlling {
             visibleFrame: Self.visibleFrame(containing: cursor)
         )
 
-        let content = QuickPasteContent(entries: entries, isFlipped: placement.isFlipped)
+        // The ages are measured once, against this moment; nothing ticks while the panel
+        // is open.
+        let content = QuickPasteContent(entries: entries, now: Date())
         let panel = QuickPastePanel(content: content, metrics: metrics)
         panel.show(at: placement.origin)
         self.panel = panel
@@ -218,12 +220,8 @@ final class QuickPasteController: QuickPasteGestureControlling {
         self.reveal = Reveal(
             entryCount: entries.count,
             frame: CGRect(origin: placement.origin, size: size),
-            isFlipped: placement.isFlipped,
             metrics: metrics,
-            selection: QuickPasteSelection(
-                entryCount: entries.count,
-                isFlipped: placement.isFlipped
-            ),
+            selection: QuickPasteSelection(entryCount: entries.count),
             targetProcessIdentifier: NSWorkspace.shared.frontmostApplication?.processIdentifier
         )
 
@@ -231,9 +229,11 @@ final class QuickPasteController: QuickPasteGestureControlling {
         // application. Set before the first repaint, and cleared in `hidePanel`, so the
         // flag is never true with nothing on screen.
         runner.setRevealed(true)
-        // The first reading, taken with the panel: it paints the row under the cursor
-        // straight away, and it gives the selection a baseline to compare later readings
-        // against, so an arrow pressed before the timer's first tick is not undone by it.
+        // The first reading, taken with the panel: it gives the selection a baseline to
+        // compare later readings against. It selects nothing — near the bottom of the
+        // screen the panel is shifted up over the pointer, and the row that happens to be
+        // under it was not pointed at — and an arrow pressed before the timer's first tick
+        // is not undone by it.
         repaintHighlight()
         startHighlightTimer()
     }
@@ -291,7 +291,6 @@ final class QuickPasteController: QuickPasteGestureControlling {
             mouse: mouse,
             panelFrame: reveal.frame,
             entryCount: reveal.entryCount,
-            isFlipped: reveal.isFlipped,
             metrics: reveal.metrics
         )
     }

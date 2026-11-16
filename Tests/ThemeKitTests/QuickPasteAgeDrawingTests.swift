@@ -93,8 +93,9 @@ final class QuickPasteAgeDrawingTests: XCTestCase {
     func testALongEntryIsCutBeforeTheAgeAndTheAgeStaysWhole() throws {
         for theme in themes {
             let gap = theme.tokens.quickPasteMarker.gap
-            for age in ["now", "59m", "23h", "400d"] {
-                let alone = try render(theme, text: "e0", age: "")
+            let alone = try render(theme, text: "e0", age: "")
+            // The narrowest label and the widest.
+            for age in ["now", "400d"] {
                 let short = try render(theme, text: "e0", age: age)
                 let cut = try render(theme, text: Self.longEntry, age: age)
                 let what = "\(theme.name) \(age)"
