@@ -15,15 +15,38 @@ public struct TranscriptionOutputSettings: Equatable, Sendable {
     }
 }
 
+/// How the transcript was meant to reach the focused field.
+public enum TranscriptionDelivery: Equatable, Sendable {
+    /// Through the clipboard: written there, and pasted with ⌘V when auto-paste is on.
+    /// The swap-paste-restore is this path too. Every path except the one below.
+    case clipboard
+    /// Typed with synthetic key events, the clipboard left alone, because it held files
+    /// a restore would have lost (#215). Whether anything was typed is `pasteDecision`:
+    /// a refused field gets nothing.
+    case typed
+}
+
 public struct TranscriptionOutputResult: Equatable, Sendable {
     public let wroteClipboard: Bool
     public let pasteDecision: PasteDecision?
     public let restoredClipboard: Bool
+    public let delivery: TranscriptionDelivery
 
-    public init(wroteClipboard: Bool, pasteDecision: PasteDecision?, restoredClipboard: Bool) {
+    public init(
+        wroteClipboard: Bool,
+        pasteDecision: PasteDecision?,
+        restoredClipboard: Bool,
+        delivery: TranscriptionDelivery = .clipboard
+    ) {
         self.wroteClipboard = wroteClipboard
         self.pasteDecision = pasteDecision
         self.restoredClipboard = restoredClipboard
+        self.delivery = delivery
+    }
+
+    /// The text went into the focused field: ⌘V was sent, or it was typed.
+    public var autoPasted: Bool {
+        pasteDecision == .paste
     }
 }
 
@@ -302,6 +325,7 @@ public struct TranscriptionOutputRouter {
     private let restoreDelayNanoseconds: UInt64
     private let readTimeoutNanoseconds: UInt64
     private let clipboardHistory: TranscriptionClipboardHistory?
+    private let textTyper: TextTyper?
 
     /// `clipboardHistory` is for the transcription path alone. The quick-paste popup
     /// builds its router without it: it suspends the monitor itself, and what it pastes
@@ -310,18 +334,26 @@ public struct TranscriptionOutputRouter {
     /// When the swap restores the user's clipboard after an auto-paste, it waits for the
     /// paste target to read the transcript, at most `readTimeoutNanoseconds`, and then
     /// `restoreDelayNanoseconds` more, since an application may read more than once.
+    ///
+    /// `textTyper` turns on the typing fallback (#215): with auto-paste alone, a clipboard
+    /// holding files is left untouched and the text is typed instead. Only the
+    /// transcription path passes one. The quick-paste popup builds its router without it
+    /// and keeps the swap, because its entries are often multi-line and typing turns line
+    /// breaks into spaces.
     public init(
         pasteEngine: PasteEngine = PasteEngine(),
         restoreDelayNanoseconds: UInt64 = 150_000_000,
         readTimeoutNanoseconds: UInt64 = 2_000_000_000,
-        clipboardHistory: TranscriptionClipboardHistory? = nil
+        clipboardHistory: TranscriptionClipboardHistory? = nil,
+        textTyper: TextTyper? = nil
     ) {
         self.init(
             pasteEngine: pasteEngine,
             pasteboard: SystemTranscriptionPasteboard(),
             restoreDelayNanoseconds: restoreDelayNanoseconds,
             readTimeoutNanoseconds: readTimeoutNanoseconds,
-            clipboardHistory: clipboardHistory
+            clipboardHistory: clipboardHistory,
+            textTyper: textTyper
         )
     }
 
@@ -330,13 +362,15 @@ public struct TranscriptionOutputRouter {
         pasteboard: TranscriptionPasteboard,
         restoreDelayNanoseconds: UInt64 = 150_000_000,
         readTimeoutNanoseconds: UInt64 = 2_000_000_000,
-        clipboardHistory: TranscriptionClipboardHistory? = nil
+        clipboardHistory: TranscriptionClipboardHistory? = nil,
+        textTyper: TextTyper? = nil
     ) {
         self.pasteEngine = pasteEngine
         self.pasteboard = pasteboard
         self.restoreDelayNanoseconds = restoreDelayNanoseconds
         self.readTimeoutNanoseconds = readTimeoutNanoseconds
         self.clipboardHistory = clipboardHistory
+        self.textTyper = textTyper
     }
 
     /// Puts `text` where `settings` says, and reports what happened.
