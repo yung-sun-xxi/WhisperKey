@@ -56,6 +56,15 @@ struct PasteboardSnapshot: Equatable {
     init(items: [[NSPasteboard.PasteboardType: Data]]) {
         self.items = items
     }
+
+    /// Whether any item carries a file URL — a file copied in Finder, among others.
+    ///
+    /// Only the presence of the type counts. The URL is never resolved, opened or
+    /// checked: any access to the file by WhisperKey would raise the very TCC prompt the
+    /// typing fallback exists to avoid (#215).
+    var holdsFileURL: Bool {
+        items.contains { $0.keys.contains(.fileURL) }
+    }
 }
 
 protocol TranscriptionPasteboard {
@@ -413,12 +422,29 @@ public struct TranscriptionOutputRouter {
             )
 
         case (false, true):
+            let snapshot = pasteboard.snapshot()
+            // Files on the clipboard cannot be put back: pboard drops the file URL that a
+            // process without read access to the file writes, and the next paste gives the
+            // file's name and icon. So the clipboard is not touched at all, and the text is
+            // typed instead (#215). The clipboard never changes here, so the monitor has
+            // nothing to be silenced for.
+            if let textTyper, snapshot.holdsFileURL {
+                return await typeInsteadOfSwapping(
+                    text: text,
+                    typer: textTyper,
+                    secureFieldPolicy: secureFieldPolicy
+                )
+            }
             // The swap below moves the change counter twice, and the second move puts the
             // user's own text back. A monitor left listening records that restore as a
             // fresh copy on every dictation (#211). The swap is one function so that
             // every way out of it, cancellation included, comes back through the resume.
             let suspendedMonitor = await clipboardHistory?.suspendMonitor() ?? false
-            let result = await swapPasteAndRestore(text: text, secureFieldPolicy: secureFieldPolicy)
+            let result = await swapPasteAndRestore(
+                text: text,
+                snapshot: snapshot,
+                secureFieldPolicy: secureFieldPolicy
+            )
             if suspendedMonitor {
                 await clipboardHistory?.resumeMonitor()
             }
@@ -440,11 +466,13 @@ public struct TranscriptionOutputRouter {
     /// has read it. A fixed delay used to stand there: on a loaded Mac the target handled
     /// ⌘V after the restore and pasted the user's own clipboard instead. No keystroke
     /// sent means no reader coming, and the restore goes ahead at once.
+    ///
+    /// The snapshot is taken by the caller, which has already looked in it for files.
     private func swapPasteAndRestore(
         text: String,
+        snapshot: PasteboardSnapshot,
         secureFieldPolicy: SecureFieldPolicy
     ) async -> TranscriptionOutputResult {
-        let snapshot = pasteboard.snapshot()
         guard !Task.isCancelled else {
             return TranscriptionOutputResult(wroteClipboard: false, pasteDecision: nil, restoredClipboard: false)
         }
@@ -466,10 +494,49 @@ public struct TranscriptionOutputRouter {
         if !restored {
             outputLog.error("failed to restore pasteboard after auto-paste")
         }
+        outputLog.notice("auto-paste path=swap chars=\(text.count, privacy: .public) decision=\(String(describing: decision), privacy: .public)")
         return TranscriptionOutputResult(
             wroteClipboard: wroteClipboard,
             pasteDecision: decision,
             restoredClipboard: restored
+        )
+    }
+
+    /// The `(saveToClipboard: false, autoPaste: true)` path when the clipboard holds files:
+    /// the same paste decision as the swap, then the text typed, line breaks as spaces.
+    /// The clipboard is neither written nor restored.
+    ///
+    /// The transcript goes into clipboard history whether or not the field took it, as on
+    /// the swap: nothing reaches the clipboard here, so nothing else will record it.
+    private func typeInsteadOfSwapping(
+        text: String,
+        typer: TextTyper,
+        secureFieldPolicy: SecureFieldPolicy
+    ) async -> TranscriptionOutputResult {
+        guard !Task.isCancelled else {
+            return TranscriptionOutputResult(
+                wroteClipboard: false,
+                pasteDecision: nil,
+                restoredClipboard: false,
+                delivery: .typed
+            )
+        }
+        let decision = pasteEngine.decideForFocusedElement(secureFieldPolicy: secureFieldPolicy)
+        if decision == .paste {
+            let typed = TypedText.replacingLineBreaks(text)
+            let startedAt = DispatchTime.now().uptimeNanoseconds
+            await typer.type(typed)
+            let milliseconds = (DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000
+            outputLog.notice("auto-paste path=typed chars=\(typed.count, privacy: .public) utf16=\(typed.utf16.count, privacy: .public) durationMs=\(milliseconds, privacy: .public)")
+        } else {
+            outputLog.notice("auto-paste path=typed chars=\(text.count, privacy: .public) decision=\(String(describing: decision), privacy: .public); nothing typed")
+        }
+        await clipboardHistory?.recordTranscript(text)
+        return TranscriptionOutputResult(
+            wroteClipboard: false,
+            pasteDecision: decision,
+            restoredClipboard: false,
+            delivery: .typed
         )
     }
 
