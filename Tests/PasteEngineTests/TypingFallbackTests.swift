@@ -322,6 +322,49 @@ final class TypingFallbackHistoryTests: XCTestCase {
         XCTAssertEqual(urls?.map(\.standardizedFileURL), [file.standardizedFileURL])
         XCTAssertFalse(monitor.isSuspended)
     }
+
+    /// A refused field gets nothing typed, and the clipboard still holds the file, so the
+    /// dictation exists nowhere but in quick paste. It is recorded there regardless, as on
+    /// the swap, where a refused paste is recorded too.
+    func testARefusedFieldTypesNothingButTheTranscriptIsStillRecorded() async throws {
+        let file = tempDir.appendingPathComponent("Screenshot.png")
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: file)
+        board.clearContents()
+        XCTAssertTrue(board.writeObjects([file as NSURL]))
+        monitor.poll()
+        let changeCountBefore = board.changeCount
+        let typer = RecordingTyper()
+        let keyboard = CountingKeyboard()
+        let router = TranscriptionOutputRouter(
+            pasteEngine: PasteEngine(
+                inspector: FixedFocus(focus: AXFocusInfo(role: "AXTextField", subrole: "AXSecureTextField")),
+                keyboard: keyboard,
+                secureProbe: FixedSecureInput(active: false)
+            ),
+            pasteboard: SystemTranscriptionPasteboard(pasteboard: board),
+            restoreDelayNanoseconds: 0,
+            readTimeoutNanoseconds: 1_000_000,
+            clipboardHistory: TranscriptionClipboardHistory(monitor: monitor, store: store),
+            textTyper: typer
+        )
+
+        let result = await router.deliver(
+            text: "dictated",
+            settings: TranscriptionOutputSettings(saveToClipboard: false, autoPaste: true),
+            secureFieldPolicy: .refuse
+        )
+        monitor.poll()
+
+        XCTAssertEqual(result.delivery, .typed)
+        XCTAssertEqual(result.pasteDecision, .clipboardOnly)
+        XCTAssertEqual(typer.typed, [], "typed into a refused field")
+        XCTAssertEqual(keyboard.callCount, 0)
+        XCTAssertEqual(board.changeCount, changeCountBefore, "the clipboard was written")
+        let urls = board.readObjects(forClasses: [NSURL.self]) as? [URL]
+        XCTAssertEqual(urls?.map(\.standardizedFileURL), [file.standardizedFileURL])
+        XCTAssertEqual(store.entries.first?.text, "dictated", "the refused dictation is not in quick paste")
+        XCTAssertEqual(store.entries.first?.origin, .whisperKey)
+    }
 }
 
 /// The real typer, with its events captured instead of posted.
