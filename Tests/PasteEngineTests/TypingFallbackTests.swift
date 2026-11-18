@@ -394,6 +394,14 @@ final class CGEventTextTyperTests: XCTestCase {
         XCTAssertEqual(TypedText.chunks(of: "ab" + long + "cd"), ["ab", long, "cd"])
     }
 
+    /// At the very start too, with no empty piece before it: an empty piece would post a
+    /// key event with no text, which some targets read as the virtual key itself.
+    func testATextStartingWithACharacterLongerThanAChunkHasNoEmptyPiece() {
+        let long = "e" + String(repeating: "\u{301}", count: 25)
+
+        XCTAssertEqual(TypedText.chunks(of: long + "cd"), [long, "cd"])
+    }
+
     func testEveryKindOfLineBreakBecomesOneSpace() {
         XCTAssertEqual(
             TypedText.replacingLineBreaks("a\nb\r\nc\rd\u{2028}e\u{2029}f"),
