@@ -1,19 +1,14 @@
 import CoreGraphics
 import Foundation
 
-/// Where the panel sits relative to the cursor, and therefore which end of the list is
-/// nearest it.
+/// Where the panel sits on the screen. Only that: the order of the rows is the same
+/// wherever it sits, the newest entry in the top row (#211).
 public struct QuickPastePlacement: Equatable, Sendable {
     /// Bottom-left corner of the panel, in screen coordinates.
     public let origin: CGPoint
-    /// `true` when the panel had to go *above* the cursor because there was no room
-    /// below. Rows are then rendered bottom-up, so the newest entry is still the one
-    /// next to the cursor.
-    public let isFlipped: Bool
 
-    public init(origin: CGPoint, isFlipped: Bool) {
+    public init(origin: CGPoint) {
         self.origin = origin
-        self.isFlipped = isFlipped
     }
 }
 
@@ -120,10 +115,13 @@ public enum QuickPasteLayout {
     ///
     /// Hangs below the cursor by preference, which puts the newest entry — the top row —
     /// closest to the pointer. When the cursor is too near the bottom of the screen for
-    /// the whole panel to fit below it, the panel goes above the cursor instead of being
-    /// clamped into it, and the caller renders the rows bottom-up so the newest entry is
-    /// still the nearest one. Clamping without flipping would have left the *oldest*
-    /// entry against the cursor.
+    /// the whole panel to fit below it, the panel is shifted up just far enough to rest
+    /// on the bottom of `visibleFrame`. It is not moved above the cursor and its rows are
+    /// not turned over: the newest entry is the top row wherever the panel opens (#211).
+    ///
+    /// A shifted panel covers the cursor, so the pointer starts on a row it never pointed
+    /// at. `QuickPasteSelection` is what keeps that from being a choice: a pointer selects
+    /// nothing until it has moved.
     public static func placement(
         cursor: CGPoint,
         size: CGSize,
@@ -135,15 +133,12 @@ public enum QuickPasteLayout {
             upper: visibleFrame.maxX - size.width
         )
 
-        let below = cursor.y - cursorGap - size.height
-        if below >= visibleFrame.minY {
-            let y = clamp(below, lower: visibleFrame.minY, upper: visibleFrame.maxY - size.height)
-            return QuickPastePlacement(origin: CGPoint(x: x, y: y), isFlipped: false)
-        }
-
-        let above = cursor.y + cursorGap
-        let y = clamp(above, lower: visibleFrame.minY, upper: visibleFrame.maxY - size.height)
-        return QuickPastePlacement(origin: CGPoint(x: x, y: y), isFlipped: true)
+        let y = clamp(
+            cursor.y - cursorGap - size.height,
+            lower: visibleFrame.minY,
+            upper: visibleFrame.maxY - size.height
+        )
+        return QuickPastePlacement(origin: CGPoint(x: x, y: y))
     }
 
     /// Clamps to `lower...upper`, and to `lower` when the range is empty — which happens
@@ -166,13 +161,12 @@ public enum QuickPasteLayout {
     /// Boundaries: the top edge of the first row and the bottom edge of the last row are
     /// both inside; the line between two rows belongs to the *lower* of the two.
     ///
-    /// The index returned is into the entries array, newest first. When `isFlipped` the
-    /// rows are drawn bottom-up, so the bottom visual row is entry 0.
+    /// The index returned is into the entries array, newest first, and it is also the
+    /// row's place on screen counted from the top: the top row is entry 0, always.
     public static func highlightedIndex(
         mouse: CGPoint,
         panelFrame: CGRect,
         entryCount: Int,
-        isFlipped: Bool = false,
         metrics: QuickPasteMetrics
     ) -> Int? {
         guard entryCount > 0 else { return nil }
@@ -185,7 +179,6 @@ public enum QuickPasteLayout {
         // Counted from the top of the list. The floor puts a shared boundary in the lower
         // row; the min catches the bottom edge, where the division lands exactly on
         // `entryCount`.
-        let slot = min(Int((rowsTop - mouse.y) / metrics.rowHeight), entryCount - 1)
-        return isFlipped ? entryCount - 1 - slot : slot
+        return min(Int((rowsTop - mouse.y) / metrics.rowHeight), entryCount - 1)
     }
 }

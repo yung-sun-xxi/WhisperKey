@@ -86,6 +86,61 @@ final class QuickPasteSourceScanTests: XCTestCase {
         XCTAssertTrue(panel.contains("metrics: metrics"), "the panel does not size or draw from the metrics it is given")
     }
 
+    /// One order (#211): the newest entry is the top row wherever the panel opens, so
+    /// nothing in the popup's files turns the list over or asks whether it was.
+    func testNothingTurnsTheListOver() throws {
+        let files = Self.wholeFiles + [
+            Self.controller,
+            "Sources/QuickPaste/QuickPasteLayout.swift",
+            "Sources/QuickPaste/QuickPasteSelection.swift",
+        ]
+        for path in files {
+            let text = try Self.source(path)
+            XCTAssertFalse(text.contains("isFlipped"), "\(path) still asks whether the panel is turned over")
+            XCTAssertFalse(text.contains("reversed()"), "\(path) reverses something")
+        }
+        // The rows are the entries, in the entries' own order.
+        let panel = try Self.source(Self.panel)
+        XCTAssertTrue(panel.contains("entries.map { entry in"), "the panel's rows are not the entries in order")
+    }
+
+    /// The age (#211): each row's label is `QuickPasteAge` of the entry's own date against
+    /// one moment per reveal, which the controller takes from the clock exactly once and
+    /// the snapshot hook fixes, so its pictures do not change between runs.
+    func testTheAgeIsMeasuredOnceAgainstTheMomentOfReveal() throws {
+        let panel = try Self.source(Self.panel)
+        let controller = try Self.source(Self.controller)
+        let hook = try Self.source("WhisperKey/QuickPasteSnapshotHook.swift")
+
+        XCTAssertTrue(
+            panel.contains("age: QuickPasteAge.label(capturedAt: entry.capturedAt, now: now)"),
+            "the panel does not give a row its entry's age"
+        )
+        XCTAssertFalse(panel.contains("Date()"), "the panel reads the clock itself, on every repaint")
+
+        XCTAssertTrue(
+            controller.contains("QuickPasteContent(entries: entries, now: Date())"),
+            "the controller does not measure the ages against the moment of reveal"
+        )
+        XCTAssertEqual(Self.count("Date()", in: controller), 1, "the controller reads the clock more than once")
+
+        XCTAssertTrue(
+            hook.contains("QuickPasteContent(entries: entries, now: now)"),
+            "the snapshot hook does not pass its fixed moment"
+        )
+        XCTAssertTrue(
+            hook.contains("static let now = Date(timeIntervalSinceReferenceDate: 0)"),
+            "the snapshot hook's moment is not fixed"
+        )
+        XCTAssertFalse(hook.contains("Date()"), "the snapshot hook reads the clock, so its pictures change between runs")
+        // And its invented entries are dated back from that moment, each by its own age,
+        // so the pictures show more than one label.
+        XCTAssertTrue(
+            hook.contains("capturedAt: now.addingTimeInterval(-$0.age)"),
+            "the snapshot hook's entries are not dated against its fixed moment"
+        )
+    }
+
     /// The copied entry's symbol is a one-line swap: its name is written once.
     func testTheCopiedSymbolIsWrittenOnce() throws {
         var total = 0

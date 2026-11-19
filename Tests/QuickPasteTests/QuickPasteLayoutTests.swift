@@ -67,14 +67,12 @@ private extension QuickPasteLayout {
     static func highlightedIndex(
         mouse: CGPoint,
         panelFrame: CGRect,
-        entryCount: Int,
-        isFlipped: Bool = false
+        entryCount: Int
     ) -> Int? {
         highlightedIndex(
             mouse: mouse,
             panelFrame: panelFrame,
             entryCount: entryCount,
-            isFlipped: isFlipped,
             metrics: Geometry.metrics
         )
     }
@@ -267,32 +265,6 @@ final class QuickPasteLayoutTests: XCTestCase {
         }
     }
 
-    func testFlippedRowBoundariesOnTheMidnightGrid() {
-        // Flipped, the bottom row is the newest entry: the same bands, counted upwards.
-        let frame = panelFrame(entryCount: 5)
-        for k in 0..<5 {
-            let top = frame.maxY - 46 - 34 * CGFloat(k)
-            XCTAssertEqual(
-                QuickPasteLayout.highlightedIndex(
-                    mouse: CGPoint(x: frame.midX, y: top - 17),
-                    panelFrame: frame,
-                    entryCount: 5,
-                    isFlipped: true
-                ),
-                4 - k
-            )
-        }
-        XCTAssertNil(
-            QuickPasteLayout.highlightedIndex(
-                mouse: CGPoint(x: frame.midX, y: frame.minY + 4),
-                panelFrame: frame,
-                entryCount: 5,
-                isFlipped: true
-            ),
-            "the bottom inset is nothing when flipped too"
-        )
-    }
-
     func testAnEmptyPanelHasNothingToPointAt() {
         let frame = panelFrame(entryCount: 0)
         let mouse = CGPoint(x: frame.midX, y: Geometry.centreOfSlot(0, in: frame).y)
@@ -366,45 +338,6 @@ final class QuickPasteLayoutTests: XCTestCase {
         )
     }
 
-    // MARK: - Hit testing when the panel had to flip above the cursor
-
-    func testFlippedPanelPutsTheNewestEntryInTheBottomRow() {
-        let frame = panelFrame(entryCount: 3)
-
-        XCTAssertEqual(
-            QuickPasteLayout.highlightedIndex(
-                mouse: Geometry.centreOfSlot(2, in: frame),
-                panelFrame: frame,
-                entryCount: 3,
-                isFlipped: true
-            ),
-            0,
-            "the row nearest the cursor is the newest entry"
-        )
-        XCTAssertEqual(
-            QuickPasteLayout.highlightedIndex(
-                mouse: Geometry.centreOfSlot(0, in: frame),
-                panelFrame: frame,
-                entryCount: 3,
-                isFlipped: true
-            ),
-            2
-        )
-    }
-
-    func testFlippingDoesNotChangeWhatCountsAsOutsideThePanel() {
-        let frame = panelFrame(entryCount: 3)
-
-        XCTAssertNil(
-            QuickPasteLayout.highlightedIndex(
-                mouse: CGPoint(x: frame.midX, y: frame.maxY + 1),
-                panelFrame: frame,
-                entryCount: 3,
-                isFlipped: true
-            )
-        )
-    }
-
     // MARK: - Placement: the ordinary case
 
     func testPanelHangsUnderTheCursorWithAGap() {
@@ -416,7 +349,6 @@ final class QuickPasteLayoutTests: XCTestCase {
             cursor: cursor, size: size, visibleFrame: screen
         )
 
-        XCTAssertFalse(placement.isFlipped)
         XCTAssertEqual(placement.origin.y, cursor.y - Geometry.gap - size.height, accuracy: 0.001)
         XCTAssertEqual(placement.origin.x, cursor.x - Geometry.cursorInsetX, accuracy: 0.001)
     }
@@ -437,16 +369,15 @@ final class QuickPasteLayoutTests: XCTestCase {
             QuickPasteLayout.highlightedIndex(
                 mouse: CGPoint(x: cursor.x, y: firstRowY),
                 panelFrame: frame,
-                entryCount: 5,
-                isFlipped: placement.isFlipped
+                entryCount: 5
             ),
             0
         )
     }
 
-    // MARK: - Placement: clamped to the visible frame
+    // MARK: - Placement: shifted up near the bottom edge, never turned over (#211)
 
-    func testNearTheBottomEdgeThePanelFlipsAboveTheCursorInsteadOfBeingCutOff() {
+    func testNearTheBottomEdgeThePanelIsShiftedUpToStayOnScreen() {
         let size = QuickPasteLayout.panelSize(entryCount: 5)
         let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
         let cursor = CGPoint(x: 700, y: 30)
@@ -455,13 +386,40 @@ final class QuickPasteLayoutTests: XCTestCase {
             cursor: cursor, size: size, visibleFrame: screen
         )
 
-        XCTAssertTrue(placement.isFlipped)
-        XCTAssertGreaterThanOrEqual(placement.origin.y, screen.minY)
-        XCTAssertLessThanOrEqual(placement.origin.y + size.height, screen.maxY)
-        XCTAssertEqual(placement.origin.y, cursor.y + Geometry.gap, accuracy: 0.001)
+        // Not above the cursor: resting on the bottom of the usable area.
+        XCTAssertEqual(placement.origin.y, screen.minY, accuracy: 0.001)
+        XCTAssertEqual(placement.origin.x, cursor.x - Geometry.cursorInsetX, accuracy: 0.001)
     }
 
-    func testAFlippedPanelStillPutsTheNewestEntryNearestTheCursor() {
+    func testTheShiftStopsAtTheBottomOfTheVisibleFrameNotOfTheScreen() {
+        // A Dock 70 tall: the usable area starts at 70, and so does the shifted panel.
+        let size = QuickPasteLayout.panelSize(entryCount: 5)
+        let screen = CGRect(x: 0, y: 70, width: 1440, height: 800)
+
+        let placement = QuickPasteLayout.placement(
+            cursor: CGPoint(x: 700, y: 100), size: size, visibleFrame: screen
+        )
+
+        XCTAssertEqual(placement.origin.y, 70, accuracy: 0.001)
+    }
+
+    func testThePanelIsShiftedOnlyAsFarAsItHasTo() {
+        // 225 tall with a gap of 10: at y 235 the panel fits below the cursor exactly.
+        let size = QuickPasteLayout.panelSize(entryCount: 5)
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        func originY(cursorY: CGFloat) -> CGFloat {
+            QuickPasteLayout.placement(
+                cursor: CGPoint(x: 700, y: cursorY), size: size, visibleFrame: screen
+            ).origin.y
+        }
+
+        XCTAssertEqual(originY(cursorY: 236), 1, accuracy: 0.001, "one point of room to spare")
+        XCTAssertEqual(originY(cursorY: 235), 0, accuracy: 0.001, "fits exactly")
+        XCTAssertEqual(originY(cursorY: 234), 0, accuracy: 0.001, "one point short: shifted up by one")
+        XCTAssertEqual(originY(cursorY: 0), 0, accuracy: 0.001, "the cursor on the bottom edge")
+    }
+
+    func testAShiftedPanelStillHasTheNewestEntryInTheTopRow() {
         let size = QuickPasteLayout.panelSize(entryCount: 5)
         let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
         let cursor = CGPoint(x: 700, y: 30)
@@ -471,18 +429,41 @@ final class QuickPasteLayoutTests: XCTestCase {
         )
         let frame = CGRect(origin: placement.origin, size: size)
 
-        // Walk straight up from the cursor: the first row met is the newest entry.
-        let bottomRowY = Geometry.rowsTop(frame) - 5 * Geometry.rowHeight + 1
+        // Top down, entry 0 first, exactly as when the panel hangs below the cursor.
+        for slot in 0..<5 {
+            XCTAssertEqual(
+                QuickPasteLayout.highlightedIndex(
+                    mouse: Geometry.centreOfSlot(slot, in: frame),
+                    panelFrame: frame,
+                    entryCount: 5
+                ),
+                slot,
+                "slot \(slot)"
+            )
+        }
+    }
+
+    func testAShiftedPanelOpensOverTheCursor() {
+        // The consequence of shifting instead of turning over: the pointer starts inside
+        // the panel, on a row. `QuickPasteSelection` is what keeps that from being a choice.
+        let size = QuickPasteLayout.panelSize(entryCount: 5)
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let cursor = CGPoint(x: 700, y: 30)
+
+        let placement = QuickPasteLayout.placement(
+            cursor: cursor, size: size, visibleFrame: screen
+        )
+        let frame = CGRect(origin: placement.origin, size: size)
+
+        XCTAssertTrue(frame.contains(cursor), "\(frame) should cover \(cursor)")
+        // Rows of 34 above a bottom band of 9: y 30 is in the last row, the oldest entry.
         XCTAssertEqual(
-            QuickPasteLayout.highlightedIndex(
-                mouse: CGPoint(x: cursor.x, y: bottomRowY),
-                panelFrame: frame,
-                entryCount: 5,
-                isFlipped: placement.isFlipped
-            ),
-            0
+            QuickPasteLayout.highlightedIndex(mouse: cursor, panelFrame: frame, entryCount: 5),
+            4
         )
     }
+
+    // MARK: - Placement: clamped to the visible frame
 
     func testNearTheRightEdgeThePanelIsPushedLeftToStayWhole() {
         let size = QuickPasteLayout.panelSize(entryCount: 5)
@@ -518,7 +499,7 @@ final class QuickPasteLayoutTests: XCTestCase {
             cursor: cursor, size: size, visibleFrame: screen
         )
 
-        XCTAssertFalse(placement.isFlipped)
+        XCTAssertEqual(placement.origin.y, cursor.y - Geometry.gap - size.height, accuracy: 0.001)
         XCTAssertLessThanOrEqual(placement.origin.y + size.height, screen.maxY)
     }
 

@@ -4,45 +4,42 @@ import QuickPaste
 import SwiftUI
 import ThemeKit
 
-/// What the quick-paste panel shows: the most recent clipboard entries, and which of them
-/// the pointer is currently over.
+/// What the quick-paste panel shows: the most recent clipboard entries, newest in the top
+/// row wherever the panel opens (#211), how old each one is, and which of them is chosen.
 ///
 /// The entries come from `ClipboardHistoryStore`, not from a live read of the pasteboard.
 /// Which one is chosen is decided by `QuickPasteLayout` from the mouse position, never by
 /// the view — the panel takes no mouse events at all. `ThemedQuickPasteView` draws it.
 struct QuickPasteContent: Equatable {
-    /// Newest first, already trimmed to what the panel should display.
+    /// Newest first, already trimmed to what the panel should display. Also the order of
+    /// the rows on screen, top down.
     let entries: [ClipboardEntry]
-    /// Rows are drawn bottom-up when the panel had to open above the cursor, so the
-    /// newest entry is the one next to the pointer either way.
-    let isFlipped: Bool
-    /// Index into `entries` — not into the rows on screen — of the entry under the
-    /// pointer. `nil` means the pointer is over none of them, and releasing cancels.
+    /// The moment the panel was revealed. Every row's age is measured against it, once:
+    /// nothing ticks while the panel is open, and a repaint of the highlight draws the
+    /// same labels.
+    let now: Date
+    /// Index into `entries`, which is also the row counted from the top, of the chosen
+    /// entry. `nil` means none is chosen, and releasing cancels.
     var highlightedIndex: Int?
 
-    init(entries: [ClipboardEntry], isFlipped: Bool = false, highlightedIndex: Int? = nil) {
+    init(entries: [ClipboardEntry], now: Date, highlightedIndex: Int? = nil) {
         self.entries = entries
-        self.isFlipped = isFlipped
+        self.now = now
         self.highlightedIndex = highlightedIndex
     }
 
     var isEmpty: Bool { entries.isEmpty }
-
-    /// Entries in the order they appear from the top of the panel down.
-    var displayOrder: [(index: Int, entry: ClipboardEntry)] {
-        let numbered = Array(entries.enumerated()).map { (index: $0.offset, entry: $0.element) }
-        return isFlipped ? numbered.reversed() : numbered
-    }
 }
 
 extension QuickPasteContent {
     /// The rows as the themed view draws them, top down, and which one is selected.
     var rows: [ThemedQuickPasteView.Row] {
-        displayOrder.map { row in
+        entries.map { entry in
             ThemedQuickPasteView.Row(
-                id: row.entry.id,
-                text: row.entry.preview(maxLength: QuickPasteLayout.previewLength),
-                marker: row.entry.origin == .whisperKey ? .dictated : .copied
+                id: entry.id,
+                text: entry.preview(maxLength: QuickPasteLayout.previewLength),
+                marker: entry.origin == .whisperKey ? .dictated : .copied,
+                age: QuickPasteAge.label(capturedAt: entry.capturedAt, now: now)
             )
         }
     }

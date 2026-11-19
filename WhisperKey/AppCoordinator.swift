@@ -186,7 +186,11 @@ final class AppCoordinator: ObservableObject {
     private let encoder = AudioEncoder()
     private let sounds = SoundPlayer()
     private let appleMusic = AppleMusicRecordingController()
-    private let outputRouter = TranscriptionOutputRouter()
+    /// Built with the clipboard history, unlike quick paste's own router: a dictation
+    /// goes into the list as a dictated entry, and its swap-and-restore stays out (#211).
+    /// And with a typer, also unlike quick paste's: files on the clipboard are left alone
+    /// and the dictation typed instead (#215).
+    private let outputRouter: TranscriptionOutputRouter
     private let toastPresenter = ToastPresenter()
     private let log = Logger(subsystem: "WhisperKey", category: "AppCoordinator")
     private var cancellables = Set<AnyCancellable>()
@@ -239,6 +243,12 @@ final class AppCoordinator: ObservableObject {
         self.clipboardHistory = clipboardHistory
         self.clipboardMonitor = clipboardMonitor
         self.quickPaste = quickPaste
+        // The one line that connects the transcription output to the clipboard history.
+        // With quick paste off the monitor is not running, and the router records nothing.
+        self.outputRouter = TranscriptionOutputRouter(
+            clipboardHistory: TranscriptionClipboardHistory(monitor: clipboardMonitor, store: clipboardHistory),
+            textTyper: CGEventTextTyper()
+        )
         // Constructing these is not turning the feature on. The activation starts the
         // watcher only when the setting says so, and the event tap only when Accessibility
         // is also granted — which `synchronizeHotkey` reports as the permission changes.
@@ -782,7 +792,7 @@ final class AppCoordinator: ObservableObject {
                 log.info("output delivery result ignored for stale operationID=\(operationID.uuidString, privacy: .public)")
                 return
             }
-            log.info("output delivery finished operationID=\(operationID.uuidString, privacy: .public) provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public) audioDuration=\(audioDuration, privacy: .public) bytes=\(encoded.data.count, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public) wroteClipboard=\(output.wroteClipboard, privacy: .public) pasteDecision=\(String(describing: output.pasteDecision), privacy: .public) restoredClipboard=\(output.restoredClipboard, privacy: .public)")
+            log.info("output delivery finished operationID=\(operationID.uuidString, privacy: .public) provider=\(self.settings.provider.rawValue, privacy: .public) model=\(self.currentTranscriptionModelID, privacy: .public) audioDuration=\(audioDuration, privacy: .public) bytes=\(encoded.data.count, privacy: .public) elapsed=\(self.processingElapsed(), privacy: .public) wroteClipboard=\(output.wroteClipboard, privacy: .public) pasteDecision=\(String(describing: output.pasteDecision), privacy: .public) restoredClipboard=\(output.restoredClipboard, privacy: .public) delivery=\(String(describing: output.delivery), privacy: .public)")
             log.info("transcription output saveToClipboard=\(outputSettings.saveToClipboard, privacy: .public) autoPaste=\(outputSettings.autoPaste, privacy: .public) wroteClipboard=\(output.wroteClipboard, privacy: .public) pasteDecision=\(String(describing: output.pasteDecision), privacy: .public) restoredClipboard=\(output.restoredClipboard, privacy: .public)")
             let priceEstimate = TranscriptionCostEstimator.estimate(
                 providerID: settings.provider.rawValue,
@@ -800,7 +810,7 @@ final class AppCoordinator: ObservableObject {
                     currency: priceEstimate?.currency,
                     destinationUsed: Self.destinationUsed(for: outputSettings),
                     copiedToClipboard: outputSettings.saveToClipboard && output.wroteClipboard,
-                    autoPasted: output.pasteDecision == .paste
+                    autoPasted: output.autoPasted
                 )
             } else {
                 _ = history.append(
@@ -813,7 +823,7 @@ final class AppCoordinator: ObservableObject {
                     currency: priceEstimate?.currency,
                     destinationUsed: Self.destinationUsed(for: outputSettings),
                     copiedToClipboard: outputSettings.saveToClipboard && output.wroteClipboard,
-                    autoPasted: output.pasteDecision == .paste
+                    autoPasted: output.autoPasted
                 )
             }
             if priceEstimate == nil {

@@ -18,7 +18,7 @@ public struct AXFocusInfo: Equatable, Sendable {
 }
 
 public enum PasteDecision: Equatable, Sendable {
-    /// Synthesise ⌘V into the focused field.
+    /// Put the text into the focused field: ⌘V, or typing it (#215).
     case paste
     /// Leave the text on the clipboard only — paste would be unsafe.
     case clipboardOnly
@@ -129,6 +129,17 @@ public struct PasteEngine: Sendable {
     /// the popup needed something else.
     @discardableResult
     public func attemptPaste(secureFieldPolicy: SecureFieldPolicy = .refuse) -> PasteDecision {
+        let decision = decideForFocusedElement(secureFieldPolicy: secureFieldPolicy)
+        if decision == .paste {
+            keyboard.sendCommandV()
+        }
+        return decision
+    }
+
+    /// Inspects the focused element and decides, without sending anything. For a caller
+    /// that puts the text in some other way — the typing fallback (#215) — and must still
+    /// leave a refused field alone.
+    public func decideForFocusedElement(secureFieldPolicy: SecureFieldPolicy = .refuse) -> PasteDecision {
         let focus = inspector.currentFocus()
         let secureInputActive = secureProbe.isSecureInputActive()
         let decision = Self.decide(
@@ -137,9 +148,6 @@ public struct PasteEngine: Sendable {
             secureFieldPolicy: secureFieldPolicy
         )
         pasteLog.info("focus role=\(focus?.role ?? "nil", privacy: .public) subrole=\(focus?.subrole ?? "nil", privacy: .public) secureInput=\(secureInputActive, privacy: .public) decision=\(String(describing: decision), privacy: .public)")
-        if decision == .paste {
-            keyboard.sendCommandV()
-        }
         return decision
     }
 }

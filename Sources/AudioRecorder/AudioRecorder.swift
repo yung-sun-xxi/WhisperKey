@@ -1230,21 +1230,27 @@ protocol CaptureEngineHosting: AnyObject, Sendable {
     /// once; the work runs on the host's queue. Idempotent.
     func warm()
 
+    /// `onBluetoothInput` is called, off the actor, when the host is about to
+    /// build its engine on an input it has read to be Bluetooth: that build
+    /// is slow, and the recorder gives it a longer deadline.
     func begin(
         captureID: UInt64,
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     )
 
     /// Moves a running capture onto this host: builds the engine for the
     /// current route, attaches `pipeline` (the same one, with everything it
     /// recorded so far), and starts. Never resets the capture's diagnostics.
+    /// `onBluetoothInput` as for `begin`.
     func continueCapture(
         captureID: UInt64,
         pipeline: CapturePipeline,
         diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureSwitchResult, CaptureBeginError>) -> Void
     )
 
@@ -1303,6 +1309,45 @@ private final class SettleOnceBox<Value: Sendable>: @unchecked Sendable {
                 lock.unlock()
             }
         }
+    }
+}
+
+/// The deadline a start or a switch waits for the host under. A host that has
+/// read, on its own queue, that the input it is about to build on is Bluetooth
+/// moves it once to the Bluetooth deadline; both count from when the wait
+/// began. A host that never gets that far keeps the short one.
+private final class CaptureStartDeadline: @unchecked Sendable {
+    private let lock = NSLock()
+    private let startedNanos: UInt64
+    private let bluetoothTimeout: TimeInterval
+    private var timeout: TimeInterval
+
+    init(timeout: TimeInterval, bluetoothTimeout: TimeInterval) {
+        startedNanos = audioRecorderNowNanos()
+        self.timeout = timeout
+        self.bluetoothTimeout = bluetoothTimeout
+    }
+
+    /// The timeout in force and the moment it runs out.
+    var current: (timeout: TimeInterval, endNanos: UInt64) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (timeout, endNanos(of: timeout))
+    }
+
+    /// Moves to the Bluetooth deadline and returns the old and new timeouts,
+    /// or nil when it already moved, is not longer, or has already run out.
+    func extendForBluetooth() -> (from: TimeInterval, to: TimeInterval)? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard bluetoothTimeout > timeout, audioRecorderNowNanos() < endNanos(of: timeout) else { return nil }
+        let from = timeout
+        timeout = bluetoothTimeout
+        return (from, bluetoothTimeout)
+    }
+
+    private func endNanos(of timeout: TimeInterval) -> UInt64 {
+        startedNanos + UInt64(timeout * 1_000_000_000)
     }
 }
 
@@ -1435,6 +1480,7 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
         previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureStartResult, CaptureBeginError>) -> Void
     ) {
         queue.async { [self] in
@@ -1443,7 +1489,8 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
                     captureID: captureID,
                     outputFormat: outputFormat,
                     diagnostics: diagnostics,
-                    previousInputDevice: previousInputDevice
+                    previousInputDevice: previousInputDevice,
+                    onBluetoothInput: onBluetoothInput
                 )
             }
 
@@ -1469,11 +1516,17 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         captureID: UInt64,
         pipeline: CapturePipeline,
         diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: @escaping @Sendable (AudioInputDeviceSnapshot) -> Void,
         completion: @escaping @Sendable (Result<CaptureSwitchResult, CaptureBeginError>) -> Void
     ) {
         queue.async { [self] in
             let result: Result<CaptureSwitchResult, CaptureBeginError> = Self.mapErrors {
-                try performContinue(captureID: captureID, pipeline: pipeline, diagnostics: diagnostics)
+                try performContinue(
+                    captureID: captureID,
+                    pipeline: pipeline,
+                    diagnostics: diagnostics,
+                    onBluetoothInput: onBluetoothInput
+                )
             }
             guard !isRetiredNow else {
                 recorderLog.error(
@@ -1649,6 +1702,20 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         )
     }
 
+    /// Builds the engine inside a start or a switch. A Bluetooth input is
+    /// reported before the build: binding it moves the headset to HFP, which
+    /// takes seconds, and the recorder extends its deadline on that report.
+    private func warmForCapture(
+        phases: inout CaptureStartPhases,
+        onBluetoothInput: (AudioInputDeviceSnapshot) -> Void
+    ) throws {
+        let route = Self.currentRoute()
+        if let input = route?.input, input.isBluetooth {
+            onBluetoothInput(input.inputSnapshot)
+        }
+        try performWarm(route: route, phases: &phases)
+    }
+
     /// Points the engine's input unit at `device`. Only this engine records
     /// from it; the system default input stays as the user set it.
     private func bind(_ input: AVAudioInputNode, to device: AudioInputDeviceSnapshot) throws {
@@ -1751,7 +1818,8 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         captureID: UInt64,
         outputFormat: AVAudioFormat,
         diagnostics: AudioRecorderDiagnosticsState,
-        previousInputDevice: AudioInputDeviceSnapshot?
+        previousInputDevice: AudioInputDeviceSnapshot?,
+        onBluetoothInput: (AudioInputDeviceSnapshot) -> Void
     ) throws -> CaptureStartResult {
         let beginStartedAt = audioRecorderNowNanos()
         if let warmFailure {
@@ -1770,7 +1838,7 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
             }
         } else {
             // Just built from the current route: nothing to be stale against.
-            try performWarm(route: Self.currentRoute(), phases: &phases)
+            try warmForCapture(phases: &phases, onBluetoothInput: onBluetoothInput)
         }
         guard let warm = warmState, let engine else {
             throw AudioRecorderError.engineFailedToStart("engine host is not warm")
@@ -1831,7 +1899,8 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
     private func performContinue(
         captureID: UInt64,
         pipeline: CapturePipeline,
-        diagnostics: AudioRecorderDiagnosticsState
+        diagnostics: AudioRecorderDiagnosticsState,
+        onBluetoothInput: (AudioInputDeviceSnapshot) -> Void
     ) throws -> CaptureSwitchResult {
         if let warmFailure {
             throw CaptureBeginError.staleHost("an earlier warm-up failed: \(warmFailure)")
@@ -1839,7 +1908,7 @@ final class CaptureEngineHost: CaptureEngineHosting, @unchecked Sendable {
         let startedAt = audioRecorderNowNanos()
         var phases = CaptureStartPhases(reusedEngine: warmState != nil)
         if warmState == nil {
-            try performWarm(route: Self.currentRoute(), phases: &phases)
+            try warmForCapture(phases: &phases, onBluetoothInput: onBluetoothInput)
         }
         guard let warm = warmState, let engine else {
             throw AudioRecorderError.engineFailedToStart("engine host is not warm")
@@ -1894,6 +1963,14 @@ public actor AudioRecorder {
     /// wedged `coreaudiod` can make the first CoreAudio call of a capture
     /// never return; the user gets an error instead of a dead recorder.
     public static let defaultStartTimeout: TimeInterval = 3
+    /// The start deadline once the host has read that the input it builds on
+    /// is Bluetooth, counted from the same moment as `defaultStartTimeout`.
+    /// Prewarm skips a Bluetooth mic (it would hold the headset in HFP), so
+    /// the engine is built inside the start, and AirPods switching from A2DP
+    /// to HFP takes about 6 s there: 3 s timed out every press. The longer
+    /// deadline only follows a route read that answered, so a wedged
+    /// `coreaudiod` still fails at `defaultStartTimeout`.
+    public static let defaultBluetoothStartTimeout: TimeInterval = 10
 
     /// How long the recording host may deliver no tap buffer before the
     /// capture is moved to a fresh host (#200).
@@ -1901,6 +1978,7 @@ public actor AudioRecorder {
 
     public let maxDuration: TimeInterval
     let startTimeout: TimeInterval
+    let bluetoothStartTimeout: TimeInterval
     /// Nil turns the delivery watchdog off: test hosts that never deliver
     /// must not start switching in tests that are not about it.
     let deadEngineTimeout: TimeInterval?
@@ -1956,6 +2034,7 @@ public actor AudioRecorder {
     public init(maxDuration: TimeInterval = AudioRecorder.defaultMaxDuration) {
         self.maxDuration = maxDuration
         self.startTimeout = AudioRecorder.defaultStartTimeout
+        self.bluetoothStartTimeout = AudioRecorder.defaultBluetoothStartTimeout
         self.deadEngineTimeout = AudioRecorder.defaultDeadEngineTimeout
         self.engineHostFactory = { CaptureEngineHost(hostID: $0) }
         self.permissionCheckOverride = nil
@@ -1969,6 +2048,7 @@ public actor AudioRecorder {
     init(
         maxDuration: TimeInterval,
         startTimeout: TimeInterval,
+        bluetoothStartTimeout: TimeInterval = AudioRecorder.defaultBluetoothStartTimeout,
         engineHostFactory: @escaping @Sendable (UInt64) -> CaptureEngineHosting,
         permissionCheck: @escaping @Sendable () async throws -> Void,
         isMicrophoneAuthorized: @escaping @Sendable () -> Bool = { true },
@@ -1977,6 +2057,7 @@ public actor AudioRecorder {
     ) {
         self.maxDuration = maxDuration
         self.startTimeout = startTimeout
+        self.bluetoothStartTimeout = bluetoothStartTimeout
         self.deadEngineTimeout = deadEngineTimeout
         self.engineHostFactory = engineHostFactory
         self.permissionCheckOverride = permissionCheck
@@ -2041,12 +2122,12 @@ public actor AudioRecorder {
         nextCaptureID += 1
         routeChangedWhileStarting = false
         // One deadline for the whole start, a retry on a fresh host included.
-        let deadlineNanos = audioRecorderNowNanos() + UInt64(startTimeout * 1_000_000_000)
+        let deadline = CaptureStartDeadline(timeout: startTimeout, bluetoothTimeout: bluetoothStartTimeout)
         var replacedStaleHost = false
 
         while true {
             let host = self.host ?? makeHost()
-            let outcome = await begin(on: host, captureID: captureID, deadlineNanos: deadlineNanos)
+            let outcome = await begin(on: host, captureID: captureID, deadline: deadline)
 
             switch outcome {
             case .success(let started):
@@ -2123,35 +2204,49 @@ public actor AudioRecorder {
     private func begin(
         on host: CaptureEngineHosting,
         captureID: UInt64,
-        deadlineNanos: UInt64
+        deadline: CaptureStartDeadline
     ) async -> Result<CaptureStartResult, CaptureBeginError> {
-        let deadline = startTimeout
-        let now = audioRecorderNowNanos()
-        guard deadlineNanos > now else {
-            return .failure(.recorder(.engineStartTimedOut(deadline)))
+        let (timeout, endNanos) = deadline.current
+        guard endNanos > audioRecorderNowNanos() else {
+            return .failure(.recorder(.engineStartTimedOut(timeout)))
         }
-        let remainingNanos = deadlineNanos - now
-
-        let box = SettleOnceBox<Result<CaptureStartResult, CaptureBeginError>>()
-        host.begin(
+        let onBluetoothInput = Self.bluetoothDeadlineExtender(
+            deadline,
+            phase: "start",
             captureID: captureID,
-            outputFormat: outputFormat,
-            diagnostics: diagnostics,
-            previousInputDevice: lastInputDevice
-        ) { result in
-            box.settle(result)
+            hostID: host.hostID
+        )
+        // Awaiting the host frees the actor's executor: a CoreAudio call stuck
+        // inside it cannot block a later `stop()` or `start()`.
+        return await awaitHost(
+            deadline: deadline,
+            timeoutValue: { .failure(.recorder(.engineStartTimedOut($0))) }
+        ) { [outputFormat, diagnostics, lastInputDevice] completion in
+            host.begin(
+                captureID: captureID,
+                outputFormat: outputFormat,
+                diagnostics: diagnostics,
+                previousInputDevice: lastInputDevice,
+                onBluetoothInput: onBluetoothInput,
+                completion: completion
+            )
         }
+    }
 
-        let timeoutTask = Task { [box] in
-            try? await Task.sleep(nanoseconds: remainingNanos)
-            guard !Task.isCancelled else { return }
-            box.settle(.failure(.recorder(.engineStartTimedOut(deadline))))
+    /// What a host calls, on its own queue, when it is about to build on a
+    /// Bluetooth input: moves `deadline` to the Bluetooth one, once.
+    private static func bluetoothDeadlineExtender(
+        _ deadline: CaptureStartDeadline,
+        phase: String,
+        captureID: UInt64,
+        hostID: UInt64
+    ) -> @Sendable (AudioInputDeviceSnapshot) -> Void {
+        { input in
+            guard let extended = deadline.extendForBluetooth() else { return }
+            recorderLog.notice(
+                "\(phase, privacy: .public): captureID=\(captureID, privacy: .public) hostID=\(hostID, privacy: .public) input=\(input.logDescription, privacy: .public) is Bluetooth; deadline extended from \(extended.from, privacy: .public)s to \(extended.to, privacy: .public)s for the HFP switch"
+            )
         }
-        // Awaiting the box frees the actor's executor: a CoreAudio call stuck
-        // inside the host cannot block a later `stop()` or `start()`.
-        let outcome = await box.value()
-        timeoutTask.cancel()
-        return outcome
     }
 
     // MARK: - Following the route mid-capture
@@ -2246,14 +2341,22 @@ public actor AudioRecorder {
         // The old engine keeps recording until the new one delivers.
         pipeline.prepareSwitch(toSourceID: newHost.hostID)
 
-        let deadline = startTimeout
+        let deadline = CaptureStartDeadline(timeout: startTimeout, bluetoothTimeout: bluetoothStartTimeout)
+        let onBluetoothInput = Self.bluetoothDeadlineExtender(
+            deadline,
+            phase: "deviceSwitch",
+            captureID: captureID,
+            hostID: newHost.hostID
+        )
         let outcome: Result<CaptureSwitchResult, CaptureBeginError> = await awaitHost(
-            timeoutValue: .failure(.recorder(.engineStartTimedOut(deadline)))
+            deadline: deadline,
+            timeoutValue: { .failure(.recorder(.engineStartTimedOut($0))) }
         ) { [diagnostics] completion in
             newHost.continueCapture(
                 captureID: captureID,
                 pipeline: pipeline,
                 diagnostics: diagnostics,
+                onBluetoothInput: onBluetoothInput,
                 completion: completion
             )
         }
@@ -2415,25 +2518,37 @@ public actor AudioRecorder {
     /// The host's route check, bounded by the start deadline. A host that does
     /// not answer is treated as stuck, which is a reason to move off it.
     private func checkRoute(on host: CaptureEngineHosting) async -> String? {
-        let deadline = startTimeout
-        return await awaitHost(timeoutValue: "the route check did not answer within \(deadline)s") { completion in
+        // Never extended: a route check builds nothing.
+        let deadline = CaptureStartDeadline(timeout: startTimeout, bluetoothTimeout: startTimeout)
+        return await awaitHost(
+            deadline: deadline,
+            timeoutValue: { "the route check did not answer within \($0)s" }
+        ) { completion in
             host.checkRoute(completion: completion)
         }
     }
 
-    /// Runs one host call off the actor and waits for its completion or the
-    /// start deadline, whichever comes first.
+    /// Runs one host call off the actor and waits for its completion or
+    /// `deadline`, whichever comes first. `timeoutValue` gets the timeout in
+    /// force when it ran out.
     private func awaitHost<Value: Sendable>(
-        timeoutValue: Value,
+        deadline: CaptureStartDeadline,
+        timeoutValue: @escaping @Sendable (TimeInterval) -> Value,
         _ call: (@escaping @Sendable (Value) -> Void) -> Void
     ) async -> Value {
         let box = SettleOnceBox<Value>()
         call { box.settle($0) }
-        let timeoutNanos = UInt64(startTimeout * 1_000_000_000)
         let timeoutTask = Task { [box] in
-            try? await Task.sleep(nanoseconds: timeoutNanos)
-            guard !Task.isCancelled else { return }
-            box.settle(timeoutValue)
+            // Read again on every wake-up: the host may have extended it meanwhile.
+            while !Task.isCancelled {
+                let (timeout, endNanos) = deadline.current
+                let now = audioRecorderNowNanos()
+                guard endNanos > now else {
+                    box.settle(timeoutValue(timeout))
+                    return
+                }
+                try? await Task.sleep(nanoseconds: endNanos - now)
+            }
         }
         let value = await box.value()
         timeoutTask.cancel()
