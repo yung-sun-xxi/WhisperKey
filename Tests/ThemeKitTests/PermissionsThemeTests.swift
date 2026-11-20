@@ -120,21 +120,23 @@ final class PermissionsThemeTests: XCTestCase {
                 XCTAssertEqual(cards[1].bottom - cards[1].top, layout.cardHeight, accuracy: 1, "\(theme) \(state) second card height")
                 XCTAssertEqual(read.size.height - cards[1].bottom, midnight.permissions.paddingBottom, accuracy: 0.5, "\(theme) \(state) bottom padding")
                 XCTAssertTrue(read.at(x: 4, y: read.size.height / 2).matches(theme.tokens.colors.surface), "\(theme) \(state) surface")
-                XCTAssertTrue(read.at(x: 4, y: read.step / 2).matches(theme.tokens.colors.divider), "\(theme) \(state) divider")
+                XCTAssertTrue(read.topEdge(x: 4).contains { $0.matches(theme.tokens.colors.divider) }, "\(theme) \(state) divider: \(read.topEdge(x: 4))")
             }
         }
     }
 
     /// Each card's glyph is `secondaryText` in both states, inside the glyph column and
-    /// within the title row's height.
+    /// within the title row's height. The row is measured from the card as drawn
+    /// (`Read.cardTops`), not from `Layout`.
     func testTheGlyphsAreSecondaryTextInBothStates() throws {
         let layout = Layout(midnight)
         for theme in AppTheme.allCases {
             let colors = theme.tokens.colors
             for state in State.allCases {
                 let read = try render(theme: theme, state: state)
+                let cardTops = try read.cardTops()
                 for card in 0..<2 {
-                    let rowTop = layout.cardTop(card) + midnight.permissions.cardPaddingTop
+                    let rowTop = cardTops[card] + midnight.permissions.cardPaddingTop
                     let pixels = read.pixels(
                         x: layout.glyphLeft..<(layout.glyphLeft + midnight.permissions.glyphColumn),
                         y: (rowTop - 3)..<(rowTop + midnight.sizes.keycap + 3)
@@ -156,25 +158,31 @@ final class PermissionsThemeTests: XCTestCase {
 
     /// A card that needs access shows its badge at the card's right text edge and an
     /// enabled button on `raisedControl`; a granted card a disabled button, its fill the
-    /// card's.
+    /// card's. The badge is looked for from the card as drawn (`Read.cardTops`).
     func testTheCardsFollowTheirState() throws {
         let layout = Layout(midnight)
         for theme in AppTheme.allCases {
             let colors = theme.tokens.colors
             for state in State.allCases {
                 let read = try render(theme: theme, state: state)
+                let cardTops = try read.cardTops()
                 for card in 0..<2 {
                     let granted = state.granted[card]
                     let fill = read.at(x: layout.buttonLeft + 4, y: layout.buttonMiddle(card))
                     let edge = read.at(x: layout.buttonLeft + midnight.controlMetrics.edgeWidth / 2, y: layout.buttonMiddle(card))
                     XCTAssertTrue(fill.matches(granted ? colors.card : colors.raisedControl), "\(theme) \(state) card \(card) button fill: \(fill)")
                     XCTAssertTrue(edge.matches(colors.edge), "\(theme) \(state) card \(card) button edge: \(edge)")
-                    // Just inside the badge's top edge, left of the card's right text edge.
-                    let badge = read.at(x: layout.textRight - 4, y: layout.cardTop(card) + midnight.permissions.cardPaddingTop + 1.75)
+                    // The top 4 points of the title row, left of the card's right text edge:
+                    // the box's edge and hatch when it needs access, above the word's
+                    // ascenders when granted. A band, not a point: the hatch leaves pixels
+                    // of the card's colour between its stripes.
+                    let rowTop = cardTops[card] + midnight.permissions.cardPaddingTop
+                    let band = read.pixels(x: (layout.textRight - 4)..<(layout.textRight - 4 + read.step), y: rowTop..<(rowTop + 4))
+                    let drawn = band.filter { !$0.sample.matches(colors.card) }
                     if granted {
-                        XCTAssertTrue(badge.matches(colors.card), "\(theme) \(state) card \(card): a granted card has a box: \(badge)")
+                        XCTAssertTrue(drawn.isEmpty, "\(theme) \(state) card \(card): a granted card has a box: \(drawn)")
                     } else {
-                        XCTAssertFalse(badge.matches(colors.card), "\(theme) \(state) card \(card): no badge at the right: \(badge)")
+                        XCTAssertFalse(drawn.isEmpty, "\(theme) \(state) card \(card): no badge at the right")
                     }
                 }
             }
@@ -548,7 +556,36 @@ final class PermissionsThemeTests: XCTestCase {
             if let top = start { runs.append((top, size.height)) }
             return runs
         }
+
+        /// The tops of the two cards as drawn. The stack's height is not whole pixels (299.2
+        /// at 2x), so SwiftUI may draw it up to a pixel lower than `Layout` puts it,
+        /// depending on how the fitting size rounds; a check that reads one pixel row from
+        /// `Layout` then misses what it looks for. `testTheCardsAreWhereTheStackPutsThem`
+        /// holds these tops to `Layout` within a point.
+        @MainActor
+        func cardTops() throws -> [CGFloat] {
+            let runs = cardRuns()
+            guard runs.count == 2 else {
+                XCTFail("expected two cards, read \(runs)")
+                throw CardsNotFound()
+            }
+            return runs.map(\.top)
+        }
+
+        /// The pixel rows of the view's top edge (`edgeWidth`) and the row below it, at `x`:
+        /// the divider lands in one of them, depending on the same rounding.
+        func topEdge(x: CGFloat) -> [Sample] {
+            var samples: [Sample] = []
+            var y = step / 2
+            while y < tokens.controlMetrics.edgeWidth + step {
+                samples.append(at(x: x, y: y))
+                y += step
+            }
+            return samples
+        }
     }
+
+    private struct CardsNotFound: Error {}
 
     private func render(theme: AppTheme, state: State) throws -> Read {
         let root = root(theme: theme, state: state)
