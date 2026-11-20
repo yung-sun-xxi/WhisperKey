@@ -23,20 +23,18 @@ public enum SettingsWindowGeometry {
         tabWellHeight(tokens)
     }
 
-    /// A pane of `rows` form rows and `hintLines` hint lines.
-    public static func paneHeight(_ tokens: ThemeTokens, rows: Int, hintLines: Int = 0) -> CGFloat {
+    /// A pane of `rows` form rows.
+    public static func paneHeight(_ tokens: ThemeTokens, rows: Int) -> CGFloat {
         let window = tokens.settingsWindow
-        let items = rows + hintLines
-        let gaps = CGFloat(max(items - 1, 0)) * window.rowSpacing
+        let gaps = CGFloat(max(rows - 1, 0)) * window.rowSpacing
         return window.rowAreaTop
             + CGFloat(rows) * tokens.sizes.formRow
-            + CGFloat(hintLines) * window.hintLineHeight
             + gaps
             + window.rowAreaBottom
     }
 
     /// The window's content: the header and the pane.
-    public static func contentHeight(_ tokens: ThemeTokens, rows: Int, hintLines: Int = 0) -> CGFloat {
-        headerHeight(tokens) + paneHeight(tokens, rows: rows, hintLines: hintLines)
+    public static func contentHeight(_ tokens: ThemeTokens, rows: Int) -> CGFloat {
+        headerHeight(tokens) + paneHeight(tokens, rows: rows)
     }
 }
