@@ -6,9 +6,9 @@ import SwiftUI
 
 /// One row of a list: `sizes.listRow` tall, `spacing.rowPadding` inside, `radii.row`,
 /// the `selectedRow` fill under the pointer. A failed row lies on `failureFill` under
-/// the `failureHatch` stripes instead (#105 rule 1: failure is a state, not a brand
-/// moment). The caller insets the list `spacing.rowInset` from the shell and styles the
-/// row's text.
+/// the `failureHatch` stripes at `failedRowHatchStrength` instead (#105 rule 1: failure
+/// is a state, not a brand moment). The caller insets the list `spacing.rowInset` from
+/// the shell and styles the row's text.
 ///
 /// `isSelected` hands the selection to the caller, for a list that takes no mouse events
 /// (the quick paste popup, #166): the row then ignores hover, and a selected row draws
@@ -44,7 +44,7 @@ public struct ThemedListRow<Content: View>: View {
                 case .failed:
                     shape
                         .fill(tokens.colors.failureFill.color)
-                        .overlay(ThemedFailureHatch().clipShape(shape))
+                        .overlay(ThemedFailureHatch().opacity(tokens.controlMetrics.failedRowHatchStrength).clipShape(shape))
                 case .normal:
                     shape.fill((isFilled ? tokens.colors.selectedRow : ThemeColor.system(.clear)).color)
                 }
@@ -144,3 +144,4 @@ public struct ThemedFailureButton: View {
         .fixedSize()
     }
 }
+

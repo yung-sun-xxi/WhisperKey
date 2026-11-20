@@ -149,8 +149,11 @@ final class PermissionsThemeTests: XCTestCase {
                     }
                     let top = try XCTUnwrap(drawn.map(\.y).min())
                     let bottom = try XCTUnwrap(drawn.map(\.y).max())
-                    XCTAssertGreaterThanOrEqual(top, rowTop - 0.5, "\(theme) \(state) card \(card): the glyph is above the title row")
-                    XCTAssertLessThanOrEqual(bottom, rowTop + midnight.sizes.keycap + 0.5, "\(theme) \(state) card \(card): the glyph is below the title row")
+                    // One pixel of rounding: half a point on a 2x screen, a whole point
+                    // when the main display is 1x (an external monitor), where SwiftUI
+                    // snaps the glyph to whole points.
+                    XCTAssertGreaterThanOrEqual(top, rowTop - read.step, "\(theme) \(state) card \(card): the glyph is above the title row")
+                    XCTAssertLessThanOrEqual(bottom, rowTop + midnight.sizes.keycap + read.step, "\(theme) \(state) card \(card): the glyph is below the title row")
                 }
             }
         }

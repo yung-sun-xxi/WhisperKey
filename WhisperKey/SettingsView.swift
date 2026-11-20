@@ -864,9 +864,18 @@ private struct HeaderVerticalDivider: View {
 struct PopoverDivider: View {
     @Environment(\.themeTokens) private var tokens
 
+    /// Draws the line in `mutedEdge` (06) at a third of its strength instead of `divider`
+    /// (03). The history rows use it: in `divider` the line between two rows all but
+    /// vanished against the popover, and full `mutedEdge` was far too bright.
+    var prominent = false
+
+    private static let prominentOpacity = 1.0 / 3.0
+
     var body: some View {
         Rectangle()
-            .fill(tokens.colors.divider.color)
+            .fill(prominent
+                ? tokens.colors.mutedEdge.color.opacity(Self.prominentOpacity)
+                : tokens.colors.divider.color)
             .frame(height: tokens.panels.popover.edgeWidth)
             .frame(maxWidth: .infinity)
     }

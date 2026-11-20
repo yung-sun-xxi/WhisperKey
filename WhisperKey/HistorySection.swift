@@ -50,7 +50,7 @@ struct HistorySection: View {
                                         onRetry: { coordinator.retryHistoryEntry(entry) }
                                     )
                                     if entry.id != history.entries.last?.id {
-                                        PopoverDivider()
+                                        PopoverDivider(prominent: true)
                                             .padding(.horizontal, tokens.spacing.rowPadding)
                                     }
                                 }
