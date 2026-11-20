@@ -48,6 +48,15 @@ public final class ClipboardMonitor {
     /// instead, and stops it at the edge of the file: see `ClipboardHistoryStore`.
     public static let concealedTypeIdentifier = "org.nspasteboard.ConcealedType"
 
+    /// The type a Finder copy puts on the pasteboard beside the file's name as plain text.
+    /// A change carrying it is a copied file, not copied text, and is not recorded: picking
+    /// the name from the popup would paste the name instead of the file.
+    ///
+    /// Only the presence of the type counts. The URL is never resolved, opened or checked:
+    /// file access by WhisperKey to the Desktop or Documents raises a TCC prompt (see #215).
+    /// A web link copied in a browser carries `public.url` instead, and is recorded.
+    public static let fileURLTypeIdentifier = "public.file-url"
+
     public typealias Capture = (String, ClipboardEntryOrigin, Bool) -> Void
 
     private let pasteboard: ClipboardReading
@@ -131,6 +140,8 @@ public final class ClipboardMonitor {
         lastChangeCount = current
 
         let content = pasteboard.read()
+        // A copied file, skipped after the counter has advanced, so it is not re-read.
+        guard !content.types.contains(Self.fileURLTypeIdentifier) else { return }
         guard let string = content.string else { return }
         // Recorded, not skipped — but flagged, so the store keeps it out of the file.
         let isConcealed = content.types.contains(Self.concealedTypeIdentifier)
