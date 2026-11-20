@@ -131,7 +131,7 @@ final class WelcomeThemeTests: XCTestCase {
         let before = try buttonRow(of: host, size: size)
 
         for theme in [AppTheme.daylight, .midnight] {
-            store.theme = theme
+            store.theme = ThemeChoice(theme)
             settle(host)
             XCTAssertEqual(host.fittingSize, size, "\(theme)")
             let after = try buttonRow(of: host, size: size)
@@ -172,7 +172,7 @@ final class WelcomeThemeTests: XCTestCase {
 
         for theme in [AppTheme.daylight, .midnight] {
             window.backgroundColor = .systemPink
-            store.theme = theme
+            store.theme = ThemeChoice(theme)
             settle(host)
             XCTAssertEqual(window.backgroundColor, theme.tokens.colors.surface.nsColor, "\(theme)")
             XCTAssertEqual(window.appearance?.name, theme.tokens.windowAppearance.nsAppearance?.name, "\(theme)")

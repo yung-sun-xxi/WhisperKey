@@ -146,7 +146,7 @@ final class UsageBreakdownThemeTests: XCTestCase {
         for theme in [AppTheme.daylight, .midnight] {
             window.backgroundColor = .systemPink
             window.appearance = NSAppearance(named: theme.tokens.windowAppearance == .dark ? .aqua : .darkAqua)
-            store.theme = theme
+            store.theme = ThemeChoice(theme)
             XCTAssertEqual(window.backgroundColor, theme.tokens.colors.surface.nsColor, "\(theme)")
             XCTAssertEqual(window.appearance?.name, theme.tokens.windowAppearance.nsAppearance?.name, "\(theme)")
             XCTAssertEqual(window.frame, frame, "\(theme)")
