@@ -137,6 +137,45 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(sink.texts, [])
     }
 
+    // The type identifiers below are spelled out rather than taken from the monitor, so a
+    // typo in the monitor's constant fails here instead of agreeing with itself.
+
+    /// A Finder copy: one item with the file URL, the file's name as plain text and its icon.
+    /// The name is a by-product, not a text copy.
+    func testAFileCopiedInFinderIsNotCaptured() {
+        pasteboard.write(
+            string: "Screenshot 2026-11-17 at 18.31.28",
+            types: ["public.file-url", "public.utf16-external-plain-text", "com.apple.icns"]
+        )
+        monitor.poll()
+
+        XCTAssertEqual(sink.texts, [])
+    }
+
+    /// A link copied in a browser carries `public.url`, not `public.file-url`, and is text
+    /// the user meant to copy.
+    func testAWebLinkCopiedInABrowserIsCaptured() {
+        pasteboard.write(string: "https://example.com/page", types: ["public.url"])
+        monitor.poll()
+
+        XCTAssertEqual(sink.texts, ["https://example.com/page"])
+    }
+
+    /// Skipping a file copy still consumes its change: polling again finds nothing new, and
+    /// the next real copy lands.
+    func testAfterASkippedFileCopyTheNextTextCopyIsCaptured() {
+        pasteboard.write(string: "report.pdf", types: ["public.file-url"])
+        monitor.poll()
+        monitor.poll()
+        XCTAssertEqual(sink.texts, [])
+        XCTAssertEqual(pasteboard.readCount, 1, "the skipped copy must not be read again")
+
+        pasteboard.write(string: "typed text")
+        monitor.poll()
+
+        XCTAssertEqual(sink.texts, ["typed text"])
+    }
+
     // MARK: - Origin
 
     func testAnItemCarryingTheOriginMarkerIsAttributedToWhisperKey() {
