@@ -42,7 +42,6 @@ final class PopoverSourceScanTests: XCTestCase {
             "struct CancelStatusIcon",
             "struct UsageSummaryRow",
             "struct UsageMetricColumn",
-            "struct HeaderOutputToggle",
             "struct HeaderVerticalDivider",
             "func configurePanel",
             "func updatePanelSize",

@@ -16,6 +16,9 @@ enum UsageBreakdownWindowController {
     private static var window: NSWindow?
     private static var themeFollower: AnyCancellable?
     private static let delegate = UsageBreakdownWindowDelegate()
+    /// The event number of the mouse-down that last hid the window from the transient
+    /// stack; cleared whenever the window is shown or closed.
+    private static var hiddenByMouseDown: Int?
 
     /// The window while it is on screen, for the Debug build's snapshot hook.
     static var openWindow: NSWindow? {
@@ -23,7 +26,25 @@ enum UsageBreakdownWindowController {
         return window
     }
 
+    /// The popover's usage bar (#220): opens the window, or closes it when it was open as
+    /// the click began. `UsageBreakdownClick` holds the decision.
+    static func toggle(usageStats: UsageStatsStore, settings: SettingsStore) {
+        let event = NSApp.currentEvent
+        let thisClick = event?.type == .leftMouseUp ? event?.eventNumber : nil
+        switch UsageBreakdownClick.action(
+            isOnScreen: openWindow != nil,
+            hiddenByMouseDown: hiddenByMouseDown,
+            thisClick: thisClick
+        ) {
+        case .open:
+            show(usageStats: usageStats, settings: settings)
+        case .close:
+            close()
+        }
+    }
+
     static func show(usageStats: UsageStatsStore, settings: SettingsStore) {
+        hiddenByMouseDown = nil
         if let existing = window {
             existing.makeKeyAndOrderFront(nil)
             existing.orderFrontRegardless()
@@ -66,6 +87,7 @@ enum UsageBreakdownWindowController {
     /// builds it again. For the Debug build's snapshot hook, which shows it over another
     /// usage store.
     static func close() {
+        hiddenByMouseDown = nil
         guard let closing = window else { return }
         closing.delegate = nil
         windowDidClose()
@@ -84,6 +106,11 @@ enum UsageBreakdownWindowController {
             layer: .secondary,
             window: window
         ) {
+            // The stack hides the window from its mouse-down monitor, where the current
+            // event is that mouse-down: remembered so the usage bar's own click, ending on
+            // the matching mouse-up, knows the window was open (#220).
+            let event = NSApp.currentEvent
+            UsageBreakdownWindowController.hiddenByMouseDown = event?.type == .leftMouseDown ? event?.eventNumber : nil
             UsageBreakdownWindowController.hide()
         }
     }

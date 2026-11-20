@@ -54,6 +54,8 @@ public struct ThemeTokens: Equatable, Sendable {
     public var welcome: WelcomeMetrics
     /// The permissions onboarding window: its width, paddings, cards and glyph column.
     public var permissions: PermissionsMetrics
+    /// The "?" after a row title and the bubble its hover shows.
+    public var hint: HintMetrics
 
     public init(
         theme: AppTheme,
@@ -75,7 +77,8 @@ public struct ThemeTokens: Equatable, Sendable {
         resetUsage: ResetUsageMetrics,
         usageBreakdown: UsageBreakdownMetrics,
         welcome: WelcomeMetrics,
-        permissions: PermissionsMetrics
+        permissions: PermissionsMetrics,
+        hint: HintMetrics
     ) {
         self.theme = theme
         self.colors = colors
@@ -97,6 +100,7 @@ public struct ThemeTokens: Equatable, Sendable {
         self.usageBreakdown = usageBreakdown
         self.welcome = welcome
         self.permissions = permissions
+        self.hint = hint
     }
 }
 
@@ -746,8 +750,8 @@ public extension ThemeTokens {
         public var sectionTop: CGFloat
         /// Between the usage block and the period picker.
         public var usageGap: CGFloat
-        /// Above the toggle row.
-        public var togglesTop: CGFloat
+        /// Under the period picker, above the history header.
+        public var usageBottom: CGFloat
         /// Under the history list.
         public var listBottom: CGFloat
         /// Under the Full history and Clear history buttons.
@@ -765,10 +769,6 @@ public extension ThemeTokens {
         public var chevronSegment: CGFloat
         public var chevronArm: CGFloat
         public var chevronStroke: CGFloat
-        /// Between each half of the toggle row and the divider between them, and that
-        /// divider's height.
-        public var toggleGap: CGFloat
-        public var toggleDividerHeight: CGFloat
         /// Between a list row's text and what follows it.
         public var rowGap: CGFloat
         /// The round stop button, and the square drawn in it.
@@ -786,7 +786,7 @@ public extension ThemeTokens {
         public init(
             sectionTop: CGFloat,
             usageGap: CGFloat,
-            togglesTop: CGFloat,
+            usageBottom: CGFloat,
             listBottom: CGFloat,
             buttonsBottom: CGFloat,
             headerGap: CGFloat,
@@ -797,8 +797,6 @@ public extension ThemeTokens {
             chevronSegment: CGFloat,
             chevronArm: CGFloat,
             chevronStroke: CGFloat,
-            toggleGap: CGFloat,
-            toggleDividerHeight: CGFloat,
             rowGap: CGFloat,
             stopButton: CGFloat,
             stopSquare: CGFloat,
@@ -810,7 +808,7 @@ public extension ThemeTokens {
         ) {
             self.sectionTop = sectionTop
             self.usageGap = usageGap
-            self.togglesTop = togglesTop
+            self.usageBottom = usageBottom
             self.listBottom = listBottom
             self.buttonsBottom = buttonsBottom
             self.headerGap = headerGap
@@ -821,8 +819,6 @@ public extension ThemeTokens {
             self.chevronSegment = chevronSegment
             self.chevronArm = chevronArm
             self.chevronStroke = chevronStroke
-            self.toggleGap = toggleGap
-            self.toggleDividerHeight = toggleDividerHeight
             self.rowGap = rowGap
             self.stopButton = stopButton
             self.stopSquare = stopSquare
@@ -1290,6 +1286,40 @@ public extension ThemeTokens {
             self.glyph = glyph
             self.glyphColumn = glyphColumn
             self.glyphGap = glyphGap
+        }
+    }
+}
+
+// MARK: - The row hint
+
+public extension ThemeTokens {
+    /// The hint of a Settings row (#220): a "?" in `small` and `secondaryText` after the
+    /// row's title, and on hover a bubble in the card's look (`card` fill, an `edge`
+    /// outline of `controlMetrics.edgeWidth`, `radii.card`), its text in `caption` and
+    /// `primaryText`. Not in either design; the sizes are steps of the sheet's scale.
+    struct HintMetrics: Equatable, Sendable {
+        /// Between a row's title and its "?".
+        public var iconGap: CGFloat
+        /// The bubble's text inset, left and right then top and bottom.
+        public var bubblePaddingHorizontal: CGFloat
+        public var bubblePaddingVertical: CGFloat
+        /// The widest the bubble grows before its text wraps.
+        public var bubbleMaxWidth: CGFloat
+        /// Between the "?" and the bubble under it.
+        public var bubbleOffset: CGFloat
+
+        public init(
+            iconGap: CGFloat,
+            bubblePaddingHorizontal: CGFloat,
+            bubblePaddingVertical: CGFloat,
+            bubbleMaxWidth: CGFloat,
+            bubbleOffset: CGFloat
+        ) {
+            self.iconGap = iconGap
+            self.bubblePaddingHorizontal = bubblePaddingHorizontal
+            self.bubblePaddingVertical = bubblePaddingVertical
+            self.bubbleMaxWidth = bubbleMaxWidth
+            self.bubbleOffset = bubbleOffset
         }
     }
 }

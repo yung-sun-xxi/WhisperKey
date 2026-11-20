@@ -211,3 +211,30 @@ final class UsageBreakdownThemeTests: XCTestCase {
         view.layoutSubtreeIfNeeded()
     }
 }
+
+/// The usage bar opens the Usage by model window and a second click closes it (#220).
+final class UsageBreakdownClickTests: XCTestCase {
+    func testAClosedWindowOpens() {
+        XCTAssertEqual(UsageBreakdownClick.action(isOnScreen: false, hiddenByMouseDown: nil, thisClick: 7), .open)
+        XCTAssertEqual(UsageBreakdownClick.action(isOnScreen: false, hiddenByMouseDown: nil, thisClick: nil), .open)
+    }
+
+    func testAWindowOnScreenCloses() {
+        XCTAssertEqual(UsageBreakdownClick.action(isOnScreen: true, hiddenByMouseDown: nil, thisClick: 7), .close)
+        // Pressed from the keyboard: no click hid it first.
+        XCTAssertEqual(UsageBreakdownClick.action(isOnScreen: true, hiddenByMouseDown: nil, thisClick: nil), .close)
+    }
+
+    /// The popover's mouse-down hid the window an instant before this mouse-up: it was
+    /// open when the click began, so the click closes it rather than showing it again.
+    func testAWindowHiddenByThisClickCloses() {
+        XCTAssertEqual(UsageBreakdownClick.action(isOnScreen: false, hiddenByMouseDown: 7, thisClick: 7), .close)
+    }
+
+    /// Hidden by an earlier click elsewhere in the popover (a history row): this click
+    /// opens it again.
+    func testAWindowHiddenByAnEarlierClickOpens() {
+        XCTAssertEqual(UsageBreakdownClick.action(isOnScreen: false, hiddenByMouseDown: 6, thisClick: 7), .open)
+        XCTAssertEqual(UsageBreakdownClick.action(isOnScreen: false, hiddenByMouseDown: 6, thisClick: nil), .open)
+    }
+}

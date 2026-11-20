@@ -35,25 +35,30 @@ struct HistorySection: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(height: tokens.sizes.listRow)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(history.entries) { entry in
-                                HistoryInlineRow(
-                                    entry: entry,
-                                    copied: copiedID == entry.id,
-                                    onCopy: { copy(entry: entry) },
-                                    onOpenReadWindow: { openReadWindow(entry: entry) },
-                                    onRetry: { coordinator.retryHistoryEntry(entry) }
-                                )
-                                if entry.id != history.entries.last?.id {
-                                    PopoverDivider()
-                                        .padding(.horizontal, tokens.spacing.rowPadding)
+                    // Every row's age is measured against the same minute, and redrawn
+                    // when the minute turns while the popover is open (#220).
+                    TimelineView(.everyMinute) { timeline in
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(history.entries) { entry in
+                                    HistoryInlineRow(
+                                        entry: entry,
+                                        age: HistoryAge.label(createdAt: entry.createdAt, now: timeline.date),
+                                        copied: copiedID == entry.id,
+                                        onCopy: { copy(entry: entry) },
+                                        onOpenReadWindow: { openReadWindow(entry: entry) },
+                                        onRetry: { coordinator.retryHistoryEntry(entry) }
+                                    )
+                                    if entry.id != history.entries.last?.id {
+                                        PopoverDivider()
+                                            .padding(.horizontal, tokens.spacing.rowPadding)
+                                    }
                                 }
                             }
                         }
+                        .frame(height: inlineListHeight)
+                        .scrollIndicators(.visible)
                     }
-                    .frame(height: inlineListHeight)
-                    .scrollIndicators(.visible)
                 }
             }
             .padding(.horizontal, tokens.spacing.rowInset)
@@ -160,11 +165,13 @@ struct WindowAccessor: NSViewRepresentable {
     }
 }
 
-/// One history entry: one line of text in `body`, a green check once copied, and
+/// One history entry: one line of text in `body`, a green check once copied, its age
+/// (`now`, `5m`, `2w`, …) in `caption` and `secondaryText` against the trailing edge, and
 /// Retry on an entry that can be recognised again. A failed entry is a hatched row in
-/// `secondaryText`.
+/// `secondaryText`. The text is what gives way: the age is never cut or wrapped.
 private struct HistoryInlineRow: View {
     let entry: HistoryEntry
+    let age: String
     let copied: Bool
     let onCopy: () -> Void
     let onOpenReadWindow: () -> Void
@@ -187,6 +194,11 @@ private struct HistoryInlineRow: View {
                             .font(tokens.type.caption.font)
                             .foregroundStyle(tokens.colors.success.color)
                     }
+                    Text(age)
+                        .font(tokens.type.caption.font)
+                        .foregroundStyle(tokens.colors.secondaryText.color)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())

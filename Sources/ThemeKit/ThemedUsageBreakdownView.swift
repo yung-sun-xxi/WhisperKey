@@ -27,6 +27,31 @@ public struct UsageBreakdownLine: Identifiable, Equatable, Sendable {
     }
 }
 
+/// What a click on the popover's usage bar does to the Usage by model window (#220): the
+/// first opens it, the next closes it, the one after opens it again.
+///
+/// A click anywhere in the popover first hides the window from the popover's transient
+/// stack on mouse-down, before the bar's action runs on mouse-up. So "the window was open"
+/// is either the window on screen, or the window hidden by the mouse-down of this very
+/// click, which the stack reports by its event number (a mouse-up carries its own
+/// mouse-down's number).
+public enum UsageBreakdownClick: Equatable, Sendable {
+    case open
+    case close
+
+    /// - Parameters:
+    ///   - isOnScreen: the window is visible now.
+    ///   - hiddenByMouseDown: the event number of the mouse-down that last hid the window
+    ///     from the transient stack, if any since it was last shown.
+    ///   - thisClick: the event number of the mouse-up running the action; `nil` when the
+    ///     bar was pressed from the keyboard.
+    public static func action(isOnScreen: Bool, hiddenByMouseDown: Int?, thisClick: Int?) -> UsageBreakdownClick {
+        if isOnScreen { return .close }
+        if let hiddenByMouseDown, let thisClick, hiddenByMouseDown == thisClick { return .close }
+        return .open
+    }
+}
+
 /// The Usage by model window's content as drawn (#184): a `divider` line under the
 /// titlebar; the caller's period picker on a `bar` band; another `divider` line; then a
 /// `card` holding the table — the caps header over an `edge` line, one `listRow` per

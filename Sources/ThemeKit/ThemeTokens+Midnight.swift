@@ -173,7 +173,9 @@ public extension ThemeTokens {
         popover: PopoverMetrics(
             sectionTop: 14,           // the usage block, "padding:14px 16px 0"
             usageGap: 8,              // the period picker, "margin-top:8px"
-            togglesTop: 10,           // the toggles, "padding:10px 8px 0"
+            // The design's gap above the toggles, "padding:10px 8px 0", kept under the
+            // picker now that the toggles live in Settings (#220).
+            usageBottom: 10,
             listBottom: 8,            // the list, "padding:0 8px 8px"
             // Not in the design, which has no history buttons: one step above 8.
             buttonsBottom: 10,
@@ -185,10 +187,6 @@ public extension ThemeTokens {
             chevronSegment: 26,       // "width:26px"
             chevronArm: 6,            // "width:6px;height:6px"
             chevronStroke: 1.5,       // "border-top:1.5px"
-            // Not in the design, which stacks the toggles in two rows; the app keeps
-            // them side by side. The gap is a step, the divider as tall as a keycap.
-            toggleGap: 14,
-            toggleDividerHeight: 18,
             rowGap: 10,               // a list row, "gap:10px"
             // Not in the design, which drops the stop button for a status line; the
             // app keeps it at about its earlier size.
@@ -339,6 +337,14 @@ public extension ThemeTokens {
             glyph: ThemeFont(size: 18, weight: .regular),
             glyphColumn: 22,
             glyphGap: 12
+        ),
+        // Not in either design: the row hint (#220). Judged by eye.
+        hint: HintMetrics(
+            iconGap: 4,
+            bubblePaddingHorizontal: 10,
+            bubblePaddingVertical: 6,
+            bubbleMaxWidth: 260,
+            bubbleOffset: 4
         )
     )
 }
