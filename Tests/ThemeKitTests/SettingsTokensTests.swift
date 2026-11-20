@@ -96,7 +96,7 @@ final class SettingsTokensTests: XCTestCase {
         XCTAssertEqual(colors.failureText, colors.primaryText)
         XCTAssertEqual(colors.cautionText, colors.secondaryText)
         XCTAssertEqual(colors.actionGlyph, colors.secondaryText)
-        XCTAssertEqual(colors.chipEdge, colors.edge)
+        XCTAssertEqual(colors.controlEdge, colors.edge)
         XCTAssertEqual(midnight.type.fieldCaption, midnight.type.caption)
     }
 

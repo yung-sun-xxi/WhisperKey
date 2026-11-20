@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Midnight's pop-up: a system `NSPopUpButton`, so its menu, keyboard handling and
 /// VoiceOver stay the system's, with a cell that draws the closed button from the tokens:
-/// a `card` box with an `edge` outline, the title in `body`, up and down chevrons in
+/// a `controlFill` box with a `controlEdge` outline, the title in `body`, up and down chevrons in
 /// `secondaryText`. Disabled, it is the sheet's disabled control: no fill, 05 edge,
 /// 07 label.
 struct DrawnPopUpButton: NSViewRepresentable {
@@ -86,10 +86,10 @@ final class DrawnPopUpButtonCell: NSPopUpButtonCell {
         let box = cellFrame.insetBy(dx: edge / 2, dy: edge / 2)
         let path = NSBezierPath(roundedRect: box, xRadius: radius, yRadius: radius)
         if isEnabled {
-            (isHighlighted ? colors.raisedControl : colors.card).nsColor.setFill()
+            (isHighlighted ? colors.raisedControl : colors.controlFill).nsColor.setFill()
             path.fill()
         }
-        colors.edge.nsColor.setStroke()
+        colors.controlEdge.nsColor.setStroke()
         path.lineWidth = edge
         path.stroke()
 

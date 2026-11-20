@@ -96,8 +96,8 @@ private struct ThemedHintAnchorView: NSViewRepresentable {
 }
 
 /// The one hint bubble on screen: a borderless, click-through child window of the row's
-/// window, under the "?" and aligned to its leading edge, kept inside the screen's
-/// visible frame (above the "?" when there is no room under it).
+/// window, opened at the pointer as a tooltip is, and kept inside the visible frame of
+/// the screen the pointer is on.
 @MainActor
 final class ThemedHintBubbleWindow {
     static let shared = ThemedHintBubbleWindow()
@@ -105,6 +105,7 @@ final class ThemedHintBubbleWindow {
     private var panel: NSPanel?
     private var host: NSHostingController<AnyView>?
 
+    /// `anchor` names the window the bubble belongs to; the pointer places it.
     func show(_ text: AttributedString, tokens: ThemeTokens, under anchor: NSView?) {
         hide()
         guard let anchor, let parent = anchor.window else { return }
@@ -114,9 +115,15 @@ final class ThemedHintBubbleWindow {
         ))
         let proposal = CGSize(width: tokens.hint.bubbleMaxWidth, height: .greatestFiniteMagnitude)
         let size = host.sizeThatFits(in: proposal)
-        let anchorFrame = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        let screen = (parent.screen ?? NSScreen.main)?.visibleFrame
-        let origin = Self.origin(of: size, under: anchorFrame, offset: tokens.hint.bubbleOffset, within: screen)
+        let pointer = NSEvent.mouseLocation
+        let screen = (NSScreen.screens.first { $0.frame.contains(pointer) } ?? parent.screen ?? NSScreen.main)?.visibleFrame
+        let origin = Self.origin(
+            of: size,
+            pointer: pointer,
+            below: tokens.hint.belowPointer,
+            beside: tokens.hint.besidePointer,
+            within: screen
+        )
 
         let panel = NSPanel(
             contentRect: CGRect(origin: origin, size: size),
@@ -145,18 +152,20 @@ final class ThemedHintBubbleWindow {
         host = nil
     }
 
-    /// Under the anchor, its leading edge on the anchor's; moved left to stay on screen,
-    /// and above the anchor when the screen ends under it.
-    static func origin(of size: CGSize, under anchor: CGRect, offset: CGFloat, within screen: CGRect?) -> CGPoint {
-        var origin = CGPoint(x: anchor.minX, y: anchor.minY - offset - size.height)
+    /// Where the bubble's top-left corner goes for a pointer at `pointer` (screen
+    /// coordinates, y up), before the screen is considered: `below` under the hotspot and
+    /// `beside` to its right. Inside `screen`: moved left at its right edge, right at its
+    /// left edge, and above the pointer (its bottom `beside` over the hotspot) when there
+    /// is no room under it, then down from the top edge if even that does not fit.
+    static func origin(of size: CGSize, pointer: CGPoint, below: CGFloat, beside: CGFloat, within screen: CGRect?) -> CGPoint {
+        var origin = CGPoint(x: pointer.x + beside, y: pointer.y - below - size.height)
         guard let screen else { return origin }
-        if origin.x + size.width > screen.maxX {
-            origin.x = screen.maxX - size.width
-        }
+        origin.x = min(origin.x, screen.maxX - size.width)
         origin.x = max(origin.x, screen.minX)
         if origin.y < screen.minY {
-            origin.y = anchor.maxY + offset
+            origin.y = pointer.y + beside
         }
+        origin.y = min(origin.y, screen.maxY - size.height)
         return origin
     }
 }
