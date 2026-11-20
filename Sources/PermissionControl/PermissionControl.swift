@@ -25,6 +25,14 @@ public enum PermissionKind: String, CaseIterable, Sendable {
         }
     }
 
+    /// Whether the app restarts after a revoke. macOS keeps answering a running app with
+    /// the microphone status it read at launch: after `tccutil reset` the row would still
+    /// say Allowed until the app quits (seen on macOS 27). Apple Music's status is read
+    /// fresh each time; Accessibility is polled live.
+    public var revokeRestartsApp: Bool {
+        self == .microphone
+    }
+
     /// The service name `tccutil reset` takes for this permission.
     public var tccService: String {
         switch self {
@@ -135,7 +143,7 @@ public struct PermissionRevokePrompt: Equatable, Sendable {
         switch kind {
         case .microphone:
             title = "Revoke Microphone access?"
-            informativeText = "WhisperKey will ask for the microphone again the next time you record."
+            informativeText = "WhisperKey restarts to finish. It will ask for the microphone again the next time you record."
         case .accessibility:
             title = "Revoke Accessibility access?"
             informativeText = "The hotkey, auto-paste and quick paste stop working until you allow Accessibility again."
@@ -152,6 +160,25 @@ public enum TCCResetCommand {
 
     public static func arguments(for kind: PermissionKind, bundleIdentifier: String) -> [String] {
         ["reset", kind.tccService, bundleIdentifier]
+    }
+}
+
+/// Starts the app again once the current process has quit: a detached `/bin/sh` waits
+/// for the old process to exit (at most `maxWaitPolls` × 0.2 s, so a process that never
+/// quits cannot keep the script alive), then opens the bundle with Settings on `tab`.
+/// The values travel as positional parameters, never spliced into the script.
+public enum RelaunchCommand {
+    public static let executable = URL(fileURLWithPath: "/bin/sh")
+    /// The launch argument that opens Settings on a pane: `-WKOpenSettingsTab <id>`.
+    public static let openSettingsTabArgument = "WKOpenSettingsTab"
+    public static let maxWaitPolls = 50
+
+    public static func arguments(bundlePath: String, processIdentifier: Int32, settingsTab: String) -> [String] {
+        let script = """
+        for i in $(seq 1 \(maxWaitPolls)); do kill -0 "$1" 2>/dev/null || break; sleep 0.2; done
+        exec /usr/bin/open "$2" --args -\(openSettingsTabArgument) "$3"
+        """
+        return ["-c", script, "sh", String(processIdentifier), bundlePath, settingsTab]
     }
 }
 

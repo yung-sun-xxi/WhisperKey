@@ -84,12 +84,45 @@ extension AppCoordinator {
 
         switch result {
         case .success:
-            Self.permissionLog.info("revoked \(kind.tccService, privacy: .public)")
+            Self.permissionLog.notice("revoked \(kind.tccService, privacy: .public)")
+            if kind.revokeRestartsApp {
+                restartOnPermissionsTab()
+            }
             return nil
         case .failure(let error):
             Self.permissionLog.error("revoke \(kind.tccService, privacy: .public) failed: \(error.userMessage, privacy: .public)")
             return error
         }
+    }
+
+    /// Quits and starts again with Settings on the Permissions tab, so the new process
+    /// reads the permission macOS now holds (#225). If the helper cannot start, the app
+    /// stays up and the row shows the stale status until the next launch.
+    private func restartOnPermissionsTab() {
+        let process = Process()
+        process.executableURL = RelaunchCommand.executable
+        process.arguments = RelaunchCommand.arguments(
+            bundlePath: Bundle.main.bundlePath,
+            processIdentifier: ProcessInfo.processInfo.processIdentifier,
+            settingsTab: SettingsWindowController.permissionsTabIdentifier
+        )
+        do {
+            try process.run()
+        } catch {
+            Self.permissionLog.error("restart helper failed to start: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        Self.permissionLog.notice("restarting after a revoke")
+        NSApp.terminate(nil)
+    }
+
+    /// After a restart from the Permissions tab, opens Settings on the pane the launch
+    /// argument names. Without the argument, does nothing.
+    func openSettingsTabRequestedAtLaunch() {
+        guard let tab = UserDefaults.standard.string(forKey: RelaunchCommand.openSettingsTabArgument),
+              !tab.isEmpty else { return }
+        openSettingsWindow()
+        SettingsWindowController.selectTab(identifier: tab)
     }
 
     /// Whether this app may send Apple Events to Apple Music, asked without a prompt and

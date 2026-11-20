@@ -79,6 +79,7 @@ final class MenuBarController: NSObject {
         }
         prewarmSettingsWindow()
         coordinator.scheduleWelcomePresentationAfterLaunch()
+        coordinator.openSettingsTabRequestedAtLaunch()
         #if DEBUG
         PopoverSnapshotHook.startIfRequested(controller: self)
         QuickPasteSnapshotHook.startIfRequested(settings: coordinator.settings)
