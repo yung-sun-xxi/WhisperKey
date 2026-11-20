@@ -56,7 +56,7 @@ enum SettingsSnapshotHook {
 
         for theme in AppTheme.allCases {
             settingsWindowLog.info("hook theme=\(theme.rawValue, privacy: .public)")
-            log.append(contentsOf: await switchTheme(to: theme, settings: settings))
+            log.append(contentsOf: await switchTheme(to: ThemeChoice(theme), settings: settings))
 
             for tab in SettingsWindowController.tabIdentifiers {
                 await ensureWindowOpen(coordinator: coordinator)
@@ -92,7 +92,7 @@ enum SettingsSnapshotHook {
     /// button's frame (window coordinates) before and after, plus every frame the window
     /// passed through on the way (each move or resize AppKit announced). A switch that
     /// keeps the window still reports no step at all.
-    private static func switchTheme(to theme: AppTheme, settings: SettingsStore) async -> [String] {
+    private static func switchTheme(to theme: ThemeChoice, settings: SettingsStore) async -> [String] {
         let window = SettingsWindowController.relatedWindow
         guard let window, window.isVisible, settings.theme != theme else {
             settings.theme = theme

@@ -135,7 +135,7 @@ enum QuickPasteSnapshotHook {
     /// panel's frame moved.
     private static func switchTheme(to theme: AppTheme, settings: SettingsStore, window: NSWindow?) async -> String {
         let before = window?.frame
-        settings.theme = theme
+        settings.theme = ThemeChoice(theme)
         await settle()
         guard let window, let before else { return "switch to \(theme.rawValue)" }
         let after = window.frame

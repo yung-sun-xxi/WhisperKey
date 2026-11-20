@@ -51,8 +51,9 @@ public enum TranscriptionProviderID: String, CaseIterable, Codable, Sendable {
     public var keychainAccount: String { "apiKey" }
 }
 
-/// The app's look, chosen in General settings: Daylight (light) or Midnight (dark), one
-/// layout in two palettes. A third theme is a new case here.
+/// The app's look: Daylight (light) or Midnight (dark), one layout in two palettes. A
+/// third theme is a new case here. What General settings stores is a `ThemeChoice`,
+/// which resolves to one of these.
 public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     /// Stored as "classic", the theme's name before it became Daylight, so the setting
     /// of existing users still resolves.
@@ -67,6 +68,43 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .daylight: return "Light"
         case .midnight: return "Dark"
+        }
+    }
+}
+
+/// The Theme setting: a fixed theme, or `auto`, which follows the system's light or dark
+/// appearance the way the Mac itself does. Stored under the same key as before, so a
+/// stored "classic" or "midnight" still reads as Light or Dark.
+public enum ThemeChoice: String, CaseIterable, Identifiable, Sendable {
+    case auto
+    case daylight = "classic"
+    case midnight
+
+    public var id: String { rawValue }
+
+    /// The choice that always draws `theme`.
+    public init(_ theme: AppTheme) {
+        switch theme {
+        case .daylight: self = .daylight
+        case .midnight: self = .midnight
+        }
+    }
+
+    /// What Settings calls the choice.
+    public var displayName: String {
+        switch self {
+        case .auto: return "Auto"
+        case .daylight: return AppTheme.daylight.displayName
+        case .midnight: return AppTheme.midnight.displayName
+        }
+    }
+
+    /// The theme drawn under this choice while the system is dark (`systemIsDark`) or light.
+    public func resolved(systemIsDark: Bool) -> AppTheme {
+        switch self {
+        case .auto: return systemIsDark ? .midnight : .daylight
+        case .daylight: return .daylight
+        case .midnight: return .midnight
         }
     }
 }
@@ -221,7 +259,7 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
-    @Published public var theme: AppTheme {
+    @Published public var theme: ThemeChoice {
         didSet { if !loading { defaults.set(theme.rawValue, forKey: DefaultsKey.theme) } }
     }
 
@@ -346,8 +384,8 @@ public final class SettingsStore: ObservableObject {
         let storedHistoryMax = (defaults.object(forKey: DefaultsKey.historyMaxEntries) as? Int) ?? Self.defaultHistoryMaxEntries
         self.historyMaxEntries = Self.clampHistoryMax(storedHistoryMax)
         self.usageStatsRange = (defaults.string(forKey: DefaultsKey.usageStatsRange).flatMap(UsageStatsRange.init(rawValue:))) ?? .today
-        // Missing or unknown (a theme removed in a later version) falls back to Daylight.
-        self.theme = (defaults.string(forKey: DefaultsKey.theme).flatMap(AppTheme.init(rawValue:))) ?? .daylight
+        // Missing or unknown (a theme removed in a later version) falls back to Auto.
+        self.theme = (defaults.string(forKey: DefaultsKey.theme).flatMap(ThemeChoice.init(rawValue:))) ?? .auto
         self.quickPasteEnabled = (defaults.object(forKey: DefaultsKey.quickPasteEnabled) as? Bool) ?? false
         let storedHoldDuration = (defaults.object(forKey: DefaultsKey.quickPasteHoldDuration) as? Double)
             ?? Self.defaultQuickPasteHoldDuration

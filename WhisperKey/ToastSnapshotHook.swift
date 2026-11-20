@@ -134,7 +134,7 @@ enum ToastSnapshotHook {
     /// moved.
     private static func switchTheme(to theme: AppTheme, settings: SettingsStore, windows: [NSWindow]) async -> [String] {
         let before = windows.map(\.frame)
-        settings.theme = theme
+        settings.theme = ThemeChoice(theme)
         await settle()
         guard !windows.isEmpty else { return ["switch to \(theme.rawValue)"] }
         return zip(windows, before).enumerated().map { index, pair in

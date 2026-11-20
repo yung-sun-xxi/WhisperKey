@@ -59,7 +59,7 @@ enum WelcomeSnapshotHook {
         await settle()
 
         for theme in AppTheme.allCases {
-            settings.theme = theme
+            settings.theme = ThemeChoice(theme)
             await settle()
             let window = WelcomeWindowController.makeWindow(goToSettings: {}, doLater: {})
             let follower = ThemedSurfaceWindow.follow(ThemeTokensSource.shared, window: window)
@@ -86,7 +86,7 @@ enum WelcomeSnapshotHook {
     /// Switches the theme with the window open and reports its frame and its close
     /// button's frame before and after, plus every frame it passed through on the way.
     private static func switchTheme(to theme: AppTheme, settings: SettingsStore, window: NSWindow) async -> [String] {
-        guard settings.theme != theme else {
+        guard settings.theme != ThemeChoice(theme) else {
             return ["theme \(theme.rawValue) already; frame \(describe(window.frame))"]
         }
         let before = window.frame
@@ -98,7 +98,7 @@ enum WelcomeSnapshotHook {
                 MainActor.assumeIsolated { steps.append(window.frame) }
             }
         }
-        settings.theme = theme
+        settings.theme = ThemeChoice(theme)
         await settle()
         observers.forEach(center.removeObserver)
 
