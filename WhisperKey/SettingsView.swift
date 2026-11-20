@@ -8,6 +8,7 @@ import QuickPaste
 import SettingsStore
 import TranscriptionProvider
 import HistoryStore
+import PermissionControl
 import UsageStatsStore
 #if DEBUG
 import DevBuildMarker
@@ -1010,6 +1011,7 @@ private enum SettingsTab: CaseIterable {
     case recording
     case transcription
     case quickPaste
+    case permissions
 
     var title: String {
         switch self {
@@ -1019,6 +1021,8 @@ private enum SettingsTab: CaseIterable {
             return "Recording"
         case .quickPaste:
             return "Quick paste"
+        case .permissions:
+            return "Permissions"
         case .general:
             return "General"
         }
@@ -1032,13 +1036,15 @@ private enum SettingsTab: CaseIterable {
             return "recording"
         case .quickPaste:
             return "quickPaste"
+        case .permissions:
+            return "permissions"
         case .general:
             return "general"
         }
     }
 }
 
-/// The row area every pane shares: one width for all four, the theme's padding and
+/// The row area every pane shares: one width for all five, the theme's padding and
 /// surface.
 private struct SettingsPane: View {
     let tab: SettingsTab
@@ -1067,6 +1073,8 @@ private struct SettingsPane: View {
             RecordingSettingsPane(settings: settings)
         case .quickPaste:
             QuickPasteSettingsPane(settings: settings)
+        case .permissions:
+            PermissionsSettingsPane()
         case .general:
             GeneralSettingsPane(settings: settings)
         }
@@ -1648,6 +1656,162 @@ private struct GeneralSettingsPane: View {
     private func applyHistorySize(_ limit: Int) {
         settings.historyMaxEntries = limit
         historySizeDraft = settings.historyMaxEntries
+    }
+}
+
+/// One row per system permission the app uses (#225): its status, and one button that
+/// revokes it when granted or asks for it the way the popover banner does when not.
+/// Microphone and Accessibility follow `coordinator.permissions`, which the coordinator
+/// polls; Apple Music is read when the pane appears, when the app becomes active and
+/// after each action.
+private struct PermissionsSettingsPane: View {
+    @EnvironmentObject private var coordinator: AppCoordinator
+    @Environment(\.themeTokens) private var tokens
+    @State private var ownerWindow: NSWindow?
+    @State private var appleMusicStatus = PermissionStatus.unknown
+    @State private var errors: [PermissionKind: String] = [:]
+    @State private var revoking: Set<PermissionKind> = []
+
+    var body: some View {
+        SettingsPaneStack {
+            ForEach(PermissionKind.allCases, id: \.self) { kind in
+                row(for: kind)
+            }
+        }
+        .background {
+            WindowAccessor { window in
+                ownerWindow = window
+            }
+        }
+        .onAppear {
+            refresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refresh()
+        }
+    }
+
+    private func row(for kind: PermissionKind) -> some View {
+        let status = status(for: kind)
+        let action = PermissionRowAction.action(for: kind, status: status)
+
+        return SettingsRow(kind.title, hint: kind.purpose) {
+            // Trailing, so the button stays at the row's right edge when an error shows.
+            VStack(alignment: .trailing, spacing: tokens.settingsWindow.errorLineGap) {
+                HStack(spacing: tokens.settingsWindow.labelSpacing) {
+                    Text(status.text(for: kind))
+                        .font(tokens.type.small.font)
+                        .foregroundStyle(tokens.colors.secondaryText.color)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ThemedPushButton(action.buttonTitle, role: action == .revoke ? .destructive : nil) {
+                        perform(action, for: kind)
+                    }
+                    .disabled(revoking.contains(kind))
+                }
+
+                if let message = errors[kind] {
+                    Text(message)
+                        .font(tokens.type.fieldCaption.font)
+                        .foregroundStyle(tokens.colors.failureText.color)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func status(for kind: PermissionKind) -> PermissionStatus {
+        switch kind {
+        case .microphone:
+            return .microphone(coordinator.permissions.microphoneStatus)
+        case .accessibility:
+            return .accessibility(trusted: coordinator.permissions.accessibilityGranted)
+        case .appleMusic:
+            return appleMusicStatus
+        }
+    }
+
+    private func perform(_ action: PermissionRowAction, for kind: PermissionKind) {
+        errors[kind] = nil
+        switch action {
+        case .revoke:
+            PermissionRevokeConfirmation.present(
+                PermissionRevokePrompt(kind: kind),
+                from: ownerWindow ?? SettingsWindowController.relatedWindow
+            ) { confirmed in
+                guard confirmed else { return }
+                revoke(kind)
+            }
+        case .allowMicrophone:
+            coordinator.requestMicrophonePermission()
+        case .openSystemSettings:
+            switch kind {
+            case .microphone:
+                coordinator.openMicrophoneSettings()
+            case .accessibility:
+                coordinator.openAccessibilitySettings()
+            case .appleMusic:
+                coordinator.openAutomationSettings()
+            }
+        }
+    }
+
+    private func revoke(_ kind: PermissionKind) {
+        revoking.insert(kind)
+        Task { @MainActor in
+            let error = await coordinator.revokePermission(kind)
+            errors[kind] = error?.userMessage
+            revoking.remove(kind)
+            appleMusicStatus = await AppCoordinator.appleMusicAutomationStatus()
+        }
+    }
+
+    private func refresh() {
+        Task { @MainActor in
+            await coordinator.refreshPermissionsOffMainThread()
+            appleMusicStatus = await AppCoordinator.appleMusicAutomationStatus()
+        }
+    }
+}
+
+/// The question asked before Revoke resets a permission (#225).
+@MainActor
+enum PermissionRevokeConfirmation {
+    /// The alert, configured but not shown, so it can also be rendered on its own.
+    static func makeAlert(prompt: PermissionRevokePrompt) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.informativeText
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: PermissionRevokePrompt.confirmButtonTitle)
+        alert.addButton(withTitle: PermissionRevokePrompt.cancelButtonTitle)
+        alert.buttons.first?.hasDestructiveAction = true
+        // A solid red fill, as Reset usage's alert: the destructive flag alone draws only
+        // pale red on glass.
+        alert.buttons.first?.bezelColor = .systemRed
+        alert.buttons.first?.keyEquivalent = "\r"
+        alert.buttons.dropFirst().first?.keyEquivalent = "\u{1b}"
+        return alert
+    }
+
+    /// Shows the alert as a sheet on `window`; `completion` gets true only for Revoke, and
+    /// false when there is no window to show it on.
+    static func present(
+        _ prompt: PermissionRevokePrompt,
+        from window: NSWindow?,
+        completion: @escaping @MainActor (Bool) -> Void
+    ) {
+        guard let window else {
+            completion(false)
+            return
+        }
+
+        makeAlert(prompt: prompt).beginSheetModal(for: window) { response in
+            Task { @MainActor in
+                completion(response == .alertFirstButtonReturn)
+            }
+        }
     }
 }
 

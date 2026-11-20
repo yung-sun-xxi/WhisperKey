@@ -3,6 +3,7 @@ import AppKit
 import AVFoundation
 import CoreGraphics
 import HotkeyEngine
+import PermissionControl
 import QuickPaste
 import SettingsStore
 import os
@@ -10,6 +11,8 @@ import os
 extension AppCoordinator {
     static let microphoneSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
     static let accessibilitySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+    static let automationSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!
+    nonisolated private static let appleMusicBundleIdentifier = "com.apple.Music"
     private static let permissionLog = Logger(subsystem: "WhisperKey", category: "Permissions")
     private static let pendingPermissionPollInterval: UInt64 = 1_000_000_000
     private static let grantedPermissionPollInterval: UInt64 = 5_000_000_000
@@ -65,6 +68,39 @@ extension AppCoordinator {
         closeTransientWindowsBeforeExternalPermissionUI()
         refreshPermissions(forceOnboarding: true)
         Task { await requestAccessibilityPermissionAndOpenSettings() }
+    }
+
+    func openAutomationSettings() {
+        closeTransientWindowsBeforeExternalPermissionUI()
+        openSystemSettings(Self.automationSettingsURL)
+    }
+
+    /// Resets one permission of this app (its own bundle identifier, so the dev and the
+    /// release app each revoke only their own) with `tccutil`, then reads the permissions
+    /// again. Nil when the reset went through.
+    func revokePermission(_ kind: PermissionKind) async -> PermissionRevokeError? {
+        let result = await PermissionRevoker().revoke(kind, bundleIdentifier: Bundle.main.bundleIdentifier)
+        await refreshPermissionsOffMainThread()
+
+        switch result {
+        case .success:
+            Self.permissionLog.info("revoked \(kind.tccService, privacy: .public)")
+            return nil
+        case .failure(let error):
+            Self.permissionLog.error("revoke \(kind.tccService, privacy: .public) failed: \(error.userMessage, privacy: .public)")
+            return error
+        }
+    }
+
+    /// Whether this app may send Apple Events to Apple Music, asked without a prompt and
+    /// off the main thread. macOS answers only while Music is running; otherwise the
+    /// status is unknown.
+    nonisolated static func appleMusicAutomationStatus() async -> PermissionStatus {
+        await Task.detached(priority: .utility) {
+            let target = NSAppleEventDescriptor(bundleIdentifier: AppCoordinator.appleMusicBundleIdentifier)
+            let result = AEDeterminePermissionToAutomateTarget(target.aeDesc, typeWildCard, typeWildCard, false)
+            return PermissionStatus.automation(result)
+        }.value
     }
 
     func observeWorkspaceActivation() {

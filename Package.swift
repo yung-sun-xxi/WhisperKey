@@ -23,6 +23,7 @@ let package = Package(
         .library(name: "LoginItem", targets: ["LoginItem"]),
         .library(name: "SingleInstance", targets: ["SingleInstance"]),
         .library(name: "ThemeKit", targets: ["ThemeKit"]),
+        .library(name: "PermissionControl", targets: ["PermissionControl"]),
     ],
     targets: [
         .target(name: "HotkeyEngine"),
@@ -40,6 +41,9 @@ let package = Package(
         .target(name: "ErrorToast", dependencies: ["TranscriptionProvider"]),
         .target(name: "LoginItem"),
         .target(name: "SingleInstance"),
+        // What the Settings Permissions tab shows and how Revoke resets a permission
+        // through tccutil, behind a command runner the tests replace (#225).
+        .target(name: "PermissionControl"),
         // The look of each theme as values, and their delivery to every hosting root (#160).
         // QuickPaste directly: ThemeKit builds the quick paste geometry from the tokens (#166).
         .target(name: "ThemeKit", dependencies: ["SettingsStore", "QuickPaste"]),
@@ -71,6 +75,7 @@ let package = Package(
                 "SingleInstance",
                 "DevBuildMarker",
                 "ThemeKit",
+                "PermissionControl",
             ]
         ),
 
@@ -90,6 +95,7 @@ let package = Package(
         .testTarget(name: "LoginItemTests", dependencies: ["LoginItem"]),
         .testTarget(name: "SingleInstanceTests", dependencies: ["SingleInstance"]),
         .testTarget(name: "DevBuildMarkerTests", dependencies: ["DevBuildMarker"]),
+        .testTarget(name: "PermissionControlTests", dependencies: ["PermissionControl"]),
         .testTarget(name: "ThemeKitTests", dependencies: ["ThemeKit", "SettingsStore", "KeychainStore", "QuickPaste"]),
     ]
 )
