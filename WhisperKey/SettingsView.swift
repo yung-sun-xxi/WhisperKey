@@ -496,7 +496,8 @@ private final class FirstResponderParkingView: NSView {
 
 /// The menu bar popover (#161): today's structure and behaviour in the theme's look. Top
 /// to bottom the permission banner (only while a permission is missing), the header row,
-/// the usage block and period picker, the output toggles, the history and the footer.
+/// the usage block and period picker, the history and the footer. Clipboard and
+/// Auto-paste live in Settings → General (#220).
 /// The shell around it is `ThemedPanelShell(.popover)`; every colour, font and size here
 /// comes from the tokens.
 struct PopoverContent: View {
@@ -641,10 +642,7 @@ private struct CommandCenterHeader: View {
             }
             .padding(.horizontal, tokens.spacing.panelTextEdge)
             .padding(.top, tokens.popover.sectionTop)
-
-            outputToggles
-                .padding(.horizontal, tokens.spacing.rowInset)
-                .padding(.top, tokens.popover.togglesTop)
+            .padding(.bottom, tokens.popover.usageBottom)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -693,27 +691,16 @@ private struct CommandCenterHeader: View {
         }
     }
 
-    /// Clipboard and Auto-paste side by side in one `listRow`, a short divider between.
-    private var outputToggles: some View {
-        HStack(spacing: tokens.popover.toggleGap) {
-            HeaderOutputToggle(title: "Clipboard", isOn: $settings.saveTranscriptionToClipboard)
-            HeaderVerticalDivider(color: tokens.colors.divider, height: tokens.popover.toggleDividerHeight)
-            HeaderOutputToggle(title: "Auto-paste", isOn: $settings.autoPasteTranscription)
-        }
-        .padding(.horizontal, tokens.spacing.rowPadding)
-        .frame(height: tokens.sizes.listRow)
-        .frame(maxWidth: .infinity)
-    }
-
     /// Every provider and model in the period, not just the selected one (#139).
     private var summary: UsageSummary {
         usageStats.totalSummary(range: settings.usageStatsRange)
     }
 
-    /// The whole summary bar opens the per-model breakdown; a chevron inside it says so.
+    /// The whole summary bar opens the per-model breakdown, and closes it again while it
+    /// is open (#220); a chevron inside it says so.
     private var usageSummaryButton: some View {
         Button {
-            UsageBreakdownWindowController.show(usageStats: usageStats, settings: settings)
+            UsageBreakdownWindowController.toggle(usageStats: usageStats, settings: settings)
         } label: {
             UsageSummaryRow(summary: summary, showsDisclosure: true)
         }
@@ -807,9 +794,6 @@ private struct UsageSummaryRow: View {
         .background((isHovered ? tokens.colors.selectedRow : tokens.colors.card).color, in: shape)
         .contentShape(shape)
         .onHover { isHovered = $0 }
-        .help(showsDisclosure
-            ? "\(UsageLineFormatter.line(from: summary)). Click for usage by model."
-            : UsageLineFormatter.line(from: summary))
     }
 
     private var statDivider: some View {
@@ -855,27 +839,6 @@ private struct UsageMetricColumn: View {
 // MARK: - Themed Popover end
 
 // MARK: - Themed Popover begin
-
-/// Clipboard or Auto-paste: the label in `body` and `primaryText`, a `ThemedToggle` at
-/// the end of its half of the row.
-private struct HeaderOutputToggle: View {
-    let title: String
-    @Binding var isOn: Bool
-    @Environment(\.themeTokens) private var tokens
-
-    var body: some View {
-        HStack(spacing: tokens.popover.rowGap) {
-            Text(title)
-                .font(tokens.type.body.font)
-                .foregroundStyle(tokens.colors.primaryText.color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-            Spacer(minLength: 0)
-            ThemedToggle(title, isOn: $isOn)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
 
 /// A vertical line as wide as the panel's edge. Without a height it takes the height
 /// its container gives it.
@@ -1152,10 +1115,10 @@ private struct TranscriptionSettingsPane: View {
             SettingsRow("Model") {
                 modelPicker
             }
-            SettingsRow("API Key") {
+            SettingsRow("API Key", hint: "Stored in the macOS Keychain.") {
                 apiKeyField
             }
-            SettingsRow("Language") {
+            SettingsRow("Language", hint: "Auto detects the language. Pick one if Auto gets it wrong.") {
                 ThemedPopUpPicker(
                     "Language",
                     selection: $settings.language,
@@ -1452,7 +1415,7 @@ private struct RecordingSettingsPane: View {
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
-            SettingsRow("Mode") {
+            SettingsRow("Mode", hint: "Hold: records while the key is held. Tap: tap to start, tap again to stop.") {
                 ThemedSegmentedPicker(
                     "Mode",
                     selection: $settings.triggerMode,
@@ -1462,7 +1425,7 @@ private struct RecordingSettingsPane: View {
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
-            SettingsRow("Esc to cancel record") {
+            SettingsRow("Esc to cancel record", hint: "Esc during a recording discards it without transcribing.") {
                 ThemedToggle("Esc to cancel record", isOn: $settings.escapeToCancelRecording)
                     .disabled(isRecording)
                     .help(isRecording ? "Stop recording to change." : "")
@@ -1470,9 +1433,11 @@ private struct RecordingSettingsPane: View {
             SettingsRow("Sound effects") {
                 ThemedToggle("Sound effects", isOn: $settings.soundEffectsEnabled)
             }
-            SettingsRow("Pause Apple Music while recording") {
+            SettingsRow(
+                "Pause Apple Music while recording",
+                hint: "Pauses Apple Music when a recording starts and resumes it after."
+            ) {
                 ThemedToggle("Pause Apple Music while recording", isOn: $settings.pauseAppleMusicWhileRecording)
-                    .help("Pauses Apple Music at the start of a recording and resumes it when the microphone stops.")
             }
         }
     }
@@ -1485,12 +1450,7 @@ private struct QuickPasteSettingsPane: View {
 
     /// Stated because it is invisible from the settings screen otherwise: dictated text
     /// only reaches the popup by way of the clipboard.
-    static let quickPasteHelp = """
-        Hold the popup trigger to pick from the last few things on the clipboard and paste \
-        without leaving the field you are typing in. Dictated text reaches the popup only \
-        while Clipboard is on: with Clipboard off and Auto-paste on, transcriptions never \
-        touch the clipboard and so never appear here.
-        """
+    static let quickPasteHint = "Hold the trigger to paste one of your last copied items. Dictated text shows up only while Clipboard is on."
 
     /// Held in milliseconds because that is the unit the setting is stated in; the store
     /// keeps seconds, and it is the store that clamps.
@@ -1507,26 +1467,21 @@ private struct QuickPasteSettingsPane: View {
         )
     }
 
-    /// Parsed so the bold key name renders; falls back to the plain string rather than
-    /// showing nothing if the Markdown ever fails to parse. Inline-only, whitespace kept:
-    /// full-document parsing would collapse the double spaces around the separators.
-    private var quickPasteUsageHint: AttributedString {
-        let hint = QuickPasteConfiguration.usageHint(for: settings.quickPasteTriggerKey)
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: hint, options: options)) ?? AttributedString(hint)
+    /// The selected trigger in bold, Markdown that the hint bubble renders.
+    private var popupTriggerHint: String {
+        "Hold **\(settings.quickPasteTriggerKey.displayName)**, choose with ↑↓ or the pointer, release to paste. Cannot be the recording trigger."
     }
 
     var body: some View {
         SettingsPaneStack {
-            SettingsRow("Quick paste popup") {
+            SettingsRow("Quick paste popup", hint: Self.quickPasteHint) {
                 ThemedToggle("Quick paste popup", isOn: $settings.quickPasteEnabled)
-                    .help(Self.quickPasteHelp)
             }
             // Hidden rather than disabled while the feature is off: the window now
             // follows the height of the selected pane, so a row appearing later no
             // longer falls off the bottom edge.
             if settings.quickPasteEnabled {
-                SettingsRow("Popup trigger") {
+                SettingsRow("Popup trigger", hint: popupTriggerHint) {
                     ThemedPopUpPicker(
                         "Popup trigger",
                         selection: $settings.quickPasteTriggerKey,
@@ -1534,19 +1489,9 @@ private struct QuickPasteSettingsPane: View {
                         title: \.displayName
                     )
                     .disabled(isRecording)
-                    .help(
-                        isRecording
-                            ? "Stop recording to change."
-                            : "The recording trigger cannot be reused here."
-                    )
+                    .help(isRecording ? "Stop recording to change." : "")
                 }
-                Text(quickPasteUsageHint)
-                    .font(tokens.type.fieldCaption.font)
-                    .foregroundStyle(tokens.colors.secondaryText.color)
-                    .lineLimit(1)
-                    // One height in both themes, whatever the caption size.
-                    .frame(maxWidth: .infinity, minHeight: tokens.settingsWindow.hintLineHeight, maxHeight: tokens.settingsWindow.hintLineHeight, alignment: .leading)
-                SettingsRow("Popup hold") {
+                SettingsRow("Popup hold", hint: "How long to hold the key before the popup opens.") {
                     ThemedNumberField(
                         "Popup hold",
                         value: holdMilliseconds,
@@ -1555,7 +1500,7 @@ private struct QuickPasteSettingsPane: View {
                         unit: "ms"
                     )
                 }
-                SettingsRow("Popup entries") {
+                SettingsRow("Popup entries", hint: "How many recent items the popup shows.") {
                     ThemedNumberField(
                         "Popup entries",
                         value: $settings.quickPasteEntryCount,
@@ -1601,7 +1546,13 @@ private struct GeneralSettingsPane: View {
             SettingsRow("Launch at login") {
                 LaunchAtLoginToggle()
             }
-            SettingsRow("History size") {
+            SettingsRow("Clipboard", hint: "Copies every transcription to the clipboard.") {
+                ThemedToggle("Clipboard", isOn: $settings.saveTranscriptionToClipboard)
+            }
+            SettingsRow("Auto-paste", hint: "Pastes every transcription into the field you are typing in.") {
+                ThemedToggle("Auto-paste", isOn: $settings.autoPasteTranscription)
+            }
+            SettingsRow("History size", hint: "How many transcriptions the history keeps. Older ones are deleted.") {
                 ThemedNumberField(
                     "History size",
                     value: $historySizeDraft,
@@ -1610,8 +1561,8 @@ private struct GeneralSettingsPane: View {
                     unit: "entries"
                 )
             }
-            SettingsRow("Usage data") {
-                ThemedPushButton("Reset usage…", role: .destructive) {
+            SettingsRow("Usage data", hint: "Clears the word, audio and cost counters for the models you pick.") {
+                ThemedPushButton("Reset usage", role: .destructive) {
                     UsageResetWindowController.show(
                         currentKey: ProviderModelKey(
                             providerID: settings.provider.rawValue,
@@ -1970,24 +1921,35 @@ private struct ThemePicker: View {
 /// One row: the label in `body` on the left, the control at the right text edge. The row
 /// is at least `formRow` tall; the label keeps its full width and the control gets the
 /// rest, so a line under a control (the Launch at login error) wraps there.
+///
+/// A row with a `hint` (#220) shows a "?" right after its label; hovering it shows the
+/// hint in a themed bubble. The hint is Markdown, inline only (`**bold**`). A row without
+/// one draws only its label, as before.
 private struct SettingsRow<Content: View>: View {
     let title: String
+    let hint: String?
     let content: Content
     @Environment(\.themeTokens) private var tokens
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
+    init(_ title: String, hint: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.hint = hint
         self.content = content()
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: tokens.settingsWindow.labelSpacing) {
-            Text(title)
-                .font(tokens.type.body.font)
-                .foregroundStyle(tokens.colors.primaryText.color)
-                .lineLimit(1)
-                .fixedSize()
-                .layoutPriority(1)
+            HStack(alignment: .center, spacing: tokens.hint.iconGap) {
+                Text(title)
+                    .font(tokens.type.body.font)
+                    .foregroundStyle(tokens.colors.primaryText.color)
+                    .lineLimit(1)
+                if let hint {
+                    ThemedHintIcon(markdown: hint)
+                }
+            }
+            .fixedSize()
+            .layoutPriority(1)
 
             content
                 .controlSize(.small)
