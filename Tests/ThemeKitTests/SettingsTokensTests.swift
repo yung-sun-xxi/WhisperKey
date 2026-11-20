@@ -30,7 +30,6 @@ final class SettingsTokensTests: XCTestCase {
             XCTAssertEqual(window.rowAreaTop, 10, theme)
             XCTAssertEqual(window.rowAreaBottom, 16, theme)
             XCTAssertEqual(window.textEdge, 20, theme)
-            XCTAssertEqual(window.hintLineHeight, 16, theme)
             XCTAssertEqual(window.labelSpacing, 12, theme)
         }
         // The Settings edge is the sheet's window edge.
@@ -49,17 +48,14 @@ final class SettingsTokensTests: XCTestCase {
         }
     }
 
-    /// Every pane — rows 0 to 8, with or without the Quick paste hint — comes out one
-    /// content height in both themes.
+    /// Every pane — rows 0 to 8 — comes out one content height in both themes.
     func testTheContentIsOneHeightInBothThemes() {
         for rows in 0...8 {
-            for hints in 0...1 {
-                XCTAssertEqual(
-                    SettingsWindowGeometry.contentHeight(daylight, rows: rows, hintLines: hints),
-                    SettingsWindowGeometry.contentHeight(midnight, rows: rows, hintLines: hints),
-                    "rows \(rows), hints \(hints)"
-                )
-            }
+            XCTAssertEqual(
+                SettingsWindowGeometry.contentHeight(daylight, rows: rows),
+                SettingsWindowGeometry.contentHeight(midnight, rows: rows),
+                "rows \(rows)"
+            )
         }
     }
 
@@ -72,16 +68,11 @@ final class SettingsTokensTests: XCTestCase {
         XCTAssertEqual(SettingsWindowGeometry.paneHeight(midnight, rows: 4), 154)
         XCTAssertEqual(SettingsWindowGeometry.contentHeight(midnight, rows: 4), 214)
         XCTAssertEqual(SettingsWindowGeometry.contentHeight(daylight, rows: 4), 214)
-        // Quick paste on: five rows and the hint line.
-        XCTAssertEqual(SettingsWindowGeometry.paneHeight(daylight, rows: 5, hintLines: 1), 202)
     }
 
     /// The Theme chips keep the app's earlier sizes at the control height.
     func testThemePickerChipSizes() {
         let window = midnight.settingsWindow
-        XCTAssertEqual(window.chipIcon, 20)
-        XCTAssertEqual(window.chipIconGap, 5)
-        XCTAssertEqual(window.chipPadding, 6)
         XCTAssertEqual(window.chipSelectedOutline, 2)
         XCTAssertEqual(window.chipSpacing, 8)
         XCTAssertEqual(window.errorLineGap, 4)

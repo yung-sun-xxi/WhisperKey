@@ -161,15 +161,10 @@ public extension ThemeTokens {
             dividerWidth: 1,
             // The mockup has no Theme row; the chips keep the app's earlier sizes at
             // the control height.
-            chipIcon: 20,
-            chipIconGap: 5,
-            chipPadding: 6,
             chipSelectedOutline: 2,
             chipSpacing: 8,
             // Not in the mockup either; the app's earlier gap.
-            errorLineGap: 4,
-            // Not in the mockup: the Quick paste hint line, one height in both themes.
-            hintLineHeight: 16
+            errorLineGap: 4
         ),
         // Not on the sheet: the POPOVER section of the design file
         // (`docs/design/dark/master-design.dc.html`), quoted where it draws the value.

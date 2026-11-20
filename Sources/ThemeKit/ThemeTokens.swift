@@ -688,18 +688,12 @@ public extension ThemeTokens {
         public var tabSegmentGap: CGFloat
         /// The lines above the tab well and above the rows.
         public var dividerWidth: CGFloat
-        /// The Theme chips: icon, icon to name, side padding, selected outline, and the
-        /// gap between chips.
-        public var chipIcon: CGFloat
-        public var chipIconGap: CGFloat
-        public var chipPadding: CGFloat
+        /// The Theme chips: selected outline and the gap between chips. Their side
+        /// padding is the boxed controls' `controlMetrics.horizontalPadding`.
         public var chipSelectedOutline: CGFloat
         public var chipSpacing: CGFloat
         /// Between a control and the error line under it (Launch at login).
         public var errorLineGap: CGFloat
-        /// A hint line between two rows (Quick paste's usage hint), fixed so the caption
-        /// size of the theme does not change the pane's height.
-        public var hintLineHeight: CGFloat
 
         public init(
             width: CGFloat,
@@ -713,13 +707,9 @@ public extension ThemeTokens {
             tabTrackPadding: CGFloat,
             tabSegmentGap: CGFloat,
             dividerWidth: CGFloat,
-            chipIcon: CGFloat,
-            chipIconGap: CGFloat,
-            chipPadding: CGFloat,
             chipSelectedOutline: CGFloat,
             chipSpacing: CGFloat,
-            errorLineGap: CGFloat,
-            hintLineHeight: CGFloat
+            errorLineGap: CGFloat
         ) {
             self.width = width
             self.textEdge = textEdge
@@ -732,13 +722,9 @@ public extension ThemeTokens {
             self.tabTrackPadding = tabTrackPadding
             self.tabSegmentGap = tabSegmentGap
             self.dividerWidth = dividerWidth
-            self.chipIcon = chipIcon
-            self.chipIconGap = chipIconGap
-            self.chipPadding = chipPadding
             self.chipSelectedOutline = chipSelectedOutline
             self.chipSpacing = chipSpacing
             self.errorLineGap = errorLineGap
-            self.hintLineHeight = hintLineHeight
         }
     }
 }

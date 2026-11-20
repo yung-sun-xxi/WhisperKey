@@ -155,17 +155,3 @@ final class QuickPasteConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.visibleEntryCount, 5)
     }
 }
-
-final class QuickPasteUsageHintTests: XCTestCase {
-    func testUsageHintForRightCommandIsTheOneLineShortcutHint() {
-        XCTAssertEqual(
-            QuickPasteConfiguration.usageHint(for: .rightCommand),
-            "Hold **Right Command**  ·  ↑↓ or pointer to choose  ·  release to paste"
-        )
-    }
-
-    func testUsageHintNamesTheSelectedTriggerInBold() {
-        XCTAssertTrue(QuickPasteConfiguration.usageHint(for: .rightOption).contains("**Right Option**"))
-        XCTAssertFalse(QuickPasteConfiguration.usageHint(for: .rightOption).contains("Command"))
-    }
-}
