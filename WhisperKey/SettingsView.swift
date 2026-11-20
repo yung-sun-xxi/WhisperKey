@@ -1425,7 +1425,7 @@ private struct RecordingSettingsPane: View {
                 .disabled(isRecording)
                 .help(isRecording ? "Stop recording to change." : "")
             }
-            SettingsRow("Esc to cancel record", hint: "Esc during a recording discards it without transcribing.") {
+            SettingsRow("Esc to cancel record", hint: "Esc stops the recording without transcribing. The audio stays in history to retry.") {
                 ThemedToggle("Esc to cancel record", isOn: $settings.escapeToCancelRecording)
                     .disabled(isRecording)
                     .help(isRecording ? "Stop recording to change." : "")
