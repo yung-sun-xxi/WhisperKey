@@ -161,6 +161,56 @@ final class PermissionControlTests: XCTestCase {
         XCTAssertEqual(PermissionRevokePrompt(kind: .accessibility).title, "Revoke Accessibility access?")
         XCTAssertEqual(PermissionRevokePrompt(kind: .appleMusic).title, "Revoke Apple Music automation?")
     }
+
+    func testOnlyAMicrophoneRevokeRestartsTheApp() {
+        XCTAssertTrue(PermissionKind.microphone.revokeRestartsApp)
+        XCTAssertFalse(PermissionKind.accessibility.revokeRestartsApp)
+        XCTAssertFalse(PermissionKind.appleMusic.revokeRestartsApp)
+    }
+
+    func testRestartingPromptSaysSo() {
+        XCTAssertTrue(PermissionRevokePrompt(kind: .microphone).informativeText.contains("restarts"))
+        XCTAssertFalse(PermissionRevokePrompt(kind: .accessibility).informativeText.contains("restarts"))
+        XCTAssertFalse(PermissionRevokePrompt(kind: .appleMusic).informativeText.contains("restarts"))
+    }
+
+    // MARK: - The restart
+
+    func testRelaunchWaitsForTheOldProcessThenOpensTheBundleOnTheTab() {
+        let arguments = RelaunchCommand.arguments(
+            bundlePath: "/Applications/WhisperKey Dev.app",
+            processIdentifier: 4242,
+            settingsTab: "permissions"
+        )
+
+        XCTAssertEqual(RelaunchCommand.executable.path, "/bin/sh")
+        XCTAssertEqual(arguments.first, "-c")
+        XCTAssertEqual(
+            Array(arguments.suffix(4)),
+            ["sh", "4242", "/Applications/WhisperKey Dev.app", "permissions"],
+            "pid, bundle and tab travel as positional parameters, never spliced into the script"
+        )
+        let script = arguments[1]
+        XCTAssertTrue(script.contains("kill -0 \"$1\""), script)
+        XCTAssertTrue(script.contains("seq 1 \(RelaunchCommand.maxWaitPolls)"), "the wait has a deadline: \(script)")
+        XCTAssertTrue(script.contains("/usr/bin/open \"$2\" --args -\(RelaunchCommand.openSettingsTabArgument) \"$3\""), script)
+    }
+
+    /// Runs the real script against a process that is already gone and a bundle that does
+    /// not exist: it must not wait out the deadline, and it must reach `open`.
+    func testRelaunchScriptStopsWaitingOnceTheProcessIsGone() async throws {
+        let arguments = RelaunchCommand.arguments(
+            bundlePath: "/nonexistent/WhisperKey Test.app",
+            processIdentifier: 999_999,
+            settingsTab: "permissions"
+        )
+        let started = Date()
+        let output = try await ProcessCommandRunner().run(RelaunchCommand.executable, arguments: arguments)
+
+        XCTAssertLessThan(Date().timeIntervalSince(started), 3)
+        XCTAssertNotEqual(output.exitStatus, 0, "open fails on a missing bundle, so the script got that far")
+        XCTAssertTrue(output.standardError.contains("WhisperKey Test.app"), output.standardError)
+    }
 }
 
 private extension Result {

@@ -52,6 +52,11 @@ enum SettingsWindowController {
         window = preparedWindow
     }
 
+    /// The Permissions pane's identifier, for the restart after a revoke.
+    static var permissionsTabIdentifier: String {
+        SettingsTab.permissions.identifier
+    }
+
     /// The panes' identifiers, in the order the window shows them.
     static var tabIdentifiers: [String] {
         SettingsTab.allCases.map(\.identifier)
