@@ -1886,7 +1886,7 @@ private struct ThemePicker: View {
             Text(theme.displayName)
                 .font(tokens.type.body.font)
                 .foregroundStyle(tokens.colors.primaryText.color)
-                .padding(.horizontal, window.chipPadding)
+                .padding(.horizontal, tokens.controlMetrics.horizontalPadding)
                 .frame(height: tokens.sizes.control)
                 .background(
                     tokens.colors.controlFill.color,
