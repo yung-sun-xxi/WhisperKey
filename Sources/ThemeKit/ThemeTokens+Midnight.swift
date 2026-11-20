@@ -140,7 +140,10 @@ public extension ThemeTokens {
             failureDash: [3, 3],
             // The failed row's "repeating-linear-gradient(135deg, … 0 4px, … 4px 9px)".
             failureHatchStripe: 4,
-            failureHatchPeriod: 9
+            failureHatchPeriod: 9,
+            // Not on the sheet: the owner compared 100%, 55%, 33% and none live on
+            // 2026-11-20 and picked a third, in both themes.
+            failedRowHatchStrength: 1.0 / 3
         ),
         // Not on the sheet: the Settings mockups (tokens.md, gaps item 10).
         settingsWindow: SettingsWindowMetrics(

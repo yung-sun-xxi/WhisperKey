@@ -608,6 +608,10 @@ public extension ThemeTokens {
         /// `failureHatchPeriod`, at 135°.
         public var failureHatchStripe: CGFloat
         public var failureHatchPeriod: CGFloat
+        /// How much of `failureHatch` a failed list row draws (No speech detected and
+        /// the like). Rows can stack, so their hatch is quieter than the Needs access
+        /// badge's full one.
+        public var failedRowHatchStrength: Double
 
         public init(
             edgeWidth: CGFloat,
@@ -634,7 +638,8 @@ public extension ThemeTokens {
             badgePadding: CGFloat,
             failureDash: [CGFloat],
             failureHatchStripe: CGFloat,
-            failureHatchPeriod: CGFloat
+            failureHatchPeriod: CGFloat,
+            failedRowHatchStrength: Double
         ) {
             self.edgeWidth = edgeWidth
             self.horizontalPadding = horizontalPadding
@@ -661,6 +666,7 @@ public extension ThemeTokens {
             self.failureDash = failureDash
             self.failureHatchStripe = failureHatchStripe
             self.failureHatchPeriod = failureHatchPeriod
+            self.failedRowHatchStrength = failedRowHatchStrength
         }
     }
 
