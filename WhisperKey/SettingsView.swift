@@ -1861,22 +1861,23 @@ private enum APIKeyDeletionConfirmation {
     }
 }
 
-/// The Theme row: one option per theme, its name only (#220), in the boxed-control look
+/// The Theme row: Auto, which follows the system's light or dark appearance, then one
+/// option per theme, each its name only (#220), in the boxed-control look
 /// (`controlFill`, a `controlEdge` outline); the selected one outlined in the brand
 /// colour. The options fit the control height, so the row keeps the pane's rhythm.
 private struct ThemePicker: View {
-    @Binding var selection: AppTheme
+    @Binding var selection: ThemeChoice
     @Environment(\.themeTokens) private var tokens
 
     var body: some View {
         HStack(spacing: tokens.settingsWindow.chipSpacing) {
-            ForEach(AppTheme.allCases) { theme in
+            ForEach(ThemeChoice.allCases) { theme in
                 chip(for: theme)
             }
         }
     }
 
-    private func chip(for theme: AppTheme) -> some View {
+    private func chip(for theme: ThemeChoice) -> some View {
         let isSelected = theme == selection
         let window = tokens.settingsWindow
 

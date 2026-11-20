@@ -304,9 +304,38 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.usageStatsRange, .last30Days)
     }
 
-    func testThemeDefaultsToDaylightWhenEmpty() {
+    func testThemeDefaultsToAutoWhenEmpty() {
+        let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(store.theme, .auto)
+    }
+
+    func testAutoThemePersistsAcrossInstances() {
+        let first = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        first.theme = .midnight
+        first.theme = .auto
+        XCTAssertEqual(defaults.string(forKey: "WhisperKey.settings.theme"), "auto")
+        let second = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
+        XCTAssertEqual(second.theme, .auto)
+    }
+
+    /// Light was stored as "classic" before Auto existed; it must stay Light, not turn Auto.
+    func testStoredClassicStillLoadsAsLight() {
+        defaults.set("classic", forKey: "WhisperKey.settings.theme")
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
         XCTAssertEqual(store.theme, .daylight)
+    }
+
+    func testThemeChoiceResolvesAgainstTheSystemAppearance() {
+        XCTAssertEqual(ThemeChoice.auto.resolved(systemIsDark: true), .midnight)
+        XCTAssertEqual(ThemeChoice.auto.resolved(systemIsDark: false), .daylight)
+        for isDark in [true, false] {
+            XCTAssertEqual(ThemeChoice.daylight.resolved(systemIsDark: isDark), .daylight)
+            XCTAssertEqual(ThemeChoice.midnight.resolved(systemIsDark: isDark), .midnight)
+        }
+    }
+
+    func testThemeChoicesReadAutoLightDark() {
+        XCTAssertEqual(ThemeChoice.allCases.map(\.displayName), ["Auto", "Light", "Dark"])
     }
 
     func testThemePersistsAcrossInstances() {
@@ -316,10 +345,10 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.theme, .midnight)
     }
 
-    func testUnknownStoredThemeLoadsAsDaylight() {
+    func testUnknownStoredThemeLoadsAsAuto() {
         defaults.set("no-such-theme", forKey: "WhisperKey.settings.theme")
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
-        XCTAssertEqual(store.theme, .daylight)
+        XCTAssertEqual(store.theme, .auto)
     }
 
     func testMakeProviderReturnsOpenAIWhenKeyPresent() {
