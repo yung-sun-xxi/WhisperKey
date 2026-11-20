@@ -189,6 +189,15 @@ final class FullHistoryThemeTests: XCTestCase {
         XCTAssertFalse(image.containsSaturated(), "a coloured pixel: the selection bar or a tint")
     }
 
+    /// A failed row draws the hatch at a third of its strength in both themes, so a run
+    /// of No speech detected rows stays quiet; the Needs access badge keeps the full 18%.
+    func testAFailedRowsHatchIsAThirdOfTheBadges() {
+        for tokens in [ThemeTokens.midnight, ThemeTokens.daylight] {
+            XCTAssertEqual(tokens.controlMetrics.failedRowHatchStrength, 1.0 / 3, accuracy: 0.0001, "\(tokens.theme)")
+        }
+        XCTAssertEqual(ThemeTokens.midnight.colors.failureHatch, .hex(0x8A909E, opacity: 0.18))
+    }
+
     /// The hatched row fills the row's band inside the list padding: a hatch stripe within
     /// one period of the padding on the leading side.
     func testAFailedRowIsHatchedInsideTheListPadding() throws {
@@ -203,8 +212,8 @@ final class FullHistoryThemeTests: XCTestCase {
             XCTAssertTrue(sample.matches(midnight.colors.surface), "at x \(x): \(sample)")
         }
         // The first lighter stripe starts within a hatch period of the padding. A stripe
-        // (08-grey at 18% over the failure fill) lies well away from 02; the fill alone
-        // does not.
+        // (the failure hatch at `failedRowHatchStrength` over the failure fill) lies away
+        // from 02; the fill alone does not.
         let period = midnight.controlMetrics.failureHatchPeriod * 2.squareRoot()
         let surface = midnight.colors.surface.nsColor.usingColorSpace(.sRGB)!
         func isStripe(_ sample: Sample) -> Bool {
