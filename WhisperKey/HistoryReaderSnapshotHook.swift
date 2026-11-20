@@ -98,7 +98,7 @@ enum HistoryReaderSnapshotHook {
         finish(lines, settings: settings, theme: originalTheme, scratch: scratch, directory: directory)
     }
 
-    private static func finish(_ lines: [String], settings: SettingsStore, theme: AppTheme, scratch: URL, directory: URL) {
+    private static func finish(_ lines: [String], settings: SettingsStore, theme: ThemeChoice, scratch: URL, directory: URL) {
         var lines = lines
         settings.theme = theme
         try? FileManager.default.removeItem(at: scratch)
@@ -134,7 +134,7 @@ enum HistoryReaderSnapshotHook {
     /// Switches the theme with the reader open and reports its frame and its close
     /// button's frame before and after, plus every frame it passed through on the way.
     private static func switchTheme(to theme: AppTheme, settings: SettingsStore, window: NSWindow) async -> [String] {
-        guard settings.theme != theme else {
+        guard settings.theme != ThemeChoice(theme) else {
             return ["theme \(theme.rawValue) already; frame \(describe(window.frame))"]
         }
         let before = window.frame
@@ -146,7 +146,7 @@ enum HistoryReaderSnapshotHook {
                 MainActor.assumeIsolated { steps.append(window.frame) }
             }
         }
-        settings.theme = theme
+        settings.theme = ThemeChoice(theme)
         await settle()
         observers.forEach(center.removeObserver)
 

@@ -31,13 +31,6 @@ public struct QuickPasteConfiguration: Equatable, Sendable {
         self.holdDuration = holdDuration
         self.visibleEntryCount = visibleEntryCount
     }
-
-    /// The one-line shortcut hint the settings pane shows under the trigger picker: which
-    /// key to hold, how to choose, and that releasing pastes. Markdown, with the key's
-    /// display name — the same words the picker shows — in bold.
-    public static func usageHint(for trigger: TriggerKey) -> String {
-        "Hold **\(trigger.displayName)**  ·  ↑↓ or pointer to choose  ·  release to paste"
-    }
 }
 
 /// The clipboard watcher, seen from here as nothing but something that can be running or

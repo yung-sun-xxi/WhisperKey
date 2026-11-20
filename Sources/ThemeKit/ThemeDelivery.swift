@@ -1,9 +1,11 @@
+import AppKit
 import Combine
 import os
 import SettingsStore
 import SwiftUI
 
-/// The tokens of the theme chosen in Settings, kept current as the choice changes.
+/// The tokens of the theme chosen in Settings, kept current as the choice changes and,
+/// under Auto, as the system switches between light and dark.
 ///
 /// One instance, `shared`, serves the whole app, because several surfaces are built far
 /// from any `SettingsStore` (the toast, the quick paste popup, the reader, Reset usage).
@@ -18,10 +20,18 @@ public final class ThemeTokensSource: ObservableObject {
 
     private weak var followed: SettingsStore?
     private var subscription: AnyCancellable?
+    private let systemIsDark: () -> AnyPublisher<Bool, Never>
 
-    /// Starts at `theme` and stays there until it follows a store.
-    public init(theme: AppTheme = .daylight) {
+    /// Starts at `theme` and stays there until it follows a store. `systemIsDark`
+    /// reports the system's appearance, now and on every change; by default it reads the
+    /// app's effective appearance, which follows the system because the app never sets
+    /// its own. It is subscribed only when a store is followed.
+    public init(
+        theme: AppTheme = .daylight,
+        systemIsDark: (() -> AnyPublisher<Bool, Never>)? = nil
+    ) {
         tokens = theme.tokens
+        self.systemIsDark = systemIsDark ?? Self.applicationIsDark
     }
 
     /// Takes the store's theme now and every time it changes. Following the store
@@ -30,10 +40,19 @@ public final class ThemeTokensSource: ObservableObject {
         guard followed !== settings else { return }
         followed = settings
         subscription = settings.$theme
+            .combineLatest(systemIsDark().removeDuplicates())
+            .map { choice, isDark in choice.resolved(systemIsDark: isDark) }
             .removeDuplicates()
             .sink { [weak self] theme in
                 self?.tokens = theme.tokens
             }
+    }
+
+    private static func applicationIsDark() -> AnyPublisher<Bool, Never> {
+        NSApplication.shared
+            .publisher(for: \.effectiveAppearance, options: [.initial, .new])
+            .map { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
+            .eraseToAnyPublisher()
     }
 }
 

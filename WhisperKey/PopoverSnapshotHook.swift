@@ -60,7 +60,7 @@ enum PopoverSnapshotHook {
 
         for theme in AppTheme.allCases {
             log.info("hook theme=\(theme.rawValue, privacy: .public)")
-            lines.append(contentsOf: await switchTheme(to: theme, settings: settings, window: controller.popoverWindow))
+            lines.append(contentsOf: await switchTheme(to: ThemeChoice(theme), settings: settings, window: controller.popoverWindow))
             await ensureOpen(controller)
             lines.append(await shoot(controller.popoverWindow, name: "popover-\(theme.rawValue)", in: directory))
         }
@@ -93,7 +93,7 @@ enum PopoverSnapshotHook {
     /// Switches the theme with the popover open and reports the panel's frame before and
     /// after, plus every frame it passed through (each move or resize AppKit announced).
     /// A switch that keeps the panel still reports no step at all.
-    private static func switchTheme(to theme: AppTheme, settings: SettingsStore, window: NSWindow) async -> [String] {
+    private static func switchTheme(to theme: ThemeChoice, settings: SettingsStore, window: NSWindow) async -> [String] {
         guard window.isVisible, settings.theme != theme else {
             settings.theme = theme
             await settle()

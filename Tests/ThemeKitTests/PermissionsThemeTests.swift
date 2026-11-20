@@ -378,7 +378,7 @@ final class PermissionsThemeTests: XCTestCase {
         XCTAssertEqual(before.count, 2)
 
         for theme in [AppTheme.daylight, .midnight] {
-            store.theme = theme
+            store.theme = ThemeChoice(theme)
             settle(host)
             XCTAssertEqual(host.fittingSize, size, "\(theme)")
             let read = try Read(host: host, size: size, tokens: theme.tokens)
@@ -422,7 +422,7 @@ final class PermissionsThemeTests: XCTestCase {
 
         for theme in [AppTheme.daylight, .midnight] {
             window.backgroundColor = .systemPink
-            store.theme = theme
+            store.theme = ThemeChoice(theme)
             settle(host)
             XCTAssertEqual(window.backgroundColor, theme.tokens.colors.surface.nsColor, "\(theme)")
             XCTAssertEqual(window.appearance?.name, theme.tokens.windowAppearance.nsAppearance?.name, "\(theme)")

@@ -1,3 +1,4 @@
+import Combine
 import KeychainStore
 import SettingsStore
 import XCTest
@@ -20,7 +21,7 @@ final class ThemeTokensSourceTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeStore(theme: AppTheme) -> SettingsStore {
+    private func makeStore(theme: ThemeChoice) -> SettingsStore {
         let store = SettingsStore(keychain: InMemoryKeychain(), defaults: defaults)
         store.theme = theme
         return store
@@ -91,5 +92,65 @@ final class ThemeTokensSourceTests: XCTestCase {
         first.theme = .midnight
         first.theme = .daylight
         XCTAssertEqual(source.tokens, .midnight, "the first store no longer drives it")
+    }
+
+    // MARK: Auto
+
+    private func makeSource(system: CurrentValueSubject<Bool, Never>) -> ThemeTokensSource {
+        ThemeTokensSource(systemIsDark: { system.eraseToAnyPublisher() })
+    }
+
+    func testAutoDrawsTheSystemsAppearance() {
+        let dark = CurrentValueSubject<Bool, Never>(true)
+        let darkSource = makeSource(system: dark)
+        darkSource.follow(makeStore(theme: .auto))
+        XCTAssertEqual(darkSource.tokens, .midnight)
+
+        let light = CurrentValueSubject<Bool, Never>(false)
+        let lightSource = makeSource(system: light)
+        lightSource.follow(makeStore(theme: .auto))
+        XCTAssertEqual(lightSource.tokens, .daylight)
+    }
+
+    /// The system switching while windows are open repaints them, without a Settings change.
+    func testAutoFollowsTheSystemSwitchingLive() {
+        let system = CurrentValueSubject<Bool, Never>(false)
+        let source = makeSource(system: system)
+        source.follow(makeStore(theme: .auto))
+        var published: [AppTheme] = []
+        let subscription = source.$tokens.dropFirst().sink { published.append($0.theme) }
+
+        system.send(true)
+        XCTAssertEqual(source.tokens, .midnight)
+        system.send(true)
+        system.send(false)
+        XCTAssertEqual(source.tokens, .daylight)
+        XCTAssertEqual(published, [.midnight, .daylight], "a repeated value does not republish")
+        subscription.cancel()
+    }
+
+    func testAFixedThemeIgnoresTheSystem() {
+        let system = CurrentValueSubject<Bool, Never>(true)
+        let source = makeSource(system: system)
+        source.follow(makeStore(theme: .daylight))
+        XCTAssertEqual(source.tokens, .daylight)
+        system.send(false)
+        system.send(true)
+        XCTAssertEqual(source.tokens, .daylight)
+    }
+
+    /// Picking Auto when it resolves to the theme already drawn changes nothing on screen.
+    func testSwitchingToAutoOnTheSameAppearanceDoesNotRepublish() {
+        let system = CurrentValueSubject<Bool, Never>(true)
+        let store = makeStore(theme: .midnight)
+        let source = makeSource(system: system)
+        source.follow(store)
+        var published = 0
+        let subscription = source.$tokens.dropFirst().sink { _ in published += 1 }
+
+        store.theme = .auto
+        XCTAssertEqual(published, 0)
+        XCTAssertEqual(source.tokens, .midnight)
+        subscription.cancel()
     }
 }
