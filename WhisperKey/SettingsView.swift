@@ -863,9 +863,13 @@ private struct HeaderVerticalDivider: View {
 struct PopoverDivider: View {
     @Environment(\.themeTokens) private var tokens
 
+    /// Draws the line in `edge` (05) instead of `divider` (03). The history rows use it:
+    /// in `divider` the line between two rows all but vanished against the popover.
+    var prominent = false
+
     var body: some View {
         Rectangle()
-            .fill(tokens.colors.divider.color)
+            .fill((prominent ? tokens.colors.edge : tokens.colors.divider).color)
             .frame(height: tokens.panels.popover.edgeWidth)
             .frame(maxWidth: .infinity)
     }
