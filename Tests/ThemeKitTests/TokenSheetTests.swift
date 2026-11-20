@@ -295,14 +295,16 @@ final class DaylightTokenSheetTests: XCTestCase {
         }
     }
 
-    /// "02 surface. Panels at 95% + blur 30", edged in 05: Daylight's 02 and 05.
+    /// "02 surface. Panels at 95% + blur 30": Daylight's 02. The sheet edges the shell in
+    /// 05; Daylight draws that edge clear, because the window server's shadow it keeps
+    /// already outlines the panel and the two together read as a double border.
     func testPanelShellsAreOneShellInDaylightsColours() throws {
         let surface = try sheet.hex("02", .daylight)
         let edge = try sheet.hex("05", .daylight)
         XCTAssertTrue(try sheet.cell(firstColumn: "02", column: 3).contains("Panels at 95%"))
         for panel in [daylight.panels.popover, daylight.panels.quickPaste, daylight.panels.toast] {
             XCTAssertEqual(panel.background, .fill(.hex(surface, opacity: 0.95), blur: 30))
-            XCTAssertEqual(panel.edge, .hex(edge))
+            XCTAssertEqual(panel.edge, .hex(edge, opacity: 0))
             XCTAssertEqual(panel.shadow, .system)
         }
     }
