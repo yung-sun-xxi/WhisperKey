@@ -61,10 +61,12 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
+    /// What Settings calls the theme (#220). The case names and the stored values stay
+    /// Daylight and Midnight.
     public var displayName: String {
         switch self {
-        case .daylight: return "Daylight"
-        case .midnight: return "Midnight"
+        case .daylight: return "Light"
+        case .midnight: return "Dark"
         }
     }
 }

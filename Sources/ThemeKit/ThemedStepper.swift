@@ -93,10 +93,10 @@ final class DrawnStepperControl: NSControl {
         let radius = tokens.radii.control
         let path = NSBezierPath(roundedRect: box, xRadius: radius, yRadius: radius)
         if isEnabled {
-            (pressed == nil ? colors.card : colors.raisedControl).nsColor.setFill()
+            (pressed == nil ? colors.controlFill : colors.raisedControl).nsColor.setFill()
             path.fill()
         }
-        colors.edge.nsColor.setStroke()
+        colors.controlEdge.nsColor.setStroke()
         path.lineWidth = edge
         path.stroke()
 

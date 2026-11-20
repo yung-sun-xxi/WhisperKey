@@ -79,11 +79,11 @@ private struct DrawnSwitch: View {
 
 // MARK: - Push button
 
-/// A push button: `sizes.control` tall, `card` with an `edge` outline, the title in
+/// A push button: `sizes.control` tall, `controlFill` with a `controlEdge` outline, the title in
 /// `body`. A destructive one takes `destructiveText`, which looks like its neighbours
 /// (#105 rule 2). One sitting on a `card` (`onCard`) is filled `raisedControl` instead,
 /// the sheet's 04 "control sitting on a 03 card", and `edge` while pressed. Disabled,
-/// either keeps its size and its `edge` outline, drops the fill and greys the title to
+/// either keeps its size and its `controlEdge` outline, drops the fill and greys the title to
 /// `secondaryText`.
 public struct ThemedPushButton: View {
     @Environment(\.themeTokens) private var tokens
@@ -105,7 +105,7 @@ public struct ThemedPushButton: View {
             .buttonStyle(DrawnPushButtonStyle(
                 tokens: tokens,
                 label: role == .destructive ? colors.destructiveText : colors.primaryText,
-                fill: onCard ? colors.raisedControl : colors.card,
+                fill: onCard ? colors.raisedControl : colors.controlFill,
                 pressedFill: onCard ? colors.edge : colors.raisedControl
             ))
     }
@@ -264,7 +264,7 @@ public struct ThemedSegmentedPicker<Value: Hashable>: View {
 
 // MARK: - Pop-up
 
-/// A pop-up menu of options: a `card` box at least `popUpMinWidth` wide, the title in
+/// A pop-up menu of options: a `controlFill` box at least `popUpMinWidth` wide, the title in
 /// `body`, up and down chevrons in `secondaryText`; the menu that opens is the system's.
 public struct ThemedPopUpPicker<Value: Hashable>: View {
     @Environment(\.themeTokens) private var tokens
@@ -299,7 +299,7 @@ public struct ThemedPopUpPicker<Value: Hashable>: View {
 
 // MARK: - Number field
 
-/// A whole number with a stepper and its unit: a `card` box holding the number and its
+/// A whole number with a stepper and its unit: a `controlFill` box holding the number and its
 /// unit, then a drawn stepper that repeats while held.
 public struct ThemedNumberField: View {
     @Environment(\.themeTokens) private var tokens
@@ -331,7 +331,7 @@ public struct ThemedNumberField: View {
             }
             .padding(.horizontal, metrics.horizontalPadding)
             .frame(height: tokens.sizes.control)
-            .drawnControlBox(tokens, fill: tokens.colors.card)
+            .drawnControlBox(tokens, fill: tokens.colors.controlFill)
             DrawnStepper(value: $value, range: range, step: step, tokens: tokens, accessibilityLabel: label)
                 .frame(width: metrics.stepper.width, height: metrics.stepper.height)
         }
@@ -352,8 +352,8 @@ public struct ThemedNumberField: View {
 
 // MARK: - Secure field
 
-/// A password-style text field `secureFieldWidth` wide: a `card` box with an
-/// `edge` outline. `focus` is the field's own focus state, for the view that owns it.
+/// A password-style text field `secureFieldWidth` wide: a `controlFill` box with a
+/// `controlEdge` outline. `focus` is the field's own focus state, for the view that owns it.
 public struct ThemedSecureField: View {
     @Environment(\.themeTokens) private var tokens
     private let placeholder: String
@@ -375,7 +375,7 @@ public struct ThemedSecureField: View {
             .focused(focus)
             .padding(.horizontal, metrics.horizontalPadding)
             .frame(width: metrics.secureFieldWidth, height: tokens.sizes.control)
-            .drawnControlBox(tokens, fill: tokens.colors.card)
+            .drawnControlBox(tokens, fill: tokens.colors.controlFill)
     }
 }
 
@@ -383,10 +383,10 @@ public struct ThemedSecureField: View {
 
 extension View {
     /// The box every drawn control sits in: `fill` (none for a disabled control), an
-    /// outline in `edge` (the `edge` token unless given), `radii.control`.
+    /// outline in `edge` (`controlEdge` unless given), `radii.control`.
     func drawnControlBox(_ tokens: ThemeTokens, fill: ThemeColor?, edge: ThemeColor? = nil) -> some View {
         let box = RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
         return background((fill ?? .system(.clear)).color, in: box)
-            .overlay(box.strokeBorder((edge ?? tokens.colors.edge).color, lineWidth: tokens.controlMetrics.edgeWidth))
+            .overlay(box.strokeBorder((edge ?? tokens.colors.controlEdge).color, lineWidth: tokens.controlMetrics.edgeWidth))
     }
 }

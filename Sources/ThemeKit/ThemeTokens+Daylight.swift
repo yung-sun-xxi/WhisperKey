@@ -37,7 +37,8 @@ public extension ThemeTokens {
             failureText: .hex(0x16181D),    // 08
             cautionText: .hex(0x515763),    // 07
             actionGlyph: .hex(0x515763),    // 07
-            chipEdge: .hex(0xB8BCC4)        // 05
+            controlFill: .hex(0xE0E2E6),    // 03
+            controlEdge: .hex(0xB8BCC4)     // 05
         )
         tokens.panels.popover = tokens.panels.popover.daylight()
         tokens.panels.quickPaste = tokens.panels.quickPaste.daylight()

@@ -180,8 +180,11 @@ public extension ThemeTokens {
         public var cautionText: ThemeColor
         /// A glyph button at rest: the API key's validate shield.
         public var actionGlyph: ThemeColor
-        /// The outline of an unselected Theme chip.
-        public var chipEdge: ThemeColor
+        /// The fill of every boxed control (#220): pop-ups, number fields and their
+        /// stepper, text fields, push buttons and the Theme options. 03.
+        public var controlFill: ThemeColor
+        /// The outline of every boxed control, an unselected Theme option included. 05.
+        public var controlEdge: ThemeColor
 
         public init(
             bar: ThemeColor,
@@ -210,7 +213,8 @@ public extension ThemeTokens {
             failureText: ThemeColor,
             cautionText: ThemeColor,
             actionGlyph: ThemeColor,
-            chipEdge: ThemeColor
+            controlFill: ThemeColor,
+            controlEdge: ThemeColor
         ) {
             self.bar = bar
             self.surface = surface
@@ -238,7 +242,8 @@ public extension ThemeTokens {
             self.failureText = failureText
             self.cautionText = cautionText
             self.actionGlyph = actionGlyph
-            self.chipEdge = chipEdge
+            self.controlFill = controlFill
+            self.controlEdge = controlEdge
         }
     }
 }
@@ -1305,21 +1310,27 @@ public extension ThemeTokens {
         public var bubblePaddingVertical: CGFloat
         /// The widest the bubble grows before its text wraps.
         public var bubbleMaxWidth: CGFloat
-        /// Between the "?" and the bubble under it.
-        public var bubbleOffset: CGFloat
+        /// Where the bubble's top-left corner sits from the pointer, as a tooltip does:
+        /// `belowPointer` under the hotspot (clear of the arrow) and `besidePointer` to
+        /// its right. When the screen ends under the pointer, the bubble's bottom sits
+        /// `besidePointer` above the hotspot instead.
+        public var belowPointer: CGFloat
+        public var besidePointer: CGFloat
 
         public init(
             iconGap: CGFloat,
             bubblePaddingHorizontal: CGFloat,
             bubblePaddingVertical: CGFloat,
             bubbleMaxWidth: CGFloat,
-            bubbleOffset: CGFloat
+            belowPointer: CGFloat,
+            besidePointer: CGFloat
         ) {
             self.iconGap = iconGap
             self.bubblePaddingHorizontal = bubblePaddingHorizontal
             self.bubblePaddingVertical = bubblePaddingVertical
             self.bubbleMaxWidth = bubbleMaxWidth
-            self.bubbleOffset = bubbleOffset
+            self.belowPointer = belowPointer
+            self.besidePointer = besidePointer
         }
     }
 }

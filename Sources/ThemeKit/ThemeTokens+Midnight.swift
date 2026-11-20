@@ -35,7 +35,10 @@ public extension ThemeTokens {
             failureText: .hex(0xE8EAEF),    // 08
             cautionText: .hex(0x9BA1AF),    // 07
             actionGlyph: .hex(0x9BA1AF),    // 07
-            chipEdge: .hex(0x3B4150)        // 05, every edge
+            // #220: every boxed control (pop-up, number field, text field, push
+            // button, Theme option) is one fill and one outline.
+            controlFill: .hex(0x23262D),    // 03
+            controlEdge: .hex(0x3B4150)     // 05, every edge
         ),
         type: TypeScale(
             statValue: ThemeFont(size: 15, weight: .semibold, tabularDigits: true),
@@ -344,7 +347,8 @@ public extension ThemeTokens {
             bubblePaddingHorizontal: 10,
             bubblePaddingVertical: 6,
             bubbleMaxWidth: 260,
-            bubbleOffset: 4
+            belowPointer: 16,
+            besidePointer: 4
         )
     )
 }

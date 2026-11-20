@@ -265,7 +265,8 @@ final class DaylightTokenSheetTests: XCTestCase {
         ("failureText", \.failureText, "08"),
         ("cautionText", \.cautionText, "07"),
         ("actionGlyph", \.actionGlyph, "07"),
-        ("chipEdge", \.chipEdge, "05"),
+        ("controlFill", \.controlFill, "03"),
+        ("controlEdge", \.controlEdge, "05"),
     ]
 
     func testEveryColourRoleTakesItsTokensDaylightValue() throws {

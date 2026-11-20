@@ -1861,9 +1861,9 @@ private enum APIKeyDeletionConfirmation {
     }
 }
 
-/// The Theme row: one chip per theme — the theme's icon and its name — the selected
-/// chip outlined in the brand colour, the others in
-/// `chipEdge`. The chips fit the control height, so the row keeps the pane's rhythm.
+/// The Theme row: one option per theme, its name only (#220), in the boxed-control look
+/// (`controlFill`, a `controlEdge` outline); the selected one outlined in the brand
+/// colour. The options fit the control height, so the row keeps the pane's rhythm.
 private struct ThemePicker: View {
     @Binding var selection: AppTheme
     @Environment(\.themeTokens) private var tokens
@@ -1883,38 +1883,27 @@ private struct ThemePicker: View {
         return Button {
             selection = theme
         } label: {
-            HStack(spacing: window.chipIconGap) {
-                Image(Self.iconName(for: theme))
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: window.chipIcon, height: window.chipIcon)
-                    .accessibilityHidden(true)
-                Text(theme.displayName)
-                    .font(tokens.type.body.font)
-                    .foregroundStyle(tokens.colors.primaryText.color)
-            }
-            .padding(.horizontal, window.chipPadding)
-            .frame(height: tokens.sizes.control)
-            .overlay {
-                RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
-                    .strokeBorder(
-                        (isSelected ? tokens.colors.brand : tokens.colors.chipEdge).color,
-                        lineWidth: isSelected ? window.chipSelectedOutline : tokens.controlMetrics.edgeWidth
-                    )
-            }
-            .contentShape(Rectangle())
+            Text(theme.displayName)
+                .font(tokens.type.body.font)
+                .foregroundStyle(tokens.colors.primaryText.color)
+                .padding(.horizontal, window.chipPadding)
+                .frame(height: tokens.sizes.control)
+                .background(
+                    tokens.colors.controlFill.color,
+                    in: RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
+                        .strokeBorder(
+                            (isSelected ? tokens.colors.brand : tokens.colors.controlEdge).color,
+                            lineWidth: isSelected ? window.chipSelectedOutline : tokens.controlMetrics.edgeWidth
+                        )
+                }
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(theme.displayName)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private static func iconName(for theme: AppTheme) -> String {
-        switch theme {
-        case .daylight: "ThemeIconClassic"
-        case .midnight: "ThemeIconMidnight"
-        }
     }
 }
 
