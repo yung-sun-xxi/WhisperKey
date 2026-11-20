@@ -63,14 +63,14 @@ enum DaylightAccent {
 }
 
 private extension PanelShell {
-    /// Midnight's shell in Daylight's colours: 02 at 95% over the same blur, and a clear
-    /// edge where the design draws 05.
+    /// Midnight's shell in Daylight's colours: 02 at 95% over the same blur, and a white
+    /// highlight where the design draws a 05 edge.
     ///
     /// The panels keep the window server's shadow (#161), which outlines the window with
     /// its own dark rim. On a light background that rim and a 05 line inside it read as a
-    /// heavy double border, so Daylight leaves the outline to the rim alone, as the
-    /// system's own menus do. The edge stays in the shell, only clear, so the themes still
-    /// differ only in colours.
+    /// heavy double border, and the rim alone still reads heavy. The system's own menus
+    /// pair the rim with a light line inside it, which makes it read thin; Daylight does
+    /// the same. The edge stays in the shell, so the themes still differ only in colours.
     func daylight() -> PanelShell {
         var shell = self
         if case let .fill(_, blur) = shell.background {
@@ -82,6 +82,7 @@ private extension PanelShell {
 }
 
 extension PanelShell {
-    /// Daylight's panel edge: clear, see `daylight()`.
-    static let daylightEdge: ThemeColor = .hex(0xB8BCC4, opacity: 0)
+    /// Daylight's panel edge: a white highlight inside the window server's rim, see
+    /// `daylight()`.
+    static let daylightEdge: ThemeColor = .hex(0xFFFFFF, opacity: 0.7)
 }
