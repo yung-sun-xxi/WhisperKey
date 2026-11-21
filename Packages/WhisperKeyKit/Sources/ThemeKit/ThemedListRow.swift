@@ -2,7 +2,7 @@ import SwiftUI
 
 // The list row the floating panels and the history windows share (#161; the quick paste
 // popup #166 and the full history window #164 reuse it), with the failed-row hatch and
-// the dashed Retry button that go with it.
+// the Retry button that goes with it.
 
 /// One row of a list: `sizes.listRow` tall, `spacing.rowPadding` inside, `radii.row`,
 /// the `selectedRow` fill under the pointer. A failed row lies on `failureFill` under
@@ -109,9 +109,11 @@ public struct ThemedFailureHatch: View {
     }
 }
 
-/// The button a failed row carries ("Retry"): `type.caption` in `primaryText`,
-/// `sizes.keycap` tall, `badgePadding` inside a dashed `mutedEdge` at `radii.control`.
-/// Grey like its row (#105 rule 1).
+/// The button a failed row carries ("Retry"), in the popover and the full history window:
+/// an accent link, `arrow.clockwise` and the title in `type.caption` and `brand`,
+/// `badgeDotGap` apart, `sizes.keycap` tall, with no box. The one coloured mark on a
+/// grey failed row, so the way out of the failure is what the eye finds (#228; the owner
+/// picked it live over a grey push button and a grey icon).
 public struct ThemedFailureButton: View {
     @Environment(\.themeTokens) private var tokens
     private let title: String
@@ -123,25 +125,18 @@ public struct ThemedFailureButton: View {
     }
 
     public var body: some View {
-        let metrics = tokens.controlMetrics
-        let box = RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
         Button(action: action) {
-            Text(title)
-                .font(tokens.type.caption.font)
-                .foregroundStyle(tokens.colors.primaryText.color)
-                .lineLimit(1)
-                .padding(.horizontal, metrics.badgePadding)
-                .frame(height: tokens.sizes.keycap)
-                .overlay(
-                    box.strokeBorder(
-                        tokens.colors.mutedEdge.color,
-                        style: StrokeStyle(lineWidth: metrics.edgeWidth, dash: metrics.failureDash)
-                    )
-                )
-                .contentShape(box)
+            HStack(spacing: tokens.controlMetrics.badgeDotGap) {
+                Image(systemName: "arrow.clockwise")
+                Text(title)
+                    .lineLimit(1)
+            }
+            .font(tokens.type.caption.font)
+            .foregroundStyle(tokens.colors.brand.color)
+            .frame(height: tokens.sizes.keycap)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .fixedSize()
     }
 }
-
