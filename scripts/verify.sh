@@ -8,6 +8,12 @@
 #   scripts/verify.sh -t     package tests only
 #   scripts/verify.sh -c     clean the app's derived data first
 #
+# Every mode takes a machine-wide build slot before it compiles anything
+# (agent-tooling's bin/build-slot.sh) and releases it on exit. Exit 2: no free
+# slot, nothing was compiled; wait for one in the background with
+# `build-slot.sh acquire --wait 30`, then re-run. Exit 3: still no slot at the
+# CI deadline (CI waits 20 minutes).
+#
 # This is the only place these commands live. README, CLAUDE.md and CI all call
 # this script rather than repeating them — see ~/PersonalProjects/AGENTS.md,
 # "One recipe, one home".
@@ -34,7 +40,7 @@ while getopts "cbth" opt; do
     c) DO_CLEAN=1 ;;
     b) DO_TEST=0 ;;
     t) DO_BUILD=0 ;;
-    h) sed -n '2,15p' "$0"; exit 0 ;;
+    h) sed -n '2,21p' "$0"; exit 0 ;;
     *) exit 2 ;;
   esac
 done
@@ -44,6 +50,51 @@ PKG_LOG="$DERIVED/package.log"
 APP_LOG="$DERIVED/app.log"
 
 echo "----------------------------------------------------------------"
+
+# --- build slot --------------------------------------------------------------
+# At most two heavy builds run on this Mac at once (agent-tooling's
+# build-slot.sh, claude/rules/swift-xcode.md item 12). Every mode compiles, so
+# the slot is taken before the first swift build or swift test and held through
+# the app build. One EXIT trap releases it on every exit path, a failed build
+# included. Locally never wait: on a busy Mac exit at once, so the caller waits
+# in the background where the owner can see it. CI has nobody to wait for it
+# and waits here. Required, not optional, like bundle-check.sh below.
+BUILD_SLOT="$HOME/PersonalProjects/agent-tooling/bin/build-slot.sh"
+BUILD_SLOT_HELD=0
+release_build_slot() {
+  if [ "$BUILD_SLOT_HELD" = 1 ]; then
+    echo "build slot  $("$BUILD_SLOT" release 2>&1)"
+  fi
+}
+trap release_build_slot EXIT
+
+if [ ! -x "$BUILD_SLOT" ]; then
+  echo "BUILD SLOT SCRIPT MISSING — $BUILD_SLOT is required"
+  exit 1
+fi
+if [ -n "${CI:-}" ]; then
+  BUILD_WAIT=(--wait 20)
+else
+  BUILD_WAIT=()
+fi
+# Set before acquire, so a run killed while CI waits still releases whatever
+# acquire took; release of a record never taken prints "nothing to release".
+BUILD_SLOT_HELD=1
+"$BUILD_SLOT" acquire ${BUILD_WAIT[@]+"${BUILD_WAIT[@]}"} "verify WhisperKey"
+BUILD_SLOT_STATUS=$?
+case "$BUILD_SLOT_STATUS" in
+  0) ;;
+  2|3)
+    BUILD_SLOT_HELD=0
+    echo "NO FREE BUILD SLOT (build-slot.sh exit $BUILD_SLOT_STATUS) — nothing was compiled. Wait for one in the background:"
+    echo "  ~/PersonalProjects/agent-tooling/bin/build-slot.sh acquire --wait 30"
+    echo "then re-run this script."
+    exit "$BUILD_SLOT_STATUS" ;;
+  *)
+    BUILD_SLOT_HELD=0
+    echo "NO BUILD SLOT (build-slot.sh exit $BUILD_SLOT_STATUS) — see \`$BUILD_SLOT status\`"
+    exit 1 ;;
+esac
 
 # --- swift package -----------------------------------------------------------
 if [ "$DO_BUILD" = 1 ]; then
