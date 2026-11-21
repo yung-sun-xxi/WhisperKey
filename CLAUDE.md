@@ -10,12 +10,13 @@ repository.
 scripts/verify.sh
 ```
 
-Package build, package tests, and the macOS app build: about **20 seconds**
+Package build, package tests, the macOS app build and a check that the built
+app carries no docs (`bundle-check.sh`): about **20 seconds**
 incrementally and **a minute** from clean, 387 tests. `-t` runs the package
 tests alone, `-b` skips them, `-c` cleans the app's derived data first. CI runs this same script, so a green run here is the
 same check the pull request gets.
 
-Fast loop: `swift test` (the package tests alone, no app build); `scripts/verify.sh` runs once at the end.
+Fast loop: `scripts/verify.sh -t` (the package tests alone, no app build); `scripts/verify.sh` runs once at the end.
 
 ## Traps
 
@@ -39,13 +40,16 @@ Fast loop: `swift test` (the package tests alone, no app build); `scripts/verify
 5. **Anything touching the microphone, Accessibility, global hotkeys, auto-paste
    or launch behaviour has to run as the installed app**, not from the build
    directory. That is what the `WhisperKey Dev Installed` scheme is for.
-6. **The local package is referenced as `relativePath = .`, and has to stay that
-   way.** A reference that spells out the folder name — `../WhisperKey` — resolves
-   only in a checkout whose directory carries that name. In a git worktree named
+6. **The local package lives in `Packages/WhisperKeyKit/` and is referenced as
+   `relativePath = Packages/WhisperKeyKit`, relative to the project.** A reference
+   that spells out the checkout's folder name — `../WhisperKey/...` — resolves only
+   in a checkout whose directory carries that name. In a git worktree named
    anything else, `xcodebuild` fails with `Could not resolve package dependencies`
    while `swift build` and `swift test` still pass, so the package graph looks
    healthy right up to the app build. Keep every local package path relative to the
-   project itself, never to the name of the folder it sits in.
+   project itself, never to the name of the folder it sits in. Run the package's
+   own commands through `scripts/verify.sh`, which passes `--package-path`; a bare
+   `swift test` at the repository root finds no package.
 7. **The self-hosted runner's logs (`~/actions-runner-whisperkey/_diag`) write
    decimals with a comma**, after this Mac's locale: `Back off 7,642 seconds` is
    7.6 seconds, not two hours.

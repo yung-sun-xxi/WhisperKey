@@ -12,8 +12,8 @@ import XCTest
 /// `ThemedFullHistoryView`, which draws them.
 final class FullHistorySourceScanTests: XCTestCase {
     private static let window = "WhisperKey/HistoryFullWindow.swift"
-    private static let drawn = "Sources/ThemeKit/ThemedFullHistoryView.swift"
-    private static let chrome = "Sources/ThemeKit/ThemedFullHistoryWindow.swift"
+    private static let drawn = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedFullHistoryView.swift"
+    private static let chrome = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedFullHistoryWindow.swift"
 
     private static let wholeFiles = [
         window,

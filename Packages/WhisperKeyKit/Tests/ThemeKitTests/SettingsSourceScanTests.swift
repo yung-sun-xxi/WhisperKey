@@ -133,6 +133,8 @@ final class SettingsSourceScanTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // ThemeKitTests
             .deletingLastPathComponent() // Tests
+            .deletingLastPathComponent() // WhisperKeyKit
+            .deletingLastPathComponent() // Packages
             .deletingLastPathComponent() // repository
     }
 

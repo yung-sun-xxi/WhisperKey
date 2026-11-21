@@ -11,9 +11,9 @@ import XCTest
 /// from the source: what this test holds is the text of the wiring, not the window it
 /// builds.
 final class PermissionsSourceScanTests: XCTestCase {
-    private static let drawn = "Sources/ThemeKit/ThemedPermissionsView.swift"
-    private static let controls = "Sources/ThemeKit/ThemedControls.swift"
-    private static let chrome = "Sources/ThemeKit/ThemedSurfaceWindow.swift"
+    private static let drawn = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedPermissionsView.swift"
+    private static let controls = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedControls.swift"
+    private static let chrome = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedSurfaceWindow.swift"
     private static let app = "WhisperKey/OnboardingWindow.swift"
     private static let hook = "WhisperKey/PermissionsSnapshotHook.swift"
 

@@ -11,8 +11,8 @@ import XCTest
 /// drawn view's words and actions; `ThemedHistoryReaderView` draws them.
 final class HistoryReaderSourceScanTests: XCTestCase {
     private static let window = "WhisperKey/HistoryReadWindow.swift"
-    private static let drawn = "Sources/ThemeKit/ThemedHistoryReaderView.swift"
-    private static let chrome = "Sources/ThemeKit/ThemedHistoryReaderWindow.swift"
+    private static let drawn = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedHistoryReaderView.swift"
+    private static let chrome = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedHistoryReaderWindow.swift"
     private static let hook = "WhisperKey/HistoryReaderSnapshotHook.swift"
 
     private static let wholeFiles = [window, drawn, chrome, hook]

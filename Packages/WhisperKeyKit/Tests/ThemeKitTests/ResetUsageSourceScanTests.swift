@@ -11,8 +11,8 @@ import XCTest
 final class ResetUsageSourceScanTests: XCTestCase {
     private static let beginMarker = "// MARK: - Themed Reset usage begin"
     private static let endMarker = "// MARK: - Themed Reset usage end"
-    private static let drawn = "Sources/ThemeKit/ThemedResetUsageView.swift"
-    private static let chrome = "Sources/ThemeKit/ThemedResetUsageWindow.swift"
+    private static let drawn = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedResetUsageView.swift"
+    private static let chrome = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedResetUsageWindow.swift"
     private static let hook = "WhisperKey/ResetUsageSnapshotHook.swift"
 
     private static func appRegions() throws -> [SettingsSourceScanTests.Region] {

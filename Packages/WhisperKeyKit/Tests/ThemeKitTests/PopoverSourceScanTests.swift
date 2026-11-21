@@ -20,9 +20,9 @@ final class PopoverSourceScanTests: XCTestCase {
 
     private static let wholeFiles = [
         "WhisperKey/HistorySection.swift",
-        "Sources/ThemeKit/ThemedPanelShell.swift",
-        "Sources/ThemeKit/ThemedListRow.swift",
-        "Sources/ThemeKit/ThemedPeriodPicker.swift",
+        "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedPanelShell.swift",
+        "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedListRow.swift",
+        "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedPeriodPicker.swift",
     ]
 
     private static func popoverRegions() throws -> [SettingsSourceScanTests.Region] {
