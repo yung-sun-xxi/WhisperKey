@@ -2,7 +2,7 @@ import SwiftUI
 
 // The list row the floating panels and the history windows share (#161; the quick paste
 // popup #166 and the full history window #164 reuse it), with the failed-row hatch and
-// the dashed Retry button that go with it.
+// the Retry button that goes with it.
 
 /// One row of a list: `sizes.listRow` tall, `spacing.rowPadding` inside, `radii.row`,
 /// the `selectedRow` fill under the pointer. A failed row lies on `failureFill` under
@@ -109,10 +109,21 @@ public struct ThemedFailureHatch: View {
     }
 }
 
-/// The button a failed row carries ("Retry"): `type.caption` in `primaryText`,
-/// `sizes.keycap` tall, `badgePadding` inside a dashed `mutedEdge` at `radii.control`.
-/// Grey like its row (#105 rule 1).
+/// The button a failed row carries ("Retry"), `sizes.keycap` tall, in the popover and the
+/// full history window. Its look is being picked live (#228), from three variants:
+///
+/// - `a`, a small push button: `controlFill` inside a solid `controlEdge` at `edgeWidth`
+///   and `radii.control`, the title in `type.caption` and `primaryText`, `badgePadding`
+///   inside. The default.
+/// - `b`, an accent link: `arrow.clockwise` and the title in `type.caption` and `brand`,
+///   `badgeDotGap` apart, no box.
+/// - `c`, an icon: `arrow.clockwise` in `actionGlyph`, centred in a `raisedControl`
+///   circle `sizes.keycap` across; the title is its tooltip and accessibility label.
+///
+/// The `WKRetryVariant` default picks one (`a` when unset or unknown).
 public struct ThemedFailureButton: View {
+    // TEMP #228: remove before merge. The variant switch, read live from the defaults.
+    @AppStorage("WKRetryVariant") private var variant = "a"
     @Environment(\.themeTokens) private var tokens
     private let title: String
     private let action: () -> Void
@@ -123,25 +134,55 @@ public struct ThemedFailureButton: View {
     }
 
     public var body: some View {
-        let metrics = tokens.controlMetrics
-        let box = RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
         Button(action: action) {
-            Text(title)
-                .font(tokens.type.caption.font)
-                .foregroundStyle(tokens.colors.primaryText.color)
-                .lineLimit(1)
-                .padding(.horizontal, metrics.badgePadding)
-                .frame(height: tokens.sizes.keycap)
-                .overlay(
-                    box.strokeBorder(
-                        tokens.colors.mutedEdge.color,
-                        style: StrokeStyle(lineWidth: metrics.edgeWidth, dash: metrics.failureDash)
-                    )
-                )
-                .contentShape(box)
+            // TEMP #228: remove before merge.
+            switch variant {
+            case "b":
+                accentLink
+            case "c":
+                icon
+            default:
+                pushButton
+            }
         }
         .buttonStyle(.plain)
         .fixedSize()
     }
-}
 
+    private var pushButton: some View {
+        let metrics = tokens.controlMetrics
+        let box = RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
+        return Text(title)
+            .font(tokens.type.caption.font)
+            .foregroundStyle(tokens.colors.primaryText.color)
+            .lineLimit(1)
+            .padding(.horizontal, metrics.badgePadding)
+            .frame(height: tokens.sizes.keycap)
+            .background(box.fill(tokens.colors.controlFill.color))
+            .overlay(box.strokeBorder(tokens.colors.controlEdge.color, lineWidth: metrics.edgeWidth))
+            .contentShape(box)
+    }
+
+    private var accentLink: some View {
+        HStack(spacing: tokens.controlMetrics.badgeDotGap) {
+            Image(systemName: "arrow.clockwise")
+            Text(title)
+                .lineLimit(1)
+        }
+        .font(tokens.type.caption.font)
+        .foregroundStyle(tokens.colors.brand.color)
+        .frame(height: tokens.sizes.keycap)
+        .contentShape(Rectangle())
+    }
+
+    private var icon: some View {
+        Image(systemName: "arrow.clockwise")
+            .font(tokens.type.caption.font)
+            .foregroundStyle(tokens.colors.actionGlyph.color)
+            .frame(width: tokens.sizes.keycap, height: tokens.sizes.keycap)
+            .background(Circle().fill(tokens.colors.raisedControl.color))
+            .contentShape(Circle())
+            .help(title)
+            .accessibilityLabel(title)
+    }
+}

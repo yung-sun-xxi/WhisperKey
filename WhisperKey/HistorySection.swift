@@ -165,10 +165,12 @@ struct WindowAccessor: NSViewRepresentable {
     }
 }
 
-/// One history entry: one line of text in `body`, a green check once copied, its age
-/// (`now`, `5m`, `2w`, …) in `caption` and `secondaryText` against the trailing edge, and
-/// Retry on an entry that can be recognised again. A failed entry is a hatched row in
-/// `secondaryText`. The text is what gives way: the age is never cut or wrapped.
+/// One history entry: one line of text in `body`, a green check once copied, Retry on an
+/// entry that can be recognised again, and its age (`now`, `5m`, `2w`, …) in `caption` and
+/// `secondaryText` against the trailing edge, where every row keeps it (#228). A failed
+/// entry is a hatched row in `secondaryText`. The text is what gives way: the age is never
+/// cut or wrapped. The text and the age carry the row's click, menu and tooltip; Retry
+/// lies outside them, so a click on it only retries.
 private struct HistoryInlineRow: View {
     let entry: HistoryEntry
     let age: String
@@ -194,38 +196,32 @@ private struct HistoryInlineRow: View {
                             .font(tokens.type.caption.font)
                             .foregroundStyle(tokens.colors.success.color)
                     }
-                    Text(age)
-                        .font(tokens.type.caption.font)
-                        .foregroundStyle(tokens.colors.secondaryText.color)
-                        .lineLimit(1)
-                        .fixedSize()
                 }
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .onTapGesture(perform: handlePrimaryClick)
-                .contextMenu {
-                    if entry.canRetryRecognition {
-                        Button("Retry", action: onRetry)
-                    }
-                    Button("Open in Window", action: onOpenReadWindow)
-                    if entry.status == .recognized {
-                        Button("Copy to Clipboard", action: onCopy)
-                    }
-                }
-                .help(displayText)
+                .modifier(InlineRowActions(
+                    entry: entry,
+                    help: displayText,
+                    onCopy: onCopy,
+                    onOpenReadWindow: onOpenReadWindow,
+                    onRetry: onRetry
+                ))
 
                 if entry.canRetryRecognition {
                     ThemedFailureButton("Retry", action: onRetry)
                 }
-            }
-        }
-    }
 
-    private func handlePrimaryClick() {
-        if entry.status != .recognized || NSEvent.modifierFlags.contains(.shift) {
-            onOpenReadWindow()
-        } else {
-            onCopy()
+                Text(age)
+                    .font(tokens.type.caption.font)
+                    .foregroundStyle(tokens.colors.secondaryText.color)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .modifier(InlineRowActions(
+                        entry: entry,
+                        help: displayText,
+                        onCopy: onCopy,
+                        onOpenReadWindow: onOpenReadWindow,
+                        onRetry: onRetry
+                    ))
+            }
         }
     }
 
@@ -241,6 +237,42 @@ private struct HistoryInlineRow: View {
             "No microphone audio captured"
         case .captureFailed:
             entry.text.isEmpty ? "Audio capture failed" : entry.text
+        }
+    }
+}
+
+/// What a popover row does wherever on it the pointer is (Retry aside): a click copies a
+/// recognised entry, a shift-click or a click on any other opens the reader; the context
+/// menu offers Retry, Open in Window and Copy to Clipboard; the tooltip is the row's text.
+private struct InlineRowActions: ViewModifier {
+    let entry: HistoryEntry
+    let help: String
+    let onCopy: () -> Void
+    let onOpenReadWindow: () -> Void
+    let onRetry: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: primaryClick)
+            .contextMenu {
+                if entry.canRetryRecognition {
+                    Button("Retry", action: onRetry)
+                }
+                Button("Open in Window", action: onOpenReadWindow)
+                if entry.status == .recognized {
+                    Button("Copy to Clipboard", action: onCopy)
+                }
+            }
+            .help(help)
+    }
+
+    private func primaryClick() {
+        if entry.status != .recognized || NSEvent.modifierFlags.contains(.shift) {
+            onOpenReadWindow()
+        } else {
+            onCopy()
         }
     }
 }
