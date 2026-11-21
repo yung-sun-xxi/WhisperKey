@@ -25,7 +25,6 @@ DERIVED="build/verify"
 # folder CI keeps between runs.
 PACKAGE=(--package-path Packages/WhisperKeyKit --scratch-path "$REPO/.build")
 APP="$DERIVED/Build/Products/Debug/WhisperKey Dev.app"
-BUNDLE_CHECK="$HOME/PersonalProjects/agent-tooling/bin/bundle-check.sh"
 DO_CLEAN=0
 DO_BUILD=1
 DO_TEST=1
@@ -115,7 +114,7 @@ if [ "$DO_BUILD" = 1 ]; then
 
   # The bundle carries only what the app reads at runtime: no docs, notes or
   # web pages copied in by a folder the project takes whole.
-  "$BUNDLE_CHECK" "$APP"
+  "$HOME/PersonalProjects/agent-tooling/bin/bundle-check.sh" "$APP"
   if [ $? != 0 ]; then
     echo "BUNDLE CHECK FAILED: $APP holds files the app never reads"
     exit 1
