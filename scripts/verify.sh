@@ -3,8 +3,8 @@
 # Build and test WhisperKey (macOS), and print what ran.
 #
 # Usage:
-#   scripts/verify.sh        package build + package tests + app build
-#   scripts/verify.sh -b     builds only, no tests
+#   scripts/verify.sh        package build + package tests + app build + bundle check
+#   scripts/verify.sh -b     builds and bundle check only, no tests
 #   scripts/verify.sh -t     package tests only
 #   scripts/verify.sh -c     clean the app's derived data first
 #
@@ -20,6 +20,12 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || exit 1
 
 DERIVED="build/verify"
+# The Swift package lives in its own folder so Xcode does not list the whole
+# repository inside it. Its build cache stays at the repository's .build, the
+# folder CI keeps between runs.
+PACKAGE=(--package-path Packages/WhisperKeyKit --scratch-path "$REPO/.build")
+APP="$DERIVED/Build/Products/Debug/WhisperKey Dev.app"
+BUNDLE_CHECK="$HOME/PersonalProjects/agent-tooling/bin/bundle-check.sh"
 DO_CLEAN=0
 DO_BUILD=1
 DO_TEST=1
@@ -43,7 +49,7 @@ echo "----------------------------------------------------------------"
 # --- swift package -----------------------------------------------------------
 if [ "$DO_BUILD" = 1 ]; then
   START=$SECONDS
-  swift build >"$PKG_LOG" 2>&1
+  swift build "${PACKAGE[@]}" >"$PKG_LOG" 2>&1
   if [ $? != 0 ]; then
     echo "PACKAGE BUILD FAILED"
     grep -E "error:" "$PKG_LOG" | sort -u | head -40
@@ -54,7 +60,7 @@ fi
 
 if [ "$DO_TEST" = 1 ]; then
   START=$SECONDS
-  swift test >"$PKG_LOG" 2>&1
+  swift test "${PACKAGE[@]}" >"$PKG_LOG" 2>&1
   STATUS=$?
   # Each test bundle prints its own "Executed N tests" total under its
   # "Test Suite 'X.xctest'" line; the last one alone is a single bundle's
@@ -105,6 +111,14 @@ if [ "$DO_BUILD" = 1 ]; then
   echo "app build   ok, $((SECONDS - START))s, ${WARNINGS} warnings"
   if [ "$DO_CLEAN" != 1 ]; then
     echo "            INCREMENTAL — only recompiled files re-emit warnings."
+  fi
+
+  # The bundle carries only what the app reads at runtime: no docs, notes or
+  # web pages copied in by a folder the project takes whole.
+  "$BUNDLE_CHECK" "$APP"
+  if [ $? != 0 ]; then
+    echo "BUNDLE CHECK FAILED: $APP holds files the app never reads"
+    exit 1
   fi
 fi
 echo "----------------------------------------------------------------"

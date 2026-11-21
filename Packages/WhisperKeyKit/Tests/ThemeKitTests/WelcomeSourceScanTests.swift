@@ -8,9 +8,9 @@ import XCTest
 /// hosts the view in the chrome and keeps the window's behaviour. The application target
 /// has no test bundle, so that file is read from the source.
 final class WelcomeSourceScanTests: XCTestCase {
-    private static let drawn = "Sources/ThemeKit/ThemedWelcomeView.swift"
-    private static let controls = "Sources/ThemeKit/ThemedControls.swift"
-    private static let chrome = "Sources/ThemeKit/ThemedSurfaceWindow.swift"
+    private static let drawn = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedWelcomeView.swift"
+    private static let controls = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedControls.swift"
+    private static let chrome = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedSurfaceWindow.swift"
     private static let app = "WhisperKey/WelcomeWindow.swift"
     private static let hook = "WhisperKey/WelcomeSnapshotHook.swift"
 

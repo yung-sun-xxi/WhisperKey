@@ -346,6 +346,8 @@ struct TokenSheet {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // ThemeKitTests
             .deletingLastPathComponent() // Tests
+            .deletingLastPathComponent() // WhisperKeyKit
+            .deletingLastPathComponent() // Packages
             .deletingLastPathComponent() // repository
             .appendingPathComponent("docs/design/tokens.md")
         let text = try String(contentsOf: url, encoding: .utf8)

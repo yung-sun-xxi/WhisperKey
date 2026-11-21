@@ -8,8 +8,8 @@ import XCTest
 /// usage store into plain rows and hosts the view with the popover's period picker. The
 /// application target has no test bundle, so that file is read from the source.
 final class UsageBreakdownSourceScanTests: XCTestCase {
-    private static let drawn = "Sources/ThemeKit/ThemedUsageBreakdownView.swift"
-    private static let chrome = "Sources/ThemeKit/ThemedSurfaceWindow.swift"
+    private static let drawn = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedUsageBreakdownView.swift"
+    private static let chrome = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedSurfaceWindow.swift"
     private static let app = "WhisperKey/UsageBreakdownWindow.swift"
     private static let hook = "WhisperKey/UsageBreakdownSnapshotHook.swift"
 

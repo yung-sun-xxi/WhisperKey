@@ -16,8 +16,8 @@ final class QuickPasteSourceScanTests: XCTestCase {
     private static let wholeFiles = [
         panel,
         "WhisperKey/QuickPasteSnapshotHook.swift",
-        "Sources/ThemeKit/ThemedQuickPasteView.swift",
-        "Sources/ThemeKit/QuickPasteGeometry.swift",
+        "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedQuickPasteView.swift",
+        "Packages/WhisperKeyKit/Sources/ThemeKit/QuickPasteGeometry.swift",
     ]
 
     private static func source(_ path: String) throws -> String {
@@ -91,8 +91,8 @@ final class QuickPasteSourceScanTests: XCTestCase {
     func testNothingTurnsTheListOver() throws {
         let files = Self.wholeFiles + [
             Self.controller,
-            "Sources/QuickPaste/QuickPasteLayout.swift",
-            "Sources/QuickPaste/QuickPasteSelection.swift",
+            "Packages/WhisperKeyKit/Sources/QuickPaste/QuickPasteLayout.swift",
+            "Packages/WhisperKeyKit/Sources/QuickPaste/QuickPasteSelection.swift",
         ]
         for path in files {
             let text = try Self.source(path)

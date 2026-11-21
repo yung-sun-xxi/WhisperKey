@@ -12,13 +12,13 @@ import XCTest
 final class ToastSourceScanTests: XCTestCase {
     private static let view = "WhisperKey/ToastView.swift"
     private static let window = "WhisperKey/ToastWindow.swift"
-    private static let drawn = "Sources/ThemeKit/ThemedToastView.swift"
+    private static let drawn = "Packages/WhisperKeyKit/Sources/ThemeKit/ThemedToastView.swift"
 
     private static let wholeFiles = [
         view,
         window,
         drawn,
-        "Sources/ThemeKit/ToastGeometry.swift",
+        "Packages/WhisperKeyKit/Sources/ThemeKit/ToastGeometry.swift",
         "WhisperKey/ToastSnapshotHook.swift",
     ]
 
