@@ -109,21 +109,12 @@ public struct ThemedFailureHatch: View {
     }
 }
 
-/// The button a failed row carries ("Retry"), `sizes.keycap` tall, in the popover and the
-/// full history window. Its look is being picked live (#228), from three variants:
-///
-/// - `a`, a small push button: `controlFill` inside a solid `controlEdge` at `edgeWidth`
-///   and `radii.control`, the title in `type.caption` and `primaryText`, `badgePadding`
-///   inside. The default.
-/// - `b`, an accent link: `arrow.clockwise` and the title in `type.caption` and `brand`,
-///   `badgeDotGap` apart, no box.
-/// - `c`, an icon: `arrow.clockwise` in `actionGlyph`, centred in a `raisedControl`
-///   circle `sizes.keycap` across; the title is its tooltip and accessibility label.
-///
-/// The `WKRetryVariant` default picks one (`a` when unset or unknown).
+/// The button a failed row carries ("Retry"), in the popover and the full history window:
+/// an accent link, `arrow.clockwise` and the title in `type.caption` and `brand`,
+/// `badgeDotGap` apart, `sizes.keycap` tall, with no box. The one coloured mark on a
+/// grey failed row, so the way out of the failure is what the eye finds (#228; the owner
+/// picked it live over a grey push button and a grey icon).
 public struct ThemedFailureButton: View {
-    // TEMP #228: remove before merge. The variant switch, read live from the defaults.
-    @AppStorage("WKRetryVariant") private var variant = "a"
     @Environment(\.themeTokens) private var tokens
     private let title: String
     private let action: () -> Void
@@ -135,54 +126,17 @@ public struct ThemedFailureButton: View {
 
     public var body: some View {
         Button(action: action) {
-            // TEMP #228: remove before merge.
-            switch variant {
-            case "b":
-                accentLink
-            case "c":
-                icon
-            default:
-                pushButton
+            HStack(spacing: tokens.controlMetrics.badgeDotGap) {
+                Image(systemName: "arrow.clockwise")
+                Text(title)
+                    .lineLimit(1)
             }
+            .font(tokens.type.caption.font)
+            .foregroundStyle(tokens.colors.brand.color)
+            .frame(height: tokens.sizes.keycap)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .fixedSize()
-    }
-
-    private var pushButton: some View {
-        let metrics = tokens.controlMetrics
-        let box = RoundedRectangle(cornerRadius: tokens.radii.control, style: .continuous)
-        return Text(title)
-            .font(tokens.type.caption.font)
-            .foregroundStyle(tokens.colors.primaryText.color)
-            .lineLimit(1)
-            .padding(.horizontal, metrics.badgePadding)
-            .frame(height: tokens.sizes.keycap)
-            .background(box.fill(tokens.colors.controlFill.color))
-            .overlay(box.strokeBorder(tokens.colors.controlEdge.color, lineWidth: metrics.edgeWidth))
-            .contentShape(box)
-    }
-
-    private var accentLink: some View {
-        HStack(spacing: tokens.controlMetrics.badgeDotGap) {
-            Image(systemName: "arrow.clockwise")
-            Text(title)
-                .lineLimit(1)
-        }
-        .font(tokens.type.caption.font)
-        .foregroundStyle(tokens.colors.brand.color)
-        .frame(height: tokens.sizes.keycap)
-        .contentShape(Rectangle())
-    }
-
-    private var icon: some View {
-        Image(systemName: "arrow.clockwise")
-            .font(tokens.type.caption.font)
-            .foregroundStyle(tokens.colors.actionGlyph.color)
-            .frame(width: tokens.sizes.keycap, height: tokens.sizes.keycap)
-            .background(Circle().fill(tokens.colors.raisedControl.color))
-            .contentShape(Circle())
-            .help(title)
-            .accessibilityLabel(title)
     }
 }
