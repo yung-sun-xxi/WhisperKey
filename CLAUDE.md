@@ -12,7 +12,7 @@ scripts/verify.sh
 
 Package build, package tests, the macOS app build and a check that the built
 app carries no docs (`bundle-check.sh`): about **20 seconds**
-incrementally and **a minute** from clean, 387 tests. `-t` runs the package
+incrementally and **a minute** from clean, 920 tests. `-t` runs the package
 tests alone, `-b` skips them, `-c` cleans the app's derived data first. CI runs this same script, so a green run here is the
 same check the pull request gets.
 
