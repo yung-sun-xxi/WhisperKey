@@ -1086,14 +1086,18 @@ final class AudioRecorderTests: XCTestCase {
         private let lock = NSLock()
         private var chunks: [Data] = []
         private var calls = 0
+        /// Holds the first chunk back this long: one that overtakes it shows up as a swap.
+        private let firstChunkDelay: TimeInterval
+        init(firstChunkDelay: TimeInterval = 0) {
+            self.firstChunkDelay = firstChunkDelay
+        }
         var sink: CapturedAudioSink {
             { [self] chunk in
-                // The first chunk is slow to arrive: one that overtakes it shows up as a swap.
                 lock.lock()
                 calls += 1
                 let isFirst = calls == 1
                 lock.unlock()
-                if isFirst { Thread.sleep(forTimeInterval: 0.01) }
+                if isFirst { Thread.sleep(forTimeInterval: firstChunkDelay) }
                 lock.lock()
                 chunks.append(chunk)
                 lock.unlock()
@@ -1105,12 +1109,6 @@ final class AudioRecorderTests: XCTestCase {
             return chunks
         }
         var bytes: Data { received.reduce(Data(), +) }
-        /// The last chunk is handed over just after the recorder counts it as appended.
-        func bytes(waitingFor count: Int) -> Data {
-            let deadline = Date().addingTimeInterval(2)
-            while bytes.count < count, Date() < deadline { Thread.sleep(forTimeInterval: 0.002) }
-            return bytes
-        }
     }
 
     /// Buffers of rising level, so a gap, a duplicate or a swap changes the bytes.
@@ -1146,8 +1144,7 @@ final class AudioRecorderTests: XCTestCase {
         pipeline.attachSink(log.sink)
         XCTAssertEqual(log.received.count, 1, "the backlog arrives as one chunk, at once")
         try feed(pipeline, diagnostics, levelBuffer(format, level: 0.3), sourceID: 1)
-        let recorded = pipeline.retireAndSnapshot()
-        XCTAssertEqual(log.bytes(waitingFor: recorded.count), recorded)
+        XCTAssertEqual(log.bytes, pipeline.retireAndSnapshot())
         XCTAssertEqual(log.received.count, 2)
     }
 
@@ -1158,7 +1155,7 @@ final class AudioRecorderTests: XCTestCase {
             let diagnostics = AudioRecorderDiagnosticsState()
             diagnostics.beginCapture(captureID: 1, engineHostID: 1, inputDevice: Self.builtInMic, inputFormat: format)
             let pipeline = try CapturePipeline(captureID: 1, inputFormat: format, outputFormat: Self.outputFormat, diagnostics: diagnostics)
-            let log = SinkLog()
+            let log = SinkLog(firstChunkDelay: 0.01)
             let feeding = DispatchSemaphore(value: 0)
             let fed = DispatchSemaphore(value: 0)
             DispatchQueue.global(qos: .userInitiated).async { [self] in
@@ -1182,9 +1179,8 @@ final class AudioRecorderTests: XCTestCase {
             while diagnostics.snapshot().conversionInFlight, Date() < deadline { Thread.sleep(forTimeInterval: 0.002) }
             let recorded = pipeline.retireAndSnapshot()
             XCTAssertGreaterThan(recorded.count, 0)
-            let received = log.bytes(waitingFor: recorded.count)
-            XCTAssertEqual(received, recorded, "round \(round)")
-            guard received == recorded else { return }
+            XCTAssertEqual(log.bytes, recorded, "round \(round)")
+            guard log.bytes == recorded else { return }
         }
     }
 
@@ -1247,7 +1243,11 @@ final class AudioRecorderTests: XCTestCase {
         let entered = DispatchSemaphore(value: 0)
         defer { release.signal() }
         try await recorder.start(sink: { _ in entered.signal(); release.wait(); release.signal() })
-        try host.deliverTone(seconds: 0.05)
+        let buffer = try toneBuffer(format: host.inputFormat, toneChannels: [0])
+        try XCTUnwrap(host.startedPipeline).enqueue(
+            buffer: buffer, tapBufferID: 1, inputFrameLength: buffer.frameLength,
+            enqueuedAtNanos: audioRecorderNowNanos(), sourceID: 1
+        )
         XCTAssertEqual(entered.wait(timeout: .now() + 2), .success, "the sink was called and hangs")
         try await Task.sleep(nanoseconds: 350_000_000)
         let asked = Date()

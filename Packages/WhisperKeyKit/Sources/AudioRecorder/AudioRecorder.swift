@@ -439,12 +439,14 @@ final class CapturePipeline: @unchecked Sendable {
         pcmData.append(converted)
         let pcmByteCount = pcmData.count
         lock.unlock()
+        let appendNanos = audioRecorderNowNanos() - startedAtNanos
+        // Before the append is reported: until then this conversion still counts as running.
+        deliverToSink()
         diagnostics.recordAppendSuccess(
             outputFrameLength: outputBuffer.frameLength,
-            appendNanos: audioRecorderNowNanos() - startedAtNanos,
+            appendNanos: appendNanos,
             pcmBytes: pcmByteCount
         )
-        deliverToSink()
     }
 }
 
