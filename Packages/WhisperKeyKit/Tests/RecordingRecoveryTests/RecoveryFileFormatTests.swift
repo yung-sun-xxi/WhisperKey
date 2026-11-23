@@ -45,6 +45,9 @@ final class RecoveryFileFormatTests: RecoveryTestCase {
         XCTAssertNotNil(RecoveryFileFormat.decode(RecoveryFileFormat.encode(makeHeader())), "the control")
         XCTAssertNil(RecoveryFileFormat.decode(Data(repeating: 0xFF, count: 4_096)))
         XCTAssertNil(RecoveryFileFormat.decode(pcm(1)))
+        var otherVersion = RecoveryFileFormat.encode(makeHeader())
+        otherVersion[8] = 2
+        XCTAssertNil(RecoveryFileFormat.decode(otherVersion))
     }
 
     /// The encoder turns the rate into an integer, which traps on these values.

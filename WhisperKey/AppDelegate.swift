@@ -1,5 +1,6 @@
 import AppKit
 import os
+import RecordingRecovery
 import SingleInstance
 
 @MainActor
