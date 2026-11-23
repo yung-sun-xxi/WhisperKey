@@ -129,6 +129,16 @@ final class RecordingKeeperTests: RecoveryTestCase {
         XCTAssertEqual(recoveryFiles, [])
     }
 
+    func testASaveIntoAHistoryOfSizeZeroLeavesNoFile() throws {
+        let id = UUID()
+        let history = makeHistory()
+        let keeper = RecordingKeeper(history: history, folder: folder)
+        try begin(keeper, id, buffer())
+        history.setMaxEntries(0)
+        XCTAssertNil(try keeper.finish(.recorded(buffer()), id, details: details))
+        XCTAssertEqual(recoveryFiles, [], "there is no row to wait for")
+    }
+
     func testARowThatCannotBeWrittenKeepsTheFileUntilTheTextIsDelivered() throws {
         let id = UUID()
         let history = makeHistory()

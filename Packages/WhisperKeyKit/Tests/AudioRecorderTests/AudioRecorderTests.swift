@@ -1085,8 +1085,15 @@ final class AudioRecorderTests: XCTestCase {
     private final class SinkLog: @unchecked Sendable {
         private let lock = NSLock()
         private var chunks: [Data] = []
+        private var calls = 0
         var sink: CapturedAudioSink {
             { [self] chunk in
+                // The first chunk is slow to arrive: one that overtakes it shows up as a swap.
+                lock.lock()
+                calls += 1
+                let isFirst = calls == 1
+                lock.unlock()
+                if isFirst { Thread.sleep(forTimeInterval: 0.01) }
                 lock.lock()
                 chunks.append(chunk)
                 lock.unlock()

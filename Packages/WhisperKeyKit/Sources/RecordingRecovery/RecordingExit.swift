@@ -98,15 +98,11 @@ public final class RecordingExit {
             if actions.musicNeedsResuming() {
                 await Self.run(before: deadline) { [self] in await actions.resumeMusic() }
             }
-            replyOnce()
+            // The only reply: `notAsked` is left once, so this task runs once.
+            phase = .replied
+            actions.reply()
         }
         return .saveFirst
-    }
-
-    private func replyOnce() {
-        guard phase == .saving else { return }
-        phase = .replied
-        actions.reply()
     }
 
     /// Runs `work` and returns when it finishes or the deadline passes, whichever is first.
