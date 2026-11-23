@@ -10,8 +10,9 @@ private protocol AppleMusicControlling {
 final class AppleMusicRecordingController {
     private let music: any AppleMusicControlling
     private var activeRecordingID: UUID?
-    private var pendingPauseAttempts = Set<UUID>()
+    private var pauseAttempts = [UUID: Task<Void, Never>]()
     private var pausedByWhisperKey = false
+    private var resumeTask: Task<Void, Never>?
 
     init() {
         self.music = SystemAppleMusicController()
@@ -22,8 +23,7 @@ final class AppleMusicRecordingController {
         activeRecordingID = recordingID
         guard enabled else { return }
 
-        pendingPauseAttempts.insert(recordingID)
-        Task { [weak self, music] in
+        pauseAttempts[recordingID] = Task { [weak self, music] in
             let didPause = await music.pauseIfPlaying()
             self?.pauseAttemptFinished(recordingID: recordingID, didPause: didPause)
         }
@@ -35,7 +35,7 @@ final class AppleMusicRecordingController {
     }
 
     private func pauseAttemptFinished(recordingID: UUID, didPause: Bool) {
-        pendingPauseAttempts.remove(recordingID)
+        pauseAttempts[recordingID] = nil
         if didPause {
             pausedByWhisperKey = true
         }
@@ -43,12 +43,31 @@ final class AppleMusicRecordingController {
     }
 
     private func resumeIfReady() {
-        guard activeRecordingID == nil, pendingPauseAttempts.isEmpty, pausedByWhisperKey else { return }
+        guard activeRecordingID == nil, pauseAttempts.isEmpty, pausedByWhisperKey else { return }
         pausedByWhisperKey = false
 
-        Task { [music] in
+        resumeTask = Task { [weak self, music] in
             await music.resume()
+            self?.resumeTask = nil
         }
+    }
+
+    // MARK: - On the way out (#233)
+
+    /// Whether quitting right now could leave the music paused: a pause that may still land,
+    /// one that landed, or a resume on its way.
+    var needsResuming: Bool {
+        pausedByWhisperKey || !pauseAttempts.isEmpty || resumeTask != nil
+    }
+
+    /// Ends the recording as far as the music goes and returns once Music has been told to
+    /// play again, or nothing had been paused.
+    func resumeForExit() async {
+        recordingDidEnd()
+        while let attempt = pauseAttempts.values.first {
+            await attempt.value
+        }
+        await resumeTask?.value
     }
 }
 

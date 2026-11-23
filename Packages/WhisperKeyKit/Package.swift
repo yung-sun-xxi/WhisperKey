@@ -24,6 +24,7 @@ let package = Package(
         .library(name: "SingleInstance", targets: ["SingleInstance"]),
         .library(name: "ThemeKit", targets: ["ThemeKit"]),
         .library(name: "PermissionControl", targets: ["PermissionControl"]),
+        .library(name: "RecordingRecovery", targets: ["RecordingRecovery"]),
     ],
     targets: [
         .target(name: "HotkeyEngine"),
@@ -44,6 +45,9 @@ let package = Package(
         // What the Settings Permissions tab shows and how Revoke resets a permission
         // through tccutil, behind a command runner the tests replace (#225).
         .target(name: "PermissionControl"),
+        // Keeps a recording when the app quits, is killed or crashes before its history row
+        // exists: the recovery file, its ownership, the launch recovery and the exit (#233).
+        .target(name: "RecordingRecovery", dependencies: ["AudioRecorder", "AudioEncoder", "HistoryStore"]),
         // The look of each theme as values, and their delivery to every hosting root (#160).
         // QuickPaste directly: ThemeKit builds the quick paste geometry from the tokens (#166).
         .target(name: "ThemeKit", dependencies: ["SettingsStore", "QuickPaste"]),
@@ -54,7 +58,7 @@ let package = Package(
         // copies at once and prove the file lock holds across processes (#140).
         .executableTarget(
             name: "SharedStoreProbe",
-            dependencies: ["UsageStatsStore", "HistoryStore", "ClipboardHistoryStore"]
+            dependencies: ["UsageStatsStore", "HistoryStore", "ClipboardHistoryStore", "RecordingRecovery"]
         ),
         .target(
             name: "WhisperKeyKit",
@@ -76,6 +80,7 @@ let package = Package(
                 "DevBuildMarker",
                 "ThemeKit",
                 "PermissionControl",
+                "RecordingRecovery",
             ]
         ),
 
@@ -96,6 +101,10 @@ let package = Package(
         .testTarget(name: "SingleInstanceTests", dependencies: ["SingleInstance"]),
         .testTarget(name: "DevBuildMarkerTests", dependencies: ["DevBuildMarker"]),
         .testTarget(name: "PermissionControlTests", dependencies: ["PermissionControl"]),
+        .testTarget(
+            name: "RecordingRecoveryTests",
+            dependencies: ["RecordingRecovery", "AudioRecorder", "AudioEncoder", "HistoryStore", "SharedStoreProbe"]
+        ),
         .testTarget(name: "ThemeKitTests", dependencies: ["ThemeKit", "SettingsStore", "KeychainStore", "QuickPaste"]),
     ]
 )

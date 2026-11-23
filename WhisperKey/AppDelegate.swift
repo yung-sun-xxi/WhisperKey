@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let log = Logger(subsystem: "WhisperKey", category: "AppDelegate")
     let coordinator = AppCoordinator()
     private var menuBarController: MenuBarController?
+    private let termination = AppTermination()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let runningApplications = NSWorkspace.shared.runningApplications
@@ -49,6 +50,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.log.info("didFinishLaunching pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public)")
         menuBarController = MenuBarController(coordinator: coordinator)
+        termination.listenForSIGTERM()
+        // After the single-instance check, so a second copy that is about to quit touches
+        // no recovery file.
+        coordinator.recoverRecordingsAtLaunch()
         coordinator.checkStoredAPIKeyAtLaunch()
+    }
+
+    /// Quit, Cmd+Q, logout and SIGTERM all come here. Never `.terminateCancel`, which would
+    /// cancel a logout.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        AppTermination.noteAsked()
+        switch coordinator.prepareToExit() {
+        case .exitNow:
+            return .terminateNow
+        case .saveFirst:
+            termination.backstop.arm()
+            return .terminateLater
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        termination.finishPendingExit { coordinator.isSavingBeforeExit }
     }
 }
