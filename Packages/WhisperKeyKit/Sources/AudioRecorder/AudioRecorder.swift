@@ -165,6 +165,11 @@ final class CapturePipeline: @unchecked Sendable {
     private var pendingSourceID: UInt64?
     private var lastCurrentSourceBufferNanos: UInt64?
     private var sourceSwitchHandler: (@Sendable (UInt64) -> Void)?
+    private var sink: CapturedAudioSink?
+    private var deliveredByteCount = 0
+    /// Held while the sink is called, so chunks reach it in order. Never taken under `lock`,
+    /// and never by `retireAndSnapshot`, which must not wait for a sink.
+    private let deliveryLock = NSLock()
 
     init(
         captureID: UInt64,
@@ -261,6 +266,30 @@ final class CapturePipeline: @unchecked Sendable {
                 enqueuedAtNanos: enqueuedAtNanos
             )
         }
+    }
+
+    /// Hands the recording's audio to `sink` from its first byte: what is captured already,
+    /// now, and every converted chunk as it comes (#233).
+    func attachSink(_ sink: @escaping CapturedAudioSink) {
+        lock.lock()
+        self.sink = sink
+        lock.unlock()
+        deliverToSink()
+    }
+
+    /// Gives the sink what it has not had yet, outside the capture lock.
+    private func deliverToSink() {
+        deliveryLock.lock()
+        defer { deliveryLock.unlock() }
+        lock.lock()
+        guard let sink, pcmData.count > deliveredByteCount else {
+            lock.unlock()
+            return
+        }
+        let chunk = pcmData.subdata(in: deliveredByteCount..<pcmData.count)
+        deliveredByteCount = pcmData.count
+        lock.unlock()
+        sink(chunk)
     }
 
     /// Retires the pipeline without waiting for a conversion already executing
@@ -415,6 +444,7 @@ final class CapturePipeline: @unchecked Sendable {
             appendNanos: audioRecorderNowNanos() - startedAtNanos,
             pcmBytes: pcmByteCount
         )
+        deliverToSink()
     }
 }
 
@@ -1008,6 +1038,12 @@ public struct AudioBuffer: Sendable, Equatable {
         !samples.isEmpty && samples.allSatisfy { $0 == 0 }
     }
 }
+
+/// Receives a recording's audio while it is being captured, in order and without gaps:
+/// 16-bit PCM in the recording's own format. Called on the conversion queue (and once, for
+/// what was captured before it was attached, on the recorder's actor), so it must return at
+/// once: queue the data, never write it here.
+public typealias CapturedAudioSink = @Sendable (Data) -> Void
 
 /// How a `stop()` ended, so a caller can tell a press too short to keep from
 /// a capture of normal length into which the microphone delivered nothing.
@@ -2111,7 +2147,9 @@ public actor AudioRecorder {
         host.warm()
     }
 
-    public func start() async throws {
+    /// `sink` receives this recording's audio while it runs, across a device switch, and
+    /// nothing of any other recording.
+    public func start(sink: CapturedAudioSink? = nil) async throws {
         guard !isRecording, !isStarting else { throw AudioRecorderError.alreadyRecording }
         try await ensureMicrophonePermission()
         guard !isRecording, !isStarting else { throw AudioRecorderError.alreadyRecording }
@@ -2131,6 +2169,7 @@ public actor AudioRecorder {
 
             switch outcome {
             case .success(let started):
+                if let sink { started.pipeline.attachSink(sink) }
                 activePipeline = started.pipeline
                 isRecording = true
                 startTime = Date()

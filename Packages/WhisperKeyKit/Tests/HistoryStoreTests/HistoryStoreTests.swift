@@ -34,6 +34,90 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(store.entries.map(\.text), ["third", "second", "first"])
     }
 
+    // MARK: - One row per recording (#233)
+
+    private func pending(_ store: HistoryStore, id: UUID, at seconds: TimeInterval, inDateOrder: Bool = false) -> HistoryEntry? {
+        store.appendPendingRecognition(
+            audioData: Data("audio at \(seconds)".utf8), fileExtension: "wav", providerID: "openai", language: nil,
+            audioDurationSeconds: 1, model: nil, now: Date(timeIntervalSince1970: seconds), id: id, inDateOrder: inDateOrder
+        )
+    }
+
+    func testAPendingRowWithAnIDAlreadyInTheFileIsReturnedAndNothingIsWritten() throws {
+        let store = HistoryStore(url: makeURL())
+        let id = UUID()
+        let first = try XCTUnwrap(pending(store, id: id, at: 100))
+        let before = try Data(contentsOf: makeURL())
+
+        let second = try XCTUnwrap(pending(store, id: id, at: 200))
+
+        XCTAssertEqual(second, first)
+        XCTAssertEqual(try Data(contentsOf: makeURL()), before)
+        XCTAssertEqual(try store.audioData(for: first), Data("audio at 100.0".utf8), "its audio is not overwritten either")
+        XCTAssertEqual(store.entries.count, 1)
+    }
+
+    func testARowAnotherStoreWroteSinceIsFoundUnderTheLock() throws {
+        let store = HistoryStore(url: makeURL())
+        let other = HistoryStore(url: makeURL())
+        let id = UUID()
+        XCTAssertNotNil(pending(other, id: id, at: 100))
+        _ = other.markRecognized(
+            id: id, text: "done", providerID: "openai", language: nil, model: nil,
+            estimatedPriceAtTime: nil, currency: nil, destinationUsed: nil, copiedToClipboard: nil, autoPasted: nil
+        )
+        XCTAssertEqual(store.entries, [], "this store has not read the file since")
+        XCTAssertEqual(pending(store, id: id, at: 200)?.text, "done")
+        XCTAssertEqual(HistoryStore(url: makeURL()).entries.map(\.text), ["done"])
+        let audio = try? FileManager.default.contentsOfDirectory(atPath: store.audioDirectoryURL.path)
+        XCTAssertEqual(audio ?? [], [])
+    }
+
+    func testARowWithAnIDBeyondTheCapIsNotAddedAgain() throws {
+        let url = makeURL()
+        let wide = HistoryStore(url: url, maxEntries: 10)
+        let id = UUID()
+        XCTAssertNotNil(pending(wide, id: id, at: 1))
+        for index in 2...5 { XCTAssertNotNil(pending(wide, id: UUID(), at: TimeInterval(index))) }
+        let narrow = HistoryStore(url: url, maxEntries: 2)
+        XCTAssertFalse(narrow.entries.contains { $0.id == id })
+        XCTAssertEqual(pending(narrow, id: id, at: 6)?.id, id)
+        XCTAssertEqual(HistoryStore(url: url, maxEntries: 10).entries.count, 5)
+    }
+
+    /// The pending row could not be written, the other app recovered the file meanwhile, and
+    /// then the transcription came back.
+    func testARecognizedTextWithAnIDAlreadyInTheFileReplacesThatRow() throws {
+        let store = HistoryStore(url: makeURL())
+        let id = UUID()
+        XCTAssertNotNil(pending(store, id: id, at: 100))
+        _ = store.append(text: "later", providerID: "openai", language: nil, now: Date(timeIntervalSince1970: 150))
+        let entry = store.append(text: "recognized", providerID: "openai", language: nil, now: Date(timeIntervalSince1970: 200), id: id)
+        XCTAssertEqual(store.entries.map(\.text), ["later", "recognized"])
+        XCTAssertEqual(entry?.status, .recognized)
+        XCTAssertEqual(store.entries.last?.status, .recognized)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.audioDirectoryURL.path), [], "the replaced row's audio goes with it")
+    }
+
+    func testARowInDateOrderLandsBetweenItsNeighboursAndOthersStillGoOnTop() {
+        let store = HistoryStore(url: makeURL())
+        for at in [100.0, 300, 500] { XCTAssertNotNil(pending(store, id: UUID(), at: at)) }
+        XCTAssertNotNil(pending(store, id: UUID(), at: 200, inDateOrder: true))
+        XCTAssertNotNil(pending(store, id: UUID(), at: 600, inDateOrder: true))
+        XCTAssertNotNil(pending(store, id: UUID(), at: 50, inDateOrder: true))
+        XCTAssertEqual(store.entries.map(\.createdAt.timeIntervalSince1970), [600, 500, 300, 200, 100, 50])
+        XCTAssertNotNil(pending(store, id: UUID(), at: 400))
+        XCTAssertEqual(store.entries.first?.createdAt.timeIntervalSince1970, 400)
+    }
+
+    func testARowInDateOrderOlderThanAFullHistoryTakesItsLastPlace() {
+        let store = HistoryStore(url: makeURL(), maxEntries: 2)
+        for at in [100.0, 200] { XCTAssertNotNil(pending(store, id: UUID(), at: at)) }
+        XCTAssertNotNil(pending(store, id: UUID(), at: 1, inDateOrder: true))
+        XCTAssertEqual(store.entries.map(\.createdAt.timeIntervalSince1970), [200, 1])
+        XCTAssertEqual(store.entries.filter(store.hasAudio).count, 2)
+    }
+
     // MARK: - Rotation when max exceeded
 
     func testAppendBeyondMaxRotatesOutOldest() {
