@@ -150,7 +150,7 @@ public struct ThemedFailureButton: View {
     }
 }
 
-/// Turns a symbol clockwise for as long as `isTurning`, finishing its turn when that ends.
+/// Turns a symbol clockwise for as long as `isTurning`, and stops it the moment that ends.
 /// Under Reduce Motion, and before macOS 15, the symbol dims instead.
 private struct ThemedTurningGlyph: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -158,14 +158,19 @@ private struct ThemedTurningGlyph: ViewModifier {
 
     /// How much of the symbol's colour is left where it dims rather than turns.
     private static let dimmed = 0.4
+    /// How many times the system's turn speed; the owner picked it live.
+    private static let speed = 2.0
 
     func body(content: Content) -> some View {
         if #available(macOS 15.0, *), !reduceMotion {
             content.symbolEffect(
                 .rotate.clockwise.byLayer,
-                options: .repeat(.continuous),
+                options: .speed(Self.speed).repeat(.continuous),
                 isActive: isTurning
             )
+            // Left to itself the effect finishes its turn after the result is on screen;
+            // a new identity draws the symbol at rest at once.
+            .id(isTurning)
         } else {
             content.opacity(isTurning ? Self.dimmed : 1)
         }
