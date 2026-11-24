@@ -44,6 +44,7 @@ public struct ThemedFullHistoryView: View {
     @Environment(\.themeTokens) private var tokens
     private let rows: [Row]
     private let copiedID: UUID?
+    private let retryingID: UUID?
     private let onClear: () -> Void
     private let onCopy: (UUID) -> Void
     private let onOpen: (UUID) -> Void
@@ -52,6 +53,7 @@ public struct ThemedFullHistoryView: View {
     public init(
         rows: [Row],
         copiedID: UUID?,
+        retryingID: UUID?,
         onClear: @escaping () -> Void,
         onCopy: @escaping (UUID) -> Void,
         onOpen: @escaping (UUID) -> Void,
@@ -59,6 +61,7 @@ public struct ThemedFullHistoryView: View {
     ) {
         self.rows = rows
         self.copiedID = copiedID
+        self.retryingID = retryingID
         self.onClear = onClear
         self.onCopy = onCopy
         self.onOpen = onOpen
@@ -129,6 +132,7 @@ public struct ThemedFullHistoryView: View {
                         FullHistoryRow(
                             row: row,
                             copied: copiedID == row.id,
+                            isRetrying: retryingID == row.id,
                             onCopy: onCopy,
                             onOpen: onOpen,
                             onRetry: onRetry
@@ -163,6 +167,7 @@ public struct ThemedFullHistoryView: View {
 private struct FullHistoryRow: View {
     let row: ThemedFullHistoryView.Row
     let copied: Bool
+    let isRetrying: Bool
     let onCopy: (UUID) -> Void
     let onOpen: (UUID) -> Void
     let onRetry: (UUID) -> Void
@@ -189,7 +194,7 @@ private struct FullHistoryRow: View {
                     .modifier(RowActions(row: row, onCopy: onCopy, onOpen: onOpen, onRetry: onRetry))
 
                     if row.canRetry {
-                        ThemedFailureButton("Retry") { onRetry(row.id) }
+                        ThemedFailureButton("Retry", isRunning: isRetrying) { onRetry(row.id) }
                     }
                 }
 

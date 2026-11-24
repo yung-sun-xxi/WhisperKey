@@ -114,20 +114,28 @@ public struct ThemedFailureHatch: View {
 /// `badgeDotGap` apart, `sizes.keycap` tall, with no box. The one coloured mark on a
 /// grey failed row, so the way out of the failure is what the eye finds (#228; the owner
 /// picked it live over a grey push button and a grey icon).
+///
+/// While `isRunning`, the arrow turns and a click does nothing; the title and the size
+/// stay, so the row does not move. Under Reduce Motion the arrow dims instead.
 public struct ThemedFailureButton: View {
     @Environment(\.themeTokens) private var tokens
     private let title: String
+    private let isRunning: Bool
     private let action: () -> Void
 
-    public init(_ title: String, action: @escaping () -> Void) {
+    public init(_ title: String, isRunning: Bool = false, action: @escaping () -> Void) {
         self.title = title
+        self.isRunning = isRunning
         self.action = action
     }
 
     public var body: some View {
-        Button(action: action) {
+        Button {
+            if !isRunning { action() }
+        } label: {
             HStack(spacing: tokens.controlMetrics.badgeDotGap) {
                 Image(systemName: "arrow.clockwise")
+                    .modifier(ThemedTurningGlyph(isTurning: isRunning))
                 Text(title)
                     .lineLimit(1)
             }
@@ -138,5 +146,28 @@ public struct ThemedFailureButton: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
+        .accessibilityValue(isRunning ? "In progress" : "")
+    }
+}
+
+/// Turns a symbol clockwise for as long as `isTurning`, finishing its turn when that ends.
+/// Under Reduce Motion, and before macOS 15, the symbol dims instead.
+private struct ThemedTurningGlyph: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let isTurning: Bool
+
+    /// How much of the symbol's colour is left where it dims rather than turns.
+    private static let dimmed = 0.4
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *), !reduceMotion {
+            content.symbolEffect(
+                .rotate.clockwise.byLayer,
+                options: .repeat(.continuous),
+                isActive: isTurning
+            )
+        } else {
+            content.opacity(isTurning ? Self.dimmed : 1)
+        }
     }
 }

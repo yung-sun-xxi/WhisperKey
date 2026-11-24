@@ -12,6 +12,7 @@ struct HistorySection: View {
 
     @Environment(\.themeTokens) private var tokens
     @State private var copiedID: UUID?
+    @State private var retryingID: UUID?
     @State private var ownerWindow: NSWindow?
 
     var body: some View {
@@ -45,6 +46,7 @@ struct HistorySection: View {
                                         entry: entry,
                                         age: HistoryAge.label(createdAt: entry.createdAt, now: timeline.date),
                                         copied: copiedID == entry.id,
+                                        isRetrying: retryingID == entry.id,
                                         onCopy: { copy(entry: entry) },
                                         onOpenReadWindow: { openReadWindow(entry: entry) },
                                         onRetry: { coordinator.retryHistoryEntry(entry) }
@@ -81,6 +83,7 @@ struct HistorySection: View {
             .padding(.horizontal, tokens.spacing.panelTextEdge)
             .padding(.bottom, tokens.popover.buttonsBottom)
         }
+        .onReceive(coordinator.$retryingEntryID) { retryingID = $0 }
         .background {
             WindowAccessor { window in
                 ownerWindow = window
@@ -175,6 +178,7 @@ private struct HistoryInlineRow: View {
     let entry: HistoryEntry
     let age: String
     let copied: Bool
+    let isRetrying: Bool
     let onCopy: () -> Void
     let onOpenReadWindow: () -> Void
     let onRetry: () -> Void
@@ -206,7 +210,7 @@ private struct HistoryInlineRow: View {
                 ))
 
                 if entry.canRetryRecognition {
-                    ThemedFailureButton("Retry", action: onRetry)
+                    ThemedFailureButton("Retry", isRunning: isRetrying, action: onRetry)
                 }
 
                 Text(age)
