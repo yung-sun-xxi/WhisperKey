@@ -113,7 +113,7 @@ extension AppCoordinator {
             return
         }
         Self.permissionLog.notice("restarting after a revoke")
-        NSApp.terminate(nil)
+        AppTermination.request()
     }
 
     /// After a restart from the Permissions tab, opens Settings on the pane the launch

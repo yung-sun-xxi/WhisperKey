@@ -1079,6 +1079,183 @@ final class AudioRecorderTests: XCTestCase {
         XCTAssertNotNil(diagnostics.snapshot().deviceSwitches.first?.gapMillis)
     }
 
+    // MARK: - The audio handed out while recording (#233)
+
+    /// Collects what the sink receives, in the order it arrives.
+    private final class SinkLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var chunks: [Data] = []
+        private var calls = 0
+        /// Holds the first chunk back this long: one that overtakes it shows up as a swap.
+        private let firstChunkDelay: TimeInterval
+        init(firstChunkDelay: TimeInterval = 0) {
+            self.firstChunkDelay = firstChunkDelay
+        }
+        var sink: CapturedAudioSink {
+            { [self] chunk in
+                lock.lock()
+                calls += 1
+                let isFirst = calls == 1
+                lock.unlock()
+                if isFirst { Thread.sleep(forTimeInterval: firstChunkDelay) }
+                lock.lock()
+                chunks.append(chunk)
+                lock.unlock()
+            }
+        }
+        var received: [Data] {
+            lock.lock()
+            defer { lock.unlock() }
+            return chunks
+        }
+        var bytes: Data { received.reduce(Data(), +) }
+    }
+
+    /// Buffers of rising level, so a gap, a duplicate or a swap changes the bytes.
+    private func levelBuffer(_ format: AVAudioFormat, level: Float, seconds: Double = 0.02) -> AVAudioPCMBuffer {
+        let frames = AVAudioFrameCount(format.sampleRate * seconds)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+        buffer.frameLength = frames
+        for frame in 0..<Int(frames) { buffer.floatChannelData![0][frame] = level }
+        return buffer
+    }
+
+    func testTheSinkReceivesExactlyTheRecordedAudio() async throws {
+        let host = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+        let recorder = makeRecorder(factory: CountingHostFactory(hosts: [host]))
+        let log = SinkLog()
+        try await recorder.start(sink: log.sink)
+        try host.deliverTone(seconds: 0.5)
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let stopped = await recorder.stop()
+        let buffer = try XCTUnwrap(stopped)
+        XCTAssertEqual(log.bytes, buffer.samples)
+        XCTAssertGreaterThan(log.received.count, 1, "chunk by chunk, not all at once at the end")
+    }
+
+    func testTheSinkReceivesWhatWasCapturedBeforeItWasAttached() throws {
+        let format = try monoFormat(48_000)
+        let diagnostics = AudioRecorderDiagnosticsState()
+        diagnostics.beginCapture(captureID: 1, engineHostID: 1, inputDevice: Self.builtInMic, inputFormat: format)
+        let pipeline = try CapturePipeline(captureID: 1, inputFormat: format, outputFormat: Self.outputFormat, diagnostics: diagnostics)
+        try feed(pipeline, diagnostics, levelBuffer(format, level: 0.1), sourceID: 1)
+        try feed(pipeline, diagnostics, levelBuffer(format, level: 0.2), sourceID: 1)
+        let log = SinkLog()
+        pipeline.attachSink(log.sink)
+        XCTAssertEqual(log.received.count, 1, "the backlog arrives as one chunk, at once")
+        try feed(pipeline, diagnostics, levelBuffer(format, level: 0.3), sourceID: 1)
+        XCTAssertEqual(log.bytes, pipeline.retireAndSnapshot())
+        XCTAssertEqual(log.received.count, 2)
+    }
+
+    /// Attaching races the conversion queue: no gap, no duplicate, no reordering.
+    func testAttachingWhileBuffersArriveLosesAndRepeatsNothing() throws {
+        let format = try monoFormat(48_000)
+        for round in 0..<30 {
+            let diagnostics = AudioRecorderDiagnosticsState()
+            diagnostics.beginCapture(captureID: 1, engineHostID: 1, inputDevice: Self.builtInMic, inputFormat: format)
+            let pipeline = try CapturePipeline(captureID: 1, inputFormat: format, outputFormat: Self.outputFormat, diagnostics: diagnostics)
+            let log = SinkLog(firstChunkDelay: 0.01)
+            let feeding = DispatchSemaphore(value: 0)
+            let fed = DispatchSemaphore(value: 0)
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                for index in 0..<60 {
+                    pipeline.enqueue(
+                        buffer: levelBuffer(format, level: Float(index + 1) / 100, seconds: 0.005),
+                        tapBufferID: UInt64(index),
+                        inputFrameLength: 240,
+                        enqueuedAtNanos: audioRecorderNowNanos(),
+                        sourceID: 1
+                    )
+                    if index == 5 + round % 7 { feeding.signal() }
+                    Thread.sleep(forTimeInterval: 0.0002)
+                }
+                fed.signal()
+            }
+            feeding.wait()
+            pipeline.attachSink(log.sink)
+            fed.wait()
+            let deadline = Date().addingTimeInterval(2)
+            while diagnostics.snapshot().conversionInFlight, Date() < deadline { Thread.sleep(forTimeInterval: 0.002) }
+            let recorded = pipeline.retireAndSnapshot()
+            XCTAssertGreaterThan(recorded.count, 0)
+            XCTAssertEqual(log.bytes, recorded, "round \(round)")
+            guard log.bytes == recorded else { return }
+        }
+    }
+
+    func testTheSinkSurvivesADeviceSwitch() async throws {
+        let builtIn = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+        let headset = RoutingEngineHost(hostID: 2, device: Self.headsetMic, sampleRate: 24_000)
+        let observer = FakeRouteChangeObserver()
+        let recorder = makeRecorder(factory: CountingHostFactory(hosts: [builtIn, headset]), observer: observer)
+        let log = SinkLog()
+        try await recorder.start(sink: log.sink)
+        try builtIn.deliverTone(seconds: 0.2)
+        let beforeSwitch = log.bytes.count
+        builtIn.routeChangeReason = "the derived input changed"
+        observer.fire()
+        try await waitUntil { recorder.diagnosticsSnapshot().deviceSwitchCount == 1 }
+        try headset.deliverTone(seconds: 0.3)
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let stopped = await recorder.stop()
+        let buffer = try XCTUnwrap(stopped)
+        XCTAssertEqual(log.bytes, buffer.samples)
+        XCTAssertGreaterThan(log.bytes.count, beforeSwitch, "audio from the new device reached it too")
+    }
+
+    func testEachStartHasItsOwnSinkAndAStartWithoutOneHasNone() async throws {
+        let host = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+        let recorder = makeRecorder(factory: CountingHostFactory(hosts: [host]))
+        let (first, second) = (SinkLog(), SinkLog())
+
+        try await recorder.start(sink: first.sink)
+        try host.deliverTone(seconds: 0.4)
+        let earlierPipeline = try XCTUnwrap(host.startedPipeline)
+        try await Task.sleep(nanoseconds: 310_000_000)
+        let stoppedFirst = await recorder.stop()
+
+        try await recorder.start(sink: second.sink)
+        try host.deliverTone(seconds: 0.3)
+        // A late buffer of the first recording's engine.
+        let late = try toneBuffer(format: host.inputFormat, toneChannels: [0])
+        earlierPipeline.enqueue(
+            buffer: late, tapBufferID: 999, inputFrameLength: late.frameLength,
+            enqueuedAtNanos: audioRecorderNowNanos(), sourceID: 1
+        )
+        try await Task.sleep(nanoseconds: 310_000_000)
+        let stoppedSecond = await recorder.stop()
+        XCTAssertEqual(first.bytes, try XCTUnwrap(stoppedFirst).samples)
+        XCTAssertEqual(second.bytes, try XCTUnwrap(stoppedSecond).samples)
+
+        try await recorder.start()
+        try host.deliverTone(seconds: 0.3)
+        _ = await recorder.stop()
+        XCTAssertEqual(first.bytes, try XCTUnwrap(stoppedFirst).samples, "an earlier recording's sink hears nothing more")
+        XCTAssertEqual(second.bytes, try XCTUnwrap(stoppedSecond).samples)
+    }
+
+    /// The sink runs outside the capture lock: a stop must not wait for it.
+    func testASinkThatHangsDoesNotHoldTheStop() async throws {
+        let host = RoutingEngineHost(hostID: 1, device: Self.builtInMic, sampleRate: 48_000)
+        let recorder = makeRecorder(factory: CountingHostFactory(hosts: [host]))
+        let release = DispatchSemaphore(value: 0)
+        let entered = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        try await recorder.start(sink: { _ in entered.signal(); release.wait(); release.signal() })
+        let buffer = try toneBuffer(format: host.inputFormat, toneChannels: [0])
+        try XCTUnwrap(host.startedPipeline).enqueue(
+            buffer: buffer, tapBufferID: 1, inputFrameLength: buffer.frameLength,
+            enqueuedAtNanos: audioRecorderNowNanos(), sourceID: 1
+        )
+        XCTAssertEqual(entered.wait(timeout: .now() + 2), .success, "the sink was called and hangs")
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let asked = Date()
+        let stopped = await recorder.stop()
+        XCTAssertLessThan(Date().timeIntervalSince(asked), 5)
+        XCTAssertNotNil(stopped, "the recording itself is untouched")
+    }
+
     // MARK: - Capture pipeline channel handling
 
     /// The built-in MacBook mic shows up as a 3-channel discrete array while

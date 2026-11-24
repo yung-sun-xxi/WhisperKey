@@ -343,6 +343,8 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         refreshDisplay()
     }
 
+    /// A row with `id` already in the file is replaced where it stands: the recording's
+    /// pending row, which the other app recovered while this one was transcribing (#233).
     @discardableResult
     public func append(
         text: String,
@@ -373,10 +375,20 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
             copiedToClipboard: copiedToClipboard,
             autoPasted: autoPasted
         )
-        mutate { contents in self.insert(entry, into: &contents) }
+        mutate { contents in
+            if let index = contents.firstIndex(where: { $0.id == id }) {
+                contents[index] = entry
+            } else {
+                self.insert(entry, into: &contents)
+            }
+        }
         return entry
     }
 
+    /// Adds a recording that still has to be recognized, at most once per `id`: an id already
+    /// in the file returns its row and writes nothing, so the same recording saved on the way
+    /// out and recovered at the next launch is one row (#233). `inDateOrder` puts it among the
+    /// existing rows by date instead of on top.
     @discardableResult
     public func appendPendingRecognition(
         audioData: Data,
@@ -386,7 +398,8 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         audioDurationSeconds: TimeInterval,
         model: String?,
         now: Date = Date(),
-        id: UUID = UUID()
+        id: UUID = UUID(),
+        inDateOrder: Bool = false
     ) -> HistoryEntry? {
         guard maxEntries > 0, !audioData.isEmpty else { return nil }
 
@@ -411,16 +424,18 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
         // The audio is written under the same lock as the entry, so the other app's orphan
         // sweep never sees the file without the entry that references it.
         var audioWritten = false
-        let written: Void? = mutate { contents in
+        let saved: HistoryEntry? = mutate { contents in
+            if let existing = contents.first(where: { $0.id == id }) { return existing }
             try self.writeAudio(audioData, fileName: fileName)
             audioWritten = true
-            self.insert(entry, into: &contents)
+            self.insert(entry, into: &contents, inDateOrder: inDateOrder)
+            return entry
         }
-        guard written != nil else {
+        guard let saved else {
             if audioWritten { removeAudio(fileName: fileName) }
             return nil
         }
-        return entry
+        return saved
     }
 
     /// Records a failed microphone capture when no audio was available to save or retry.
@@ -579,11 +594,14 @@ public final class HistoryStore: ObservableObject, @unchecked Sendable {
 
     // MARK: - Internals
 
-    /// Puts `entry` on top and drops the oldest down to the larger of this cap and the
-    /// size the file had, so an ordinary write never shrinks the file.
-    private func insert(_ entry: HistoryEntry, into contents: inout [HistoryEntry]) {
+    /// Puts `entry` on top, or by its date, and drops the oldest down to the larger of this
+    /// cap and the size the file had, so an ordinary write never shrinks the file. An entry
+    /// older than everything this cap shows takes the last place shown, so it is not dropped
+    /// by its own insertion.
+    private func insert(_ entry: HistoryEntry, into contents: inout [HistoryEntry], inDateOrder: Bool = false) {
         let previousCount = contents.count
-        contents.insert(entry, at: 0)
+        let byDate = contents.firstIndex { $0.createdAt <= entry.createdAt } ?? contents.count
+        contents.insert(entry, at: inDateOrder ? min(byDate, maxEntries - 1) : 0)
         let keep = max(maxEntries, previousCount)
         if contents.count > keep {
             contents = Array(contents.prefix(keep))

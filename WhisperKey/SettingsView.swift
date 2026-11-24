@@ -539,7 +539,7 @@ struct PopoverContent: View {
             .keyboardShortcut(",", modifiers: [.command])
             Spacer(minLength: 0)
             Button("Quit") {
-                NSApplication.shared.terminate(nil)
+                AppTermination.request()
             }
             .keyboardShortcut("q")
         }

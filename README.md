@@ -20,6 +20,7 @@ It supports OpenAI and Groq Whisper-compatible transcription APIs.
 - API key validation and storage in the macOS Keychain.
 - Optional clipboard output and auto-paste.
 - Local transcription history with configurable retention.
+- A recording survives a quit, a crash or a power loss: it is in history with Retry.
 - Optional quick-paste popup: hold a key to pick from recent clipboard entries — with the pointer or with the up and down arrows — and paste without leaving the field. Off by default.
 - Local usage counters by provider and model.
 - Optional sound effects and launch-at-login support.
@@ -70,6 +71,9 @@ provider you configure.
 - Recorded audio is sent directly to the selected transcription provider.
 - API keys are stored in the macOS Keychain.
 - Transcription history and usage counters are stored locally.
+- A recording in progress is also written to a local file readable only by your
+  user account. It is deleted once the recording is in history or discarded, and
+  is never written when the history size is 0.
 - WhisperKey does not run an owner-controlled backend service.
 - Transcription auto-paste is skipped for secure text fields and can be disabled.
 - The quick-paste popup does paste into a secure text field, because choosing an
