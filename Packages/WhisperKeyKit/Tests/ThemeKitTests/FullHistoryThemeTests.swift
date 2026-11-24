@@ -233,6 +233,19 @@ final class FullHistoryThemeTests: XCTestCase {
         XCTAssertNotNil(found, "no hatch at the row's leading edge")
     }
 
+    /// The arrow turns in place: a running Retry is exactly as large as an idle one, so the
+    /// row's text and timestamp do not move when it starts or ends.
+    func testARunningRetryIsAsLargeAsAnIdleOne() {
+        func size(isRunning: Bool) -> CGSize {
+            Snapshot.fittingSize(ThemedRoot("test", source: ThemeTokensSource(theme: .midnight)) {
+                ThemedFailureButton("Retry", isRunning: isRunning) {}
+            })
+        }
+        let idle = size(isRunning: false)
+        XCTAssertGreaterThan(idle.width, 0)
+        XCTAssertEqual(size(isRunning: true), idle)
+    }
+
     // MARK: - The empty list
 
     /// The tray in 06 and "No transcriptions yet" in 07 under it, centred both ways in
@@ -327,7 +340,7 @@ final class FullHistoryThemeTests: XCTestCase {
     }
 
     private func view(_ rows: [ThemedFullHistoryView.Row]) -> ThemedFullHistoryView {
-        ThemedFullHistoryView(rows: rows, copiedID: nil, onClear: {}, onCopy: { _ in }, onOpen: { _ in }, onRetry: { _ in })
+        ThemedFullHistoryView(rows: rows, copiedID: nil, retryingID: nil, onClear: {}, onCopy: { _ in }, onOpen: { _ in }, onRetry: { _ in })
     }
 
     private func render(rows: [ThemedFullHistoryView.Row]) throws -> Snapshot {

@@ -151,7 +151,15 @@ final class AppCoordinator: ObservableObject {
 
     static let processingTimeout: TimeInterval = 30
 
-    @Published private(set) var state: AppState = .idle
+    @Published private(set) var state: AppState = .idle {
+        didSet {
+            // However the retry ended (done, failed, timed out, cancelled), it left
+            // `.transcribing`.
+            if state != .transcribing, retryingEntryID != nil { retryingEntryID = nil }
+        }
+    }
+    /// The history entry a Retry is recognising right now; its row spins the Retry arrow.
+    @Published private(set) var retryingEntryID: UUID?
     @Published var permissions = PermissionState.current()
     @Published private(set) var recordingElapsed: TimeInterval = 0
     @Published private(set) var launchAtLoginEnabled: Bool = false
@@ -936,6 +944,7 @@ final class AppCoordinator: ObservableObject {
         activeProcessingMetrics?.audioDuration = request.audioDuration
         activeProcessingMetrics?.byteSize = request.encoded.data.count
         state = .transcribing
+        retryingEntryID = request.historyEntryID
         setEngineAppState(.transcribing)
         processingTask = Task { @MainActor in
             await self.runTranscription(
@@ -984,6 +993,7 @@ final class AppCoordinator: ObservableObject {
         activeProcessingMetrics?.audioDuration = request.audioDuration
         activeProcessingMetrics?.byteSize = request.encoded.data.count
         state = .transcribing
+        retryingEntryID = request.historyEntryID
         setEngineAppState(.transcribing)
         processingTask = Task { @MainActor in
             await self.runTranscription(

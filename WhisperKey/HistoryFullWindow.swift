@@ -86,12 +86,14 @@ private struct HistoryFullView: View {
     let coordinator: AppCoordinator
 
     @State private var copiedID: UUID?
+    @State private var retryingID: UUID?
     @State private var ownerWindow: NSWindow?
 
     var body: some View {
         ThemedFullHistoryView(
             rows: history.entries.map(row),
             copiedID: copiedID,
+            retryingID: retryingID,
             onClear: {
                 ClearHistoryConfirmation.present(from: ownerWindow) {
                     history.clear()
@@ -107,6 +109,7 @@ private struct HistoryFullView: View {
                 if let entry = entry(id) { coordinator.retryHistoryEntry(entry) }
             }
         )
+        .onReceive(coordinator.$retryingEntryID) { retryingID = $0 }
         .background {
             WindowAccessor { window in
                 ownerWindow = window

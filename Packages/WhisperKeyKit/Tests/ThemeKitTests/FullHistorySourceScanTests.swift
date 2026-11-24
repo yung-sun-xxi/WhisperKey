@@ -131,6 +131,19 @@ final class FullHistorySourceScanTests: XCTestCase {
         XCTAssertTrue(drawn.contains(".contextMenu"), "the row's context menu is gone")
     }
 
+    /// Retry's arrow turns on the row being recognised, in both lists, and stops however
+    /// the retry ends: the coordinator drops the entry as it leaves `.transcribing`.
+    func testARetryingRowTurnsItsArrow() throws {
+        XCTAssertTrue(try Self.raw(Self.drawn).contains("ThemedFailureButton(\"Retry\", isRunning: isRetrying)"))
+        XCTAssertTrue(try Self.raw("WhisperKey/HistorySection.swift").contains("ThemedFailureButton(\"Retry\", isRunning: isRetrying"))
+        for list in [Self.window, "WhisperKey/HistorySection.swift"] {
+            XCTAssertTrue(try Self.raw(list).contains(".onReceive(coordinator.$retryingEntryID) { retryingID = $0 }"), list)
+        }
+        let coordinator = try Self.raw("WhisperKey/AppCoordinator.swift")
+        XCTAssertEqual(coordinator.components(separatedBy: "retryingEntryID = request.historyEntryID").count - 1, 2, "a retry does not name its entry")
+        XCTAssertTrue(coordinator.contains("if state != .transcribing, retryingEntryID != nil { retryingEntryID = nil }"), "the arrow outlives the retry")
+    }
+
     /// The row's actions are today's: a click copies a recognised entry, a shift-click or
     /// a click on a failed one opens it; the context menu offers Retry, Open in Window and
     /// Copy to Clipboard as before.
