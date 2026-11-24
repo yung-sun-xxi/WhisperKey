@@ -47,6 +47,8 @@ public extension ThemeTokens {
             bodyLineHeight: 1.45,
             small: ThemeFont(size: 12, weight: .regular),
             caption: ThemeFont(size: 11, weight: .regular),
+            // Not on the sheet: Retry, the one way out of a failed row.
+            failureAction: ThemeFont(size: 11, weight: .semibold),
             capsHeader: ThemeFont(size: 11, weight: .medium, trackingEm: 0.06),
             // Not on the sheet: the active Settings tab and "Hold" segment.
             labelOnBrand: ThemeFont(size: 12, weight: .medium),

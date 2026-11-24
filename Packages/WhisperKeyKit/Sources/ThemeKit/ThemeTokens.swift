@@ -264,6 +264,8 @@ public extension ThemeTokens {
         public var small: ThemeFont
         /// 11/400. Timestamps, keycaps, units, badges.
         public var caption: ThemeFont
+        /// 11/600. The failed row's Retry.
+        public var failureAction: ThemeFont
         /// 11/500, tracked 0.06em. Caps headers.
         public var capsHeader: ThemeFont
         /// 12/500. The label on a red fill: the active Settings tab, the active
@@ -287,6 +289,7 @@ public extension ThemeTokens {
             bodyLineHeight: Double?,
             small: ThemeFont,
             caption: ThemeFont,
+            failureAction: ThemeFont,
             capsHeader: ThemeFont,
             labelOnBrand: ThemeFont,
             segmentLabelOnBrand: ThemeFont,
@@ -301,6 +304,7 @@ public extension ThemeTokens {
             self.bodyLineHeight = bodyLineHeight
             self.small = small
             self.caption = caption
+            self.failureAction = failureAction
             self.capsHeader = capsHeader
             self.labelOnBrand = labelOnBrand
             self.segmentLabelOnBrand = segmentLabelOnBrand

@@ -110,12 +110,12 @@ public struct ThemedFailureHatch: View {
 }
 
 /// The button a failed row carries ("Retry"), in the popover and the full history window:
-/// an accent link, `arrow.clockwise` and the title in `type.caption` and `brand`,
+/// an accent link, `arrow.clockwise` and the title in `type.failureAction` and `brand`,
 /// `badgeDotGap` apart, `sizes.keycap` tall, with no box. The one coloured mark on a
 /// grey failed row, so the way out of the failure is what the eye finds (#228; the owner
 /// picked it live over a grey push button and a grey icon).
 ///
-/// While `isRunning`, the arrow turns and a click does nothing; the title and the size
+/// While `isRunning`, the arrow turns (`TurnMotion`) and a click does nothing; the title and the size
 /// stay, so the row does not move. Under Reduce Motion the arrow dims instead.
 public struct ThemedFailureButton: View {
     @Environment(\.themeTokens) private var tokens
@@ -139,7 +139,7 @@ public struct ThemedFailureButton: View {
                 Text(title)
                     .lineLimit(1)
             }
-            .font(tokens.type.caption.font)
+            .font(tokens.type.failureAction.font)
             .foregroundStyle(tokens.colors.brand.color)
             .frame(height: tokens.sizes.keycap)
             .contentShape(Rectangle())
@@ -150,29 +150,57 @@ public struct ThemedFailureButton: View {
     }
 }
 
-/// Turns a symbol clockwise for as long as `isTurning`, and stops it the moment that ends.
-/// Under Reduce Motion, and before macOS 15, the symbol dims instead.
+/// Turns a symbol clockwise as `TurnMotion` has it for as long as `isTurning`, easing in and
+/// out. Under Reduce Motion the symbol dims instead.
 private struct ThemedTurningGlyph: ViewModifier {
+    private enum Phase: Equatable {
+        case rest
+        case turning(TurnMotion, since: Date)
+        case settling(TurnMotion.Settle, since: Date)
+
+        func angle(at date: Date) -> Double {
+            switch self {
+            case .rest: 0
+            case let .turning(motion, since): motion.angle(after: date.timeIntervalSince(since))
+            case let .settling(settle, since): settle.angle(after: date.timeIntervalSince(since))
+            }
+        }
+    }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase = Phase.rest
     let isTurning: Bool
 
     /// How much of the symbol's colour is left where it dims rather than turns.
     private static let dimmed = 0.4
-    /// How many times the system's turn speed; the owner picked it live.
-    private static let speed = 2.0
+    /// The centre of `arrow.clockwise`'s ring, which its arrowhead pushes below the
+    /// symbol's own: measured on the 11/600 glyph.
+    private static let ringCentre = UnitPoint(x: 0.5, y: 0.59)
 
     func body(content: Content) -> some View {
-        if #available(macOS 15.0, *), !reduceMotion {
-            content.symbolEffect(
-                .rotate.clockwise.byLayer,
-                options: .speed(Self.speed).repeat(.continuous),
-                isActive: isTurning
-            )
-            // Left to itself the effect finishes its turn after the result is on screen;
-            // a new identity draws the symbol at rest at once.
-            .id(isTurning)
-        } else {
-            content.opacity(isTurning ? Self.dimmed : 1)
+        Group {
+            if reduceMotion {
+                content.opacity(isTurning ? Self.dimmed : 1)
+            } else {
+                TimelineView(.animation(paused: phase == .rest)) { timeline in
+                    content.rotationEffect(.degrees(phase.angle(at: timeline.date)), anchor: Self.ringCentre)
+                }
+            }
+        }
+        .onChange(of: isTurning, initial: true) { turn(isTurning) }
+        .task(id: phase) {
+            guard case let .settling(settle, _) = phase else { return }
+            try? await Task.sleep(for: .seconds(settle.duration))
+            if !Task.isCancelled { phase = .rest }
+        }
+    }
+
+    private func turn(_ isTurning: Bool) {
+        let now = Date()
+        if isTurning {
+            phase = .turning(TurnMotion(from: phase.angle(at: now)), since: now)
+        } else if case let .turning(motion, since) = phase {
+            phase = .settling(motion.settle(after: now.timeIntervalSince(since)), since: now)
         }
     }
 }
